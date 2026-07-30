@@ -190,3 +190,20 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` (+1 regression test; updated 1 existing test for the new persistent-failure invocation count)
 - **Related BUILD_LOG entry:** 2026-07-30 14:49 EDT (Stage 6.3.4c).
 - **Related tests:** `test_license_grounding_shim_retry_survives_vendor_bug` (new), `test_retrieval_gate_retry_failure_keeps_pregate_result` (updated).
+
+
+## 2026-07-30 15:28 EDT — shim-4 directive was advisory, not an override; model kept parametric license bias on Neo4j/DozerDB
+
+- **Symptom:** Stage 6.3.4c 3-trial Colossus run rated 2/6, 2/6, 3/6 (mean 2.33/6, DoD MISSED — regressed from 6.3.4b's 4.33/6). Every trial's `shim_events.license_grounding` showed `directive_emitted=true, retry_outcome=retry_ok, facts=[…GPL-3.0…]`, yet every trial's final report still emitted Neo4j=AGPLv3 and DozerDB=Apache-2.0 (or "could not be determined"). No `retry_failed` — the shim retry ran cleanly; the model just ignored what it was told.
+- **Affected stage / plugin / port:** Stage 6.3.4d · Zetesis ODR harness · `ops/benchmarks/adr_010/harness/license_grounding.py` (`build_license_correction_directive`) and `ops/benchmarks/adr_010/harness/odr.py` (shim-4 correction-turn assembly).
+- **Root cause:** Two compounding effects.
+  1. The Stage 6.3.4a directive was framed as informational (`"The following license identifiers were read directly from each repository's LICENSE file at HEAD…"` with a soft imperative to "correct it to match"). Small local models treat such blocks as retrieved context — one more voice competing with training data — not as a hard override.
+  2. The correction turn appended the directive to the anchored question. The model processed the well-formed research question first, produced a report from parametric memory, and only encountered the correction as trailing context that didn't retroactively rewrite the earlier reasoning trajectory.
+- **Fix applied:**
+  1. **Directive rewrite** — `SYSTEM CORRECTION` framing, `BINDING FACTS` block with `MUST emit: <family>` + `DO NOT emit any of: <forbidden list>` per grounded repo, and a `COMPLIANCE RULE` clause that explicitly supersedes conflicting license claims from prior context, training data, or web search snippets. Bans hedging phrasing.
+  2. **Prepend, not append** — correction turn is now `directive + "\n\n" + anchored_question` in `odr.py`. The model reads the correction before the anchored question.
+  3. **Post-retry mismatch audit** — new `detect_license_mismatches(report_text, facts)` scans the retried report for canonical family aliases near each grounded repo anchor (two-pass attribution: prefer nearest-at-or-before, then nearest-overall, both within a 400-char window). Any observed family != the MUST-emit value is surfaced in `shim_events[license_grounding].post_retry_mismatches` for the blind rater and DoD gate. Deliberately NOT retried a second time — thrashing under the same bias would just burn wall-clock and thermal budget.
+- **Files changed:** `ops/benchmarks/adr_010/harness/license_grounding.py`, `ops/benchmarks/adr_010/harness/odr.py`, `ops/benchmarks/adr_010/tests/test_license_grounding.py` (updated 1 test, added 9), `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` (updated 1 test, added 2).
+- **Related BUILD_LOG entry:** 2026-07-30 15:28 EDT (Stage 6.3.4d).
+- **Related tests:** `test_correction_directive_lists_only_known_facts` (updated), `test_detect_license_mismatches_*` (9 new), `test_license_grounding_shim_prepends_directive_before_anchored_question` (new), `test_license_grounding_shim_records_post_retry_mismatches` (new).
+- **Supersedes:** 2026-07-30 14:49 EDT (which correctly diagnosed one-shot vendor-retry as insufficient but assumed the directive itself was sound).

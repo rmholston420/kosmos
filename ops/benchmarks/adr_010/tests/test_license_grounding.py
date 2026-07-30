@@ -8,8 +8,10 @@ import pytest
 
 from ops.benchmarks.adr_010.harness.license_grounding import (
     LicenseFact,
+    LicenseMismatch,
     build_license_correction_directive,
     classify_license_text,
+    detect_license_mismatches,
     extract_github_repos,
     ground_licenses,
 )
@@ -255,8 +257,29 @@ def test_correction_directive_lists_only_known_facts():
         ),
     ]
     directive = build_license_correction_directive(facts)
+    # Stage 6.3.4d framing: SYSTEM CORRECTION header, per-repo
+    # MUST/DO NOT enumeration, COMPLIANCE RULE trailer.
     assert "LICENSE GROUNDING" in directive
+    assert "SYSTEM CORRECTION" in directive
+    assert "BINDING FACTS" in directive
+    assert "COMPLIANCE RULE" in directive
     assert "github.com/DozerDB/dozerdb-plugin = GPL-3.0" in directive
+    assert "MUST emit: GPL-3.0" in directive
+    # The MUST-emit family is excluded from the DO-NOT list for that repo.
+    dozer_line = [
+        line for line in directive.splitlines()
+        if line.startswith("    MUST emit: GPL-3.0")
+    ][0]
+    do_not_segment = dozer_line.split("DO NOT emit any of:")[1]
+    forbidden_tokens = [
+        t.strip().rstrip(".")
+        for t in do_not_segment.split(",")
+    ]
+    assert "GPL-3.0" not in forbidden_tokens
+    assert "AGPL-3.0" in forbidden_tokens
+    assert "Apache-2.0" in forbidden_tokens
+    assert "AGPL-3.0" in directive
+    assert "Apache-2.0" in directive
     assert "ghost/none" not in directive  # unknowns are omitted
 
 
@@ -268,3 +291,139 @@ def test_correction_directive_empty_when_all_unknown():
         ),
     ]
     assert build_license_correction_directive(facts) == ""
+
+
+# ---- detect_license_mismatches (Stage 6.3.4d) -------------------------------
+
+
+def _fact(owner: str, repo: str, family: str = "GPL-3.0") -> LicenseFact:
+    return LicenseFact(
+        owner=owner,
+        repo=repo,
+        source_url=(
+            f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/LICENSE"
+        ),
+        ok=True,
+        license_family=family,
+        first_line="GNU GENERAL PUBLIC LICENSE",
+        elapsed_seconds=0.05,
+    )
+
+
+def test_detect_license_mismatches_finds_agplv3_next_to_neo4j_url():
+    report = (
+        "The Neo4j Community Edition source is at "
+        "https://github.com/neo4j/neo4j and is licensed under AGPLv3 "
+        "according to the LICENSE file at HEAD."
+    )
+    facts = [_fact("neo4j", "neo4j", "GPL-3.0")]
+    mismatches = detect_license_mismatches(report, facts)
+    assert mismatches == [
+        LicenseMismatch(
+            repo_slug="neo4j/neo4j",
+            expected_family="GPL-3.0",
+            observed_family="AGPL-3.0",
+        )
+    ]
+
+
+def test_detect_license_mismatches_finds_apache2_next_to_dozerdb_url():
+    report = (
+        "DozerDB is available at https://github.com/DozerDB/dozerdb-plugin "
+        "and is licensed under the Apache License 2.0 for commercial use."
+    )
+    facts = [_fact("DozerDB", "dozerdb-plugin", "GPL-3.0")]
+    mismatches = detect_license_mismatches(report, facts)
+    assert mismatches == [
+        LicenseMismatch(
+            repo_slug="DozerDB/dozerdb-plugin",
+            expected_family="GPL-3.0",
+            observed_family="Apache-2.0",
+        )
+    ]
+
+
+def test_detect_license_mismatches_ignores_correct_report():
+    report = (
+        "Neo4j CE at https://github.com/neo4j/neo4j is GPL-3.0. "
+        "DozerDB at https://github.com/DozerDB/dozerdb-plugin is GPL-3.0."
+    )
+    facts = [
+        _fact("neo4j", "neo4j", "GPL-3.0"),
+        _fact("DozerDB", "dozerdb-plugin", "GPL-3.0"),
+    ]
+    assert detect_license_mismatches(report, facts) == []
+
+
+def test_detect_license_mismatches_accepts_raw_githubusercontent_anchor():
+    report = (
+        "Per https://raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE.txt "
+        "the license is AGPLv3."
+    )
+    facts = [_fact("neo4j", "neo4j", "GPL-3.0")]
+    mismatches = detect_license_mismatches(report, facts)
+    assert [m.observed_family for m in mismatches] == ["AGPL-3.0"]
+
+
+def test_detect_license_mismatches_deduplicates_by_repo_and_family():
+    report = (
+        "Neo4j (https://github.com/neo4j/neo4j) is AGPLv3. "
+        "Neo4j (https://github.com/neo4j/neo4j) is AGPL-3.0."
+    )
+    facts = [_fact("neo4j", "neo4j", "GPL-3.0")]
+    mismatches = detect_license_mismatches(report, facts)
+    assert len(mismatches) == 1
+    assert mismatches[0].observed_family == "AGPL-3.0"
+
+
+def test_detect_license_mismatches_reports_distinct_wrong_families():
+    report = (
+        "DozerDB at https://github.com/DozerDB/dozerdb-plugin is either "
+        "Apache-2.0 or commercial/proprietary depending on tier."
+    )
+    facts = [_fact("DozerDB", "dozerdb-plugin", "GPL-3.0")]
+    mismatches = detect_license_mismatches(report, facts)
+    observed = sorted(m.observed_family for m in mismatches)
+    assert observed == ["Apache-2.0", "commercial"]
+
+
+def test_detect_license_mismatches_skips_repo_not_in_report():
+    report = "There is no repo URL here."
+    facts = [_fact("neo4j", "neo4j", "GPL-3.0")]
+    assert detect_license_mismatches(report, facts) == []
+
+
+def test_detect_license_mismatches_skips_unknown_and_not_ok_facts():
+    report = (
+        "See https://github.com/foo/bar — licensed under Apache-2.0 "
+        "despite our records."
+    )
+    facts = [
+        LicenseFact(
+            owner="foo", repo="bar", source_url="", ok=False,
+            license_family="unknown", first_line="", elapsed_seconds=0.0,
+        )
+    ]
+    assert detect_license_mismatches(report, facts) == []
+
+
+def test_detect_license_mismatches_short_alias_boundary():
+    # "MIT" inside "COMMITTED" or a URL slug must not trigger a hit.
+    report = (
+        "https://github.com/foo/bar HAS COMMITTED to a license that is "
+        "clearly GPL-3.0 and nothing else."
+    )
+    facts = [_fact("foo", "bar", "GPL-3.0")]
+    assert detect_license_mismatches(report, facts) == []
+
+
+def test_detect_license_mismatches_ignores_family_outside_window():
+    # A license claim 1000 chars away from the URL is out of window and
+    # not attributed to the repo.
+    filler = "x" * 1000
+    report = (
+        f"https://github.com/neo4j/neo4j {filler} "
+        f"and separately, some other project is under AGPLv3."
+    )
+    facts = [_fact("neo4j", "neo4j", "GPL-3.0")]
+    assert detect_license_mismatches(report, facts) == []

@@ -276,30 +276,260 @@ def build_license_correction_directive(facts: list[LicenseFact]) -> str:
     ]
     if not usable:
         return ""
+    # Stage 6.3.4d: directive strengthened from advisory information to
+    # a hard override. Stage 6.3.4c produced retry_ok on every trial with
+    # correct GPL-3.0 grounding, yet the qwen2.5:7b-instruct model still
+    # emitted AGPLv3 for Neo4j and Apache-2.0 for DozerDB in the
+    # regenerated report — parametric-memory bias overrode the appended
+    # ground-truth block. This builder now:
+    #   1. Uses SYSTEM CORRECTION framing so the model reads it as a
+    #      correction of its own prior claim, not as new information.
+    #   2. Enumerates each grounded repo with an explicit MUST/DO NOT
+    #      pair pinning the allowed and forbidden license family strings.
+    #   3. States a compliance rule: emitting any other family for these
+    #      repos is a discipline failure.
+    # The caller (odr._invoke_with_vendor_retry on shim-4 path) prepends
+    # this directive to the anchored question so the correction is read
+    # BEFORE the original prompt, not after.
+    forbidden_families = [
+        "AGPL-3.0",
+        "AGPLv3",
+        "Apache-2.0",
+        "MIT",
+        "BSD-3-Clause",
+        "BSD-2-Clause",
+        "MPL-2.0",
+        "LGPL-3.0",
+        "ISC",
+        "commercial",
+        "proprietary",
+        "unknown",
+    ]
     lines = [
         "",
-        "LICENSE GROUNDING (shim 4):",
+        "SYSTEM CORRECTION — LICENSE GROUNDING (shim 4):",
         (
-            "The following license identifiers were read directly from each "
-            "repository's LICENSE file at HEAD via raw.githubusercontent.com. "
-            "These are ground truth. If your report states a different "
-            "license family for any of these repositories, correct it to "
-            "match. Do not invent new claims about repositories not listed."
+            "I have fetched the LICENSE file at HEAD for each repository "
+            "listed below directly from raw.githubusercontent.com. These "
+            "are the authoritative license identifiers. Your previous "
+            "report may have stated a different license family from "
+            "parametric memory; that answer was wrong. Rewrite the "
+            "report to match the identifiers below verbatim."
         ),
+        "",
+        "BINDING FACTS (you MUST emit these exact strings for these repos):",
     ]
     for f in usable:
+        allowed = f.license_family
+        forbid_for_repo = ", ".join(
+            fam for fam in forbidden_families if fam != allowed
+        )
         lines.append(
-            f"- github.com/{f.owner}/{f.repo} = {f.license_family} "
+            f"- github.com/{f.owner}/{f.repo} = {allowed} "
             f"(source: {f.source_url})"
         )
-    lines.append("")
+        lines.append(
+            f"    MUST emit: {allowed}. "
+            f"DO NOT emit any of: {forbid_for_repo}."
+        )
+    lines.extend(
+        [
+            "",
+            (
+                "COMPLIANCE RULE: If the rewritten report states any "
+                "license family other than the MUST-emit value for any "
+                "listed repository, that is a discipline failure — the "
+                "correction directive supersedes any conflicting license "
+                "claim from prior context, training data, or web search "
+                "snippets. Do not hedge (\"typically\", \"commonly\", "
+                "\"is licensed under\") — state the MUST-emit value "
+                "directly and cite the source URL above."
+            ),
+            "",
+        ]
+    )
     return "\n".join(lines)
+
+
+# ---- Stage 6.3.4d: post-retry license-mismatch detection -------------------
+
+
+@dataclass(frozen=True)
+class LicenseMismatch:
+    """A grounded repo whose observed license claim in the retried report
+    does not match the MUST-emit value from its LicenseFact.
+
+    Emitted per (repo, observed_family) pair. If the report mentions the
+    repo in multiple places with conflicting families, one mismatch per
+    distinct observed family is returned.
+    """
+
+    repo_slug: str  # "<owner>/<repo>"
+    expected_family: str
+    observed_family: str
+
+
+# Case-insensitive license-family patterns. The keys match the compact
+# family set emitted by classify_license_text plus common paraphrases
+# the model uses (AGPLv3, Apache License 2.0, etc.).
+_FAMILY_ALIASES: dict[str, tuple[str, ...]] = {
+    "GPL-3.0": ("GPL-3.0", "GPLv3", "GPL v3", "GPL 3.0", "GNU General Public License v3"),
+    "AGPL-3.0": ("AGPL-3.0", "AGPLv3", "AGPL v3", "AGPL 3.0", "GNU Affero General Public License"),
+    "LGPL-3.0": ("LGPL-3.0", "LGPLv3", "LGPL v3", "LGPL 3.0", "GNU Lesser General Public License"),
+    "Apache-2.0": ("Apache-2.0", "Apache License 2.0", "Apache 2.0", "Apache License, Version 2.0"),
+    "MIT": ("MIT License", "MIT"),
+    "BSD-3-Clause": ("BSD-3-Clause", "BSD 3-Clause", "3-Clause BSD"),
+    "BSD-2-Clause": ("BSD-2-Clause", "BSD 2-Clause", "2-Clause BSD"),
+    "MPL-2.0": ("MPL-2.0", "Mozilla Public License 2.0", "MPL 2.0"),
+    "ISC": ("ISC License", "ISC"),
+    "commercial": ("commercial license", "proprietary license", "commercial/proprietary"),
+}
+
+# Window (in characters) around a repo URL to search for a license
+# family claim. Wide enough to catch a following sentence, narrow
+# enough to avoid picking up an unrelated claim from a different repo.
+_MISMATCH_WINDOW = 400
+
+
+def _all_family_hits(text: str) -> list[tuple[int, str]]:
+    """Return every ``(position, canonical_family)`` occurrence in ``text``.
+
+    Boundary-aware for short aliases ("MIT", "ISC") — those are only
+    matched when surrounded by non-word characters, so "MIT" inside
+    "COMMITTED" is not a false hit. Case-insensitive.
+    """
+    lowered = text.lower()
+    hits: list[tuple[int, str]] = []
+    for family, aliases in _FAMILY_ALIASES.items():
+        for alias in aliases:
+            needle = alias.lower()
+            search_from = 0
+            while True:
+                hit = lowered.find(needle, search_from)
+                if hit == -1:
+                    break
+                if len(needle) <= 3:
+                    before = lowered[hit - 1] if hit > 0 else " "
+                    after_idx = hit + len(needle)
+                    after = lowered[after_idx] if after_idx < len(lowered) else " "
+                    if before.isalnum() or after.isalnum():
+                        search_from = hit + 1
+                        continue
+                hits.append((hit, family))
+                search_from = hit + len(needle)
+    return hits
+
+
+def detect_license_mismatches(
+    report_text: str, facts: list[LicenseFact]
+) -> list[LicenseMismatch]:
+    """Return license-family mismatches between the report and grounded facts.
+
+    For each usable LicenseFact (ok=True, family != "unknown") we
+    locate every occurrence of ``github.com/<owner>/<repo>`` or
+    ``raw.githubusercontent.com/<owner>/<repo>`` in the report and
+    scan a window around it for license-family strings. Attribution
+    uses NEAREST-anchor semantics: each license-family occurrence in
+    the text is attributed to the closest repo anchor within the
+    mismatch window, so two closely-spaced repo URLs each with a
+    different license claim next to them are correctly separated.
+
+    Case-insensitive; deduplicated by ``(repo_slug, observed_family)``.
+    Ordering is stable in facts order, then observed-family alpha.
+    """
+    if not report_text or not facts:
+        return []
+    usable = [f for f in facts if f.ok and f.license_family != "unknown"]
+    if not usable:
+        return []
+    lowered = report_text.lower()
+
+    # Build a flat list of (anchor_pos, fact_index) across all usable
+    # facts, keeping the fact index so we can attribute back to its
+    # expected family.
+    anchors: list[tuple[int, int]] = []
+    for idx, f in enumerate(usable):
+        slug = f"{f.owner}/{f.repo}"
+        needles = (
+            f"github.com/{slug}".lower(),
+            f"raw.githubusercontent.com/{slug}".lower(),
+        )
+        for needle in needles:
+            search_from = 0
+            while True:
+                hit = lowered.find(needle, search_from)
+                if hit == -1:
+                    break
+                anchors.append((hit, idx))
+                search_from = hit + len(needle)
+    if not anchors:
+        return []
+
+    # For each license-family occurrence in the report, attribute it to
+    # a repo anchor within _MISMATCH_WINDOW using a two-pass rule:
+    #   1. Prefer the nearest anchor that appears BEFORE the license
+    #      claim (matches the dominant "<URL> is <license>" phrasing).
+    #   2. If no such anchor is in-window, fall back to the nearest
+    #      anchor overall.
+    # This prevents "URL_A is License_X. URL_B is License_Y." from
+    # cross-attributing License_X to URL_B just because URL_B happens
+    # to be closer to License_X in absolute distance.
+    hits = _all_family_hits(report_text)
+    observations: dict[int, set[str]] = {i: set() for i in range(len(usable))}
+    for pos, family in hits:
+        # Pass 1: nearest anchor at or before this position.
+        left_idx: int | None = None
+        left_dist = _MISMATCH_WINDOW + 1
+        for apos, fidx in anchors:
+            if apos <= pos:
+                dist = pos - apos
+                if dist < left_dist:
+                    left_dist = dist
+                    left_idx = fidx
+        if left_idx is not None and left_dist <= _MISMATCH_WINDOW:
+            chosen_idx = left_idx
+        else:
+            # Pass 2: fall back to nearest overall.
+            fallback_idx: int | None = None
+            fallback_dist = _MISMATCH_WINDOW + 1
+            for apos, fidx in anchors:
+                dist = abs(apos - pos)
+                if dist < fallback_dist:
+                    fallback_dist = dist
+                    fallback_idx = fidx
+            if fallback_idx is None or fallback_dist > _MISMATCH_WINDOW:
+                continue
+            chosen_idx = fallback_idx
+        expected = usable[chosen_idx].license_family
+        if family == expected:
+            continue
+        observations[chosen_idx].add(family)
+
+    out: list[LicenseMismatch] = []
+    seen: set[tuple[str, str]] = set()
+    for idx, f in enumerate(usable):
+        slug = f"{f.owner}/{f.repo}"
+        for family in sorted(observations[idx]):
+            key = (slug, family)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                LicenseMismatch(
+                    repo_slug=slug,
+                    expected_family=f.license_family,
+                    observed_family=family,
+                )
+            )
+    return out
 
 
 __all__ = [
     "LicenseFact",
+    "LicenseMismatch",
     "extract_github_repos",
     "classify_license_text",
     "ground_licenses",
     "build_license_correction_directive",
+    "detect_license_mismatches",
 ]

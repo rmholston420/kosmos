@@ -464,3 +464,177 @@ def test_license_grounding_shim_retry_survives_vendor_bug(monkeypatch):
     assert "error" not in lic, lic
     # final answer must be the corrected one
     assert metrics.final_answer == "corrected report: both GPL-3.0"
+    # Stage 6.3.4d: no license mismatches on a compliant retry.
+    assert lic["post_retry_mismatches"] == []
+
+
+def test_license_grounding_shim_prepends_directive_before_anchored_question(
+    monkeypatch,
+):
+    """Stage 6.3.4d: the correction turn must place the SYSTEM CORRECTION
+    directive BEFORE the anchored question, not after. In 6.3.4c the
+    directive was appended and the qwen2.5:7b-instruct model's parametric
+    bias on Neo4j/DozerDB licensing won on regeneration.
+    """
+
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": (
+                    "pre-license citing "
+                    "https://github.com/neo4j/neo4j"
+                ),
+                "notes": ["p"],
+                "raw_notes": ["hit"],
+            },
+            {
+                "final_report": (
+                    "corrected: https://github.com/neo4j/neo4j is GPL-3.0"
+                ),
+                "notes": ["c"],
+                "raw_notes": ["hit"],
+            },
+        ],
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod, license_grounding
+
+    async def _fake_ground(_urls, *args, **kwargs):
+        return [
+            license_grounding.LicenseFact(
+                owner="neo4j", repo="neo4j",
+                ok=True, license_family="GPL-3.0",
+                source_url="https://raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE.txt",
+                first_line="GNU GENERAL PUBLIC LICENSE",
+                elapsed_seconds=0.01,
+            ),
+        ]
+
+    monkeypatch.setattr(license_grounding, "ground_licenses", _fake_ground)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="ANCHORED_Q_SENTINEL", question_id="q1", trial_id="t_prepend",
+            enable_fact_check=False,
+            enable_license_grounding=True,
+            enable_rubric_critique=False,
+            enable_cove=False,
+            enable_claim_support_gate=False,
+        )
+    )
+
+    assert len(invocations) == 2, invocations
+    # Second invocation is the shim-4 correction turn. It must lead with
+    # the SYSTEM CORRECTION block; the anchored question follows.
+    correction_payload = invocations[1]["payload"]
+    correction_text = correction_payload["messages"][0]["content"]
+    assert "SYSTEM CORRECTION" in correction_text
+    assert "ANCHORED_Q_SENTINEL" in correction_text
+    directive_idx = correction_text.index("SYSTEM CORRECTION")
+    question_idx = correction_text.index("ANCHORED_Q_SENTINEL")
+    assert directive_idx < question_idx, (
+        "Stage 6.3.4d requires directive prepended, not appended."
+    )
+    # Directive must include the MUST/DO NOT enumeration.
+    assert "MUST emit: GPL-3.0" in correction_text
+    assert "AGPL" in correction_text  # forbidden-family list
+    # Compliant retry → no mismatches recorded.
+    shim_events_entry = next(
+        e for e in metrics.trajectory
+        if isinstance(e, dict) and "shim_events" in e
+    )
+    lic = next(
+        s for s in shim_events_entry["shim_events"]
+        if s.get("shim") == "license_grounding"
+    )
+    assert lic["post_retry_mismatches"] == []
+
+
+def test_license_grounding_shim_records_post_retry_mismatches(monkeypatch):
+    """Stage 6.3.4d: if the model IGNORES the directive and re-emits a
+    conflicting license family on retry, the shim event must surface the
+    mismatch in ``post_retry_mismatches`` so DoD checks and blind rating
+    can see it. The report is NOT retried a second time — that risks
+    thrashing under the same parametric bias.
+    """
+
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": (
+                    "pre-license: https://github.com/neo4j/neo4j and "
+                    "https://github.com/DozerDB/dozerdb-plugin"
+                ),
+                "notes": ["p"],
+                "raw_notes": ["hit"],
+            },
+            {
+                # Model IGNORES the directive and re-emits AGPLv3/Apache-2.0
+                # exactly the Stage 6.3.4c failure pattern.
+                "final_report": (
+                    "Report: https://github.com/neo4j/neo4j is AGPLv3. "
+                    "https://github.com/DozerDB/dozerdb-plugin is "
+                    "Apache-2.0."
+                ),
+                "notes": ["noncompliant"],
+                "raw_notes": ["hit"],
+            },
+        ],
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod, license_grounding
+
+    async def _fake_ground(_urls, *args, **kwargs):
+        return [
+            license_grounding.LicenseFact(
+                owner="neo4j", repo="neo4j",
+                ok=True, license_family="GPL-3.0",
+                source_url="https://raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE.txt",
+                first_line="GNU GENERAL PUBLIC LICENSE",
+                elapsed_seconds=0.01,
+            ),
+            license_grounding.LicenseFact(
+                owner="DozerDB", repo="dozerdb-plugin",
+                ok=True, license_family="GPL-3.0",
+                source_url="https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/LICENSE",
+                first_line="GNU GENERAL PUBLIC LICENSE",
+                elapsed_seconds=0.01,
+            ),
+        ]
+
+    monkeypatch.setattr(license_grounding, "ground_licenses", _fake_ground)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t_mismatch",
+            enable_fact_check=False,
+            enable_license_grounding=True,
+            enable_rubric_critique=False,
+            enable_cove=False,
+            enable_claim_support_gate=False,
+        )
+    )
+
+    # Only two invocations: shim 4 does NOT re-retry after a mismatch.
+    assert len(invocations) == 2, invocations
+    shim_events_entry = next(
+        e for e in metrics.trajectory
+        if isinstance(e, dict) and "shim_events" in e
+    )
+    lic = next(
+        s for s in shim_events_entry["shim_events"]
+        if s.get("shim") == "license_grounding"
+    )
+    assert lic["retry_outcome"] == "retry_ok"
+    mismatches = lic["post_retry_mismatches"]
+    observed = sorted((m["repo"], m["observed"]) for m in mismatches)
+    assert observed == [
+        ("DozerDB/dozerdb-plugin", "Apache-2.0"),
+        ("neo4j/neo4j", "AGPL-3.0"),
+    ]
+    for m in mismatches:
+        assert m["expected"] == "GPL-3.0"

@@ -492,7 +492,14 @@ async def run_odr_trial(
                     }
                 )
                 if directive:
-                    correction_turn = anchored_question + "\n\n" + directive
+                    # Stage 6.3.4d: PREPEND the directive so the model
+                    # reads the SYSTEM CORRECTION before the anchored
+                    # question. In 6.3.4c we appended it; the model's
+                    # parametric bias on Neo4j/DozerDB licensing won on
+                    # regeneration because it processed the original
+                    # prompt first and only saw the correction as
+                    # trailing context.
+                    correction_turn = directive + "\n\n" + anchored_question
                     try:
                         retry_result = await _invoke_with_vendor_retry(correction_turn)
                     except ThermalAbort as exc:
@@ -510,6 +517,28 @@ async def run_odr_trial(
                         current_notes_text = "\n".join(
                             str(n) for n in current_notes if n is not None
                         )
+                        # Stage 6.3.4d: post-retry license-mismatch
+                        # check. If the rewritten report still emits a
+                        # non-MUST license family for a grounded repo,
+                        # log the mismatch to the shim event so the
+                        # blind rater and DoD gate can see it. This is
+                        # a compliance audit — we don't rewrite the
+                        # report a second time (further retries risk
+                        # thrashing under the same parametric bias).
+                        mismatches = license_grounding.detect_license_mismatches(
+                            current_report, license_facts
+                        )
+                        if mismatches:
+                            shim_events[-1]["post_retry_mismatches"] = [
+                                {
+                                    "repo": m.repo_slug,
+                                    "expected": m.expected_family,
+                                    "observed": m.observed_family,
+                                }
+                                for m in mismatches
+                            ]
+                        else:
+                            shim_events[-1]["post_retry_mismatches"] = []
             except Exception as exc:  # noqa: BLE001
                 shim_events.append(
                     {
