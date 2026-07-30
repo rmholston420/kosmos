@@ -1481,3 +1481,15 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Stop-condition status:** in-progress (Stage 6.3.4 DoD unchanged). Awaiting Colossus 3-trial run.
 - **Test status:** 181 adr_010 tests pass (was 166). Whole-repo 1167 passed, 19 skipped.
 - **GPU cap:** 450 W persisted (set in prior session's runner change; systemd file at 450 W).
+
+## 2026-07-30 17:06 EDT — Stage 6.3.4f addendum: runner default power cap 450W → 435W
+
+- **Stage / plugin / port:** Stage 6.3.4f · ADR-010 harness · runner
+- **What changed:** `runner.py --power-cap-watts` default 450 → 435 (env var `ADR010_POWER_CAP_WATTS` still overrides). Colossus 6.3.4f run peaked at 84C several times — 1C under the 85C thermal-abort watchdog, too close. Dropping the sustained-wattage cap 15W (~3.3%) restores margin without disabling the run. Docstrings + help text updated.
+- **Files touched:**
+  - ops/benchmarks/adr_010/runner.py
+  - BUILD_LOG.md, SESSION_HANDOFF.md
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress (Stage 6.3.4 DoD unchanged). systemd unit `kosmos-nvidia-power-cap.service` on Colossus needs a matching update to 435 W ExecStart.
+- **Test status:** 181 adr_010 tests still pass. Whole-repo untouched.

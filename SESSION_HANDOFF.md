@@ -1,4 +1,4 @@
-# Kosmos Session Handoff — 2026-07-30 16:32 EDT
+# Kosmos Session Handoff — 2026-07-30 17:06 EDT
 
 ## Current build-sequencing position
 - **Stage / phase:** Stage 6.3.4f (ADR-010 additive shims)
@@ -33,6 +33,9 @@
 
 ## Open questions / awaiting user answer
 - none
+
+## Thermal note (Stage 6.3.4f run in progress)
+- Colossus 6.3.4f run peaked at 84 C several times — 1 C under the 85 C watchdog. Runner default power cap dropped 450W → 435W (env `ADR010_POWER_CAP_WATTS` still overrides). systemd unit `kosmos-nvidia-power-cap.service` also updated to 435 W ExecStart on the host.
 
 ## Exact next action
 ```
