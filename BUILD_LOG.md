@@ -1215,3 +1215,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Vendor tree stays pristine (no edits to `utils.py`, `pyproject.toml`, or `deep_researcher.py`). No monkey-patching. Only the officially-supported extension surface (`mcp_prompt` + user-turn wrap) is used, exactly as landed in Stage 6.3.1 authoring commit `4db2104`.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** IN PROGRESS. The install command below closes environmental blocker 2 in full — once `python -c "from open_deep_research.deep_researcher import deep_researcher"` returns clean, the 3-trial benchmark run can execute against the anchored prompts.
+
+## 2026-07-30 12:18 EDT — Stage 6.3.1 · runtime shortlist correction (langchain-openai) + MCP stdin fix
+
+- **Stage / plugin / port:** Stage 6.3.1 · Zetesis inner-loop ODR substrate tuning (environmental fixups pre-benchmark run).
+- **What changed:** Third and fourth environmental blockers surfaced in Colossus 3-trial run (all 3 trials fast-failed identically in ~4s each with empty artifacts). Both now resolved:
+
+  1. **Runtime shortlist missed `langchain-openai`.** The ODR harness at `ops/benchmarks/adr_010/harness/odr.py` deliberately routes every model slot (research, summarization, final-report, compression) through LangChain's OpenAI provider by prefixing the model tag with `openai:` (e.g. `openai:qwen2.5:32b-instruct-q4_K_M`). This is the standard pattern for using LangChain against an OpenAI-compatible endpoint (Ollama exposes one at `/v1`). LangChain's `init_chat_model` therefore dynamically imports `langchain_openai.ChatOpenAI`. The dep is not statically referenced anywhere in the ODR src tree, so `grep '^import\|^from '` did not catch it — dynamic provider loading is invisible to static import walks by design. Symptom in artifacts: `"error": "ImportError: Initializing ChatOpenAI requires the langchain-openai package"`. Fix: `pip install langchain-openai`.
+
+  2. **MCP server suspended by SIGTTIN under `&`.** Backgrounding a stdio-mode MCP server without redirecting stdin causes the shell to send SIGTTIN when the child reads from the controlling tty, showing as `[3]+  Stopped` in `jobs`. The trials completed in ~4s each because they never actually reached the MCP tool-call phase — they died before that in `init_chat_model`. Once the ChatOpenAI import lands, the MCP suspension would still block real tool calls. Fix: `< /dev/null` on the backgrounded invocation.
+
+- **Files touched:** none in the repo (both fixes are environmental — one venv install, one shell-invocation flag).
+- **Ports / adapters affected:** none. Vendor tree remains pristine. Harness code unchanged. No monkey-patching.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** IN PROGRESS. Two more environmental gaps closed; benchmark run pending. If the next 3-trial run produces non-empty `trajectory` and `final_answer` arrays and completes on realistic ODR timescales (~30s–3min/trial against a local 32B model), Stage 6.3.1 authoring is validated end-to-end and I can do the blind F1–F6 re-rating from the artifact bodies.
