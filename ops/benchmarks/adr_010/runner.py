@@ -85,6 +85,11 @@ def emit(metrics: TrialMetrics) -> Path:
 
 
 async def run_odr(args: argparse.Namespace, question_id: str, question: str) -> None:
+    # ODR wires configurable_fields=("model","max_tokens","api_key") in
+    # deep_researcher.py, so our research_model_config.base_url is dropped.
+    # Point the OpenAI client at Ollama via env vars instead.
+    os.environ["OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY", "ollama")
+    os.environ["OPENAI_BASE_URL"] = args.ollama_base_url
     for i in range(args.trials):
         trial_id = f"trial_{i + 1:02d}_{uuid.uuid4().hex[:6]}"
         monitor = GPUMonitor()
