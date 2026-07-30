@@ -78,6 +78,19 @@ def _install_fake_graphiti(monkeypatch, client: MagicMock) -> None:
     embedder_pkg.openai = embedder_openai
     core.embedder = embedder_pkg
 
+    cross_encoder_pkg = types.ModuleType("graphiti_core.cross_encoder")
+    cross_encoder_openai = types.ModuleType(
+        "graphiti_core.cross_encoder.openai_reranker_client"
+    )
+
+    class _OpenAIRerankerClient:
+        def __init__(self, config=None):
+            self.config = config
+
+    cross_encoder_openai.OpenAIRerankerClient = _OpenAIRerankerClient
+    cross_encoder_pkg.openai_reranker_client = cross_encoder_openai
+    core.cross_encoder = cross_encoder_pkg
+
     monkeypatch.setitem(sys.modules, "graphiti_core", core)
     monkeypatch.setitem(sys.modules, "graphiti_core.nodes", nodes)
     monkeypatch.setitem(sys.modules, "graphiti_core.llm_client", llm_client_pkg)
@@ -88,6 +101,14 @@ def _install_fake_graphiti(monkeypatch, client: MagicMock) -> None:
     )
     monkeypatch.setitem(sys.modules, "graphiti_core.embedder", embedder_pkg)
     monkeypatch.setitem(sys.modules, "graphiti_core.embedder.openai", embedder_openai)
+    monkeypatch.setitem(
+        sys.modules, "graphiti_core.cross_encoder", cross_encoder_pkg
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "graphiti_core.cross_encoder.openai_reranker_client",
+        cross_encoder_openai,
+    )
 
 
 def _fresh_client() -> MagicMock:

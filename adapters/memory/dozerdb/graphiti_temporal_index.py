@@ -142,6 +142,9 @@ class GraphitiTemporalIndex:
             # Lazy imports — module level would drag graphiti_core (+ deep
             # transitive tree) into the fast unit tier.
             from graphiti_core import Graphiti
+            from graphiti_core.cross_encoder.openai_reranker_client import (
+                OpenAIRerankerClient,
+            )
             from graphiti_core.embedder.openai import (
                 OpenAIEmbedder,
                 OpenAIEmbedderConfig,
@@ -163,12 +166,22 @@ class GraphitiTemporalIndex:
                 embedding_model=self._embed_model,
             )
             embedder = OpenAIEmbedder(config=embed_cfg)
+            # Graphiti also instantiates OpenAIRerankerClient() with no args,
+            # which reads OPENAI_API_KEY from env. Provide an Ollama-configured
+            # reranker so no external credentials are required.
+            reranker_cfg = LLMConfig(
+                api_key="ollama-not-used",
+                base_url=self._llm_url,
+                model=self._llm_model,
+            )
+            cross_encoder = OpenAIRerankerClient(config=reranker_cfg)
             self._graphiti = Graphiti(
                 uri=self._uri,
                 user=self._user,
                 password=self._password,
                 llm_client=llm_client,
                 embedder=embedder,
+                cross_encoder=cross_encoder,
             )
             return self._graphiti
         except Exception as e:  # noqa: BLE001
