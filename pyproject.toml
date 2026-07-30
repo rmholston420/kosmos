@@ -10,6 +10,9 @@ authors = [{ name = "rmholston420" }]
 dependencies = [
     "httpx>=0.27",
     "structlog>=24.1",
+    "pyrage>=1.1",
+    "PyYAML>=6.0",
+    "redis>=5.0",
 ]
 
 [project.optional-dependencies]

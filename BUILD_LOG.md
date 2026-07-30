@@ -166,3 +166,28 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** SecretsPort declared and satisfied by AgeFileSecretsAdapter; §7 key-management path is now executable end-to-end for long-lived secrets
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Secrets — 3 VENDORED entries (pyrage + PyYAML + Rigpa loader pattern)
 - **Stop-condition status:** met — 77/77 tests pass across `adapters/` (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19 + Secrets 23); Protocol conformance verified via `isinstance(adapter, SecretsPort)` and `isinstance(backend, AgeBackend)`
+
+---
+
+## 2026-07-29 21:43 EDT — Declare pyrage/PyYAML/redis as runtime deps; seed DEBUG_LOG
+
+- **Stage / plugin / port:** Cross-cutting · `pyproject.toml` runtime deps
+- **What changed:** Live Colossus smoke test of `AgeFileSecretsAdapter + PyrageBackend` failed with `ModuleNotFoundError: No module named 'pyrage'` because Stages 1.4 and 1.5 lazy-imported vendor libraries (`pyrage`, `yaml`, `redis.asyncio`) but did not declare them in `[project].dependencies`. Contract tests (77/77) passed because they used the in-memory fakes (`InMemoryAgeBackend`, `InMemoryStreamClient`) which never trigger the lazy imports. Added `pyrage>=1.1`, `PyYAML>=6.0`, `redis>=5.0` to runtime deps. Also seeded `DEBUG_LOG.md` (mandated by custom instructions but never created) with the diagnosis entry. Established guardrail: every lazy-imported vendor library must be declared in runtime deps at commit time.
+- **Files touched:**
+  - `pyproject.toml` — 3 runtime deps declared (pyrage, PyYAML, redis)
+  - `DEBUG_LOG.md` — new file, seeded with 2026-07-29 21:42 EDT diagnosis
+- **Ports / adapters affected:** SecretsPort live path (`PyrageBackend`), EventBusPort live path (`redis.asyncio`)
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — fix applied; DEBUG_LOG discipline now active for the project
+
+---
+
+## 2026-07-29 21:45 EDT — ADR-025 authored: ObservabilityPort OTel+Prometheus+structlog (Langfuse deferred)
+
+- **Stage / plugin / port:** Stage 1.6 · ObservabilityPort
+- **What changed:** Authored ADR-025 to reconcile spec §4.1 (`ObservabilityPort` → "Langfuse + OpenTelemetry", `trace/score/log_cost`) with donor reality: Rigpa-LMS ships OTel + Prometheus + structlog with LGTM (per Rigpa ADR-044); Langfuse appears in zero donor files. Local-first custom instruction and Langfuse's Postgres+ClickHouse+Redis footprint make Vault-style deferral appropriate. Option B chosen (OTel+Prometheus+structlog primary; Langfuse deferred to a future second adapter for LLM-specific prompt/response/eval-score UX). Locked in nine design decisions: `trace()` as sync context manager wrapping async and sync uniformly; `log_cost()` writes to OTel counters + active-span attributes; `score()` records a histogram (p50/p95/p99 later); `bind_context()` uses contextvars so bindings survive `await`; all exporters degrade gracefully to no-op when OTLP endpoint unreachable; `opentelemetry-*` and `structlog` imported lazily behind `OtelBackend` seam; non-throwing `is_healthy` (ADR-023 rule 5 reused); idempotent `close()` flushes both providers.
+- **Files touched:**
+  - `docs/adrs/ADR-025-observabilityport-otel-prometheus-structlog.md` (new)
+- **Ports / adapters affected:** ObservabilityPort surface + `Span` Protocol defined; downstream LLMPort cost-accountability wiring path defined
+- **PORTING_LEDGER / ADR updated:** ADR-025 Ratified v25 (spec §4.1 + §17 amendments + PORTING_LEDGER entries pending Stage 1.6 code)
+- **Stop-condition status:** met (ADR authored); Stage 1.6 code + fan-out pending
