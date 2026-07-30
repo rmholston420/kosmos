@@ -40,7 +40,19 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-_URL_STRIP_TRAILING = re.compile(r"[),.;\]\"']+$")
+# Trailing punctuation that Markdown/plain-text writers glue to the end
+# of a URL. Includes the URL-encoded closing angle bracket `%3E` /
+# `%3e` produced when a model wraps citations in `<...>` and the outer
+# framework URL-encodes the whole thing before we ever see it.
+_URL_STRIP_TRAILING = re.compile(
+    r"(?:%3[Ee]|[)>,.;\]\"'])+$",
+)
+
+# URL extractor for arbitrary text. Excludes whitespace, `)`, and `>`
+# in the body so that Markdown-style citations like `<https://x/>` or
+# `(https://x)` don't smuggle bracket characters into the URL. The
+# leading `<` (if any) is stripped by extract_urls() below.
+_URL_EXTRACT_RE = re.compile(r"https?://[^\s)>]+")
 
 
 @dataclass(frozen=True)
@@ -56,8 +68,44 @@ class VerifyResult:
 
 
 def _canonicalize(url: str) -> str:
-    """Strip trailing punctuation the regex extractor commonly captures."""
-    return _URL_STRIP_TRAILING.sub("", url.strip())
+    """Strip surrounding punctuation the regex extractor commonly captures.
+
+    Handles:
+      * whitespace on both ends
+      * a leading ``<`` (Markdown autolinks `<https://...>`)
+      * trailing `)`, `>`, `%3E`/`%3e`, `.,;]"'` runs
+    Idempotent.
+    """
+    s = url.strip()
+    # Strip a single leading angle bracket if it's there.
+    if s.startswith("<"):
+        s = s[1:]
+    return _URL_STRIP_TRAILING.sub("", s)
+
+
+def extract_urls(text: str) -> list[str]:
+    """Extract canonicalized URLs from arbitrary text.
+
+    Order-preserving, deduplicated. Every returned URL is the output of
+    ``_canonicalize`` — trailing punctuation and Markdown bracketing are
+    stripped. Empty strings (a canonicalization that stripped everything)
+    are skipped.
+
+    This is the single source of truth for turning a final report /
+    correction directive / retry report into the list of URLs the
+    fact-check shim will verify. Do NOT reimplement inline in odr.py.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in _URL_EXTRACT_RE.findall(text):
+        c = _canonicalize(raw)
+        if not c or not _looks_like_url(c):
+            continue
+        if c in seen:
+            continue
+        seen.add(c)
+        out.append(c)
+    return out
 
 
 def _looks_like_url(url: str) -> bool:
@@ -214,4 +262,9 @@ def annotate_unverified(
     return annotated, unverified
 
 
-__all__ = ["VerifyResult", "verify_urls", "annotate_unverified"]
+__all__ = [
+    "VerifyResult",
+    "verify_urls",
+    "annotate_unverified",
+    "extract_urls",
+]

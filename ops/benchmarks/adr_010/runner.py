@@ -88,13 +88,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cooldown-min-seconds",
         type=float,
-        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "45")),
+        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "30")),
         help=(
             "minimum cooldown seconds, applied both pre-flight and between "
-            "trials. Progression: 30 -> 60 (post-88C incident) -> 45 "
-            "(Stage 6.3.3, after empirical data showed 60s wait consistently "
-            "landed 35-43C at trial start with the 400W power cap; 45s is "
-            "a safe operator-approved compromise)."
+            "trials. Progression: 30 -> 60 (post-88C incident) -> 45 -> 30 "
+            "(Stage 6.3.3b: three consecutive 3-trial runs never crossed "
+            "71C peak with the 400W cap; observed trial-start temps "
+            "34-44C at 45s wait, well below the 52C yellow-line and far "
+            "below the 85C watchdog. Target C held at 60.)"
         ),
     )
     parser.add_argument(

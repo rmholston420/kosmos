@@ -31,7 +31,7 @@ from .prompts import (
     build_fact_check_correction_directive,
 )
 from .search_backend import unique_domain_count
-from .url_verify import annotate_unverified, verify_urls
+from .url_verify import annotate_unverified, extract_urls, verify_urls
 
 
 class ThermalAbort(RuntimeError):
@@ -318,7 +318,6 @@ async def run_odr_trial(
     #     artifact and no further retry is issued.
     #   - The retry's own output is verified in turn and its unverified
     #     URLs are annotated the same way.
-    import re as _re
 
     fact_check_events: list[dict] = []
     if (
@@ -327,7 +326,7 @@ async def run_odr_trial(
         and not thermal_aborted
     ):
         prelim_report = str(result.get("final_report", ""))
-        prelim_urls = _re.findall(r"https?://[^\s\)]+", prelim_report)
+        prelim_urls = extract_urls(prelim_report)
         if prelim_urls:
             try:
                 verifications = await verify_urls(prelim_urls)
@@ -390,9 +389,7 @@ async def run_odr_trial(
                     # Re-verify the retry's URLs so persistent failures
                     # still get annotated.
                     retry_report = str(result.get("final_report", ""))
-                    retry_urls = _re.findall(
-                        r"https?://[^\s\)]+", retry_report
-                    )
+                    retry_urls = extract_urls(retry_report)
                     if retry_urls:
                         try:
                             retry_verifs = await verify_urls(retry_urls)
@@ -438,9 +435,7 @@ async def run_odr_trial(
         # may have introduced new URLs the retry-pass verify missed.
         annotation_urls: list[str] = []
         if enable_fact_check and final_report:
-            final_urls = _re.findall(
-                r"https?://[^\s\)]+", final_report
-            )
+            final_urls = extract_urls(final_report)
             if final_urls:
                 try:
                     final_verifs = await verify_urls(final_urls)
@@ -453,7 +448,7 @@ async def run_odr_trial(
         metrics.final_answer = final_report
         metrics.final_confidence = ""  # ODR does not emit a confidence score
 
-        cited_urls = _re.findall(r"https?://[^\s\)]+", final_report)
+        cited_urls = extract_urls(final_report)
         # Strip the `[unverified]` marker from the evidence URL list — the
         # marker sits between the URL and the tag, so the raw URL is
         # already the token that regex captured.

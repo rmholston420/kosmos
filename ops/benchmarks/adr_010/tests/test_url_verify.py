@@ -25,6 +25,7 @@ import pytest
 from ops.benchmarks.adr_010.harness.url_verify import (
     VerifyResult,
     annotate_unverified,
+    extract_urls,
     verify_urls,
 )
 
@@ -213,6 +214,83 @@ def test_annotate_unverified_only_annotates_bad(monkeypatch):
         "https://bad.example/foo",
         "https://also-bad.example/x",
     }
+
+
+# ------------------------------------------------------------------- 6.3.3b
+# Regression tests for the two bugs seen in the first 6.3.3 Colossus run:
+#   1. Markdown autolinks `<https://...>` leaked the closing `>` into the
+#      URL (often URL-encoded to `%3E` upstream), producing false 404s.
+#   2. The naive regex `https?://[^\s\)]+` did not exclude `>` and so
+#      captured trailing bracket runs.
+
+
+def test_canonicalize_strips_trailing_encoded_gt():
+    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    assert _canonicalize("https://x.example/y%3E") == "https://x.example/y"
+    assert _canonicalize("https://x.example/y%3e") == "https://x.example/y"
+    assert (
+        _canonicalize("https://x.example/y%3E%3E") == "https://x.example/y"
+    )
+
+
+def test_canonicalize_strips_trailing_gt_literal():
+    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    assert _canonicalize("https://x.example/y>") == "https://x.example/y"
+    assert _canonicalize("https://x.example/y>>") == "https://x.example/y"
+    # Combined with other trailing junk
+    assert _canonicalize("https://x.example/y).") == "https://x.example/y"
+    assert (
+        _canonicalize("https://x.example/y%3E.") == "https://x.example/y"
+    )
+
+
+def test_canonicalize_strips_leading_lt():
+    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    assert _canonicalize("<https://x.example/") == "https://x.example/"
+    assert _canonicalize("<https://x.example/>") == "https://x.example/"
+    # Two leading `<` would be pathological; we only strip one.
+    assert _canonicalize("<<https://x.example/>") != "https://x.example/"
+
+
+def test_extract_urls_from_markdown_autolinks():
+    text = (
+        "See <https://a.example/x> and <https://b.example/y%3E> and "
+        "raw https://c.example/z; also (https://d.example/w)."
+    )
+    urls = extract_urls(text)
+    assert urls == [
+        "https://a.example/x",
+        "https://b.example/y",
+        "https://c.example/z",
+        "https://d.example/w",
+    ]
+
+
+def test_extract_urls_dedupes_and_preserves_order():
+    text = (
+        "cite https://a.example/1 and again https://a.example/1 and "
+        "then https://b.example/2"
+    )
+    assert extract_urls(text) == [
+        "https://a.example/1",
+        "https://b.example/2",
+    ]
+
+
+def test_extract_urls_never_yields_bracketed_url(monkeypatch):
+    """Regression: the first 6.3.3 Colossus run emitted %3E-suffixed URLs
+    that broke verification. extract_urls must never yield a URL still
+    carrying ``>`` or ``%3E``."""
+    text = (
+        "one <https://neo4j.com/product/editions-comparison/> two "
+        "three https://github.com/dozerdb/dozer/blob/main/LICENSE%3E four"
+    )
+    urls = extract_urls(text)
+    for u in urls:
+        assert ">" not in u
+        assert "%3E" not in u
+        assert "%3e" not in u
+        assert not u.startswith("<")
 
 
 def test_annotate_is_idempotent():
