@@ -1493,3 +1493,19 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress (Stage 6.3.4 DoD unchanged). systemd unit `kosmos-nvidia-power-cap.service` on Colossus needs a matching update to 435 W ExecStart.
 - **Test status:** 181 adr_010 tests still pass. Whole-repo untouched.
+
+## 2026-07-30 17:11 EDT — Stage 6.3.5: model uplift q4_K_M → q5_K_M (32B parameter count unchanged)
+
+- **Stage / plugin / port:** Stage 6.3.5 · ADR-010 harness · Ollama model default
+- **What changed:** Ollama model default `qwen2.5:32b-instruct-q4_K_M` → `qwen2.5:32b-instruct-q5_K_M` across runner, odr harness, and test_prompts. Stage 6.3.4f blind rating (mean 3.0/6) showed shims 4/9/10 all successfully grounded facts AND emitted SYSTEM CORRECTION directives with `retry_outcome=retry_ok`, but the final reports still contained: (a) DozerDB mislabeled as Apache-2.0 or commercial (contradicting grounded GPL-3.0 fact); (b) backup/restore + high_limit_store_classes cited as if DozerDB features (F6 anti-pattern); (c) all four canonical DozerDB features omitted from prose despite feature_grounding directive; (d) enterprise-license 3.5/source-withdrawn assertion never restated. Root cause: q4_K_M's 4-bit quantization loses instruction-precision on long structured reports — the model treats SYSTEM CORRECTION as advisory context rather than a rewrite mandate. q5_K_M keeps 32B parameter count (Ollama library ≈24 GB weights) and improves directive-following at the cost of ~15-20% slower inference. Config-summary log now includes `model=` for retrospective diagnosis.
+- **VRAM math:** q5_K_M weights ≈24 GB + KV cache ≈4-6 GB @ 8k ctx = 28-30 GB total on 32 GB RTX 5090 (was 27.6 GB peak on q4_K_M). Safe margin. q6_K (26.9 GB weights) would be 31-33 GB total — risk of CPU spill. q8_0 (34.8 GB) will not fit.
+- **Files touched:**
+  - ops/benchmarks/adr_010/runner.py (default + config-summary log line)
+  - ops/benchmarks/adr_010/harness/odr.py (module docstring + 2 defaults)
+  - ops/benchmarks/adr_010/tests/test_prompts.py (parametrization)
+  - BUILD_LOG.md, DEBUG_LOG.md, SESSION_HANDOFF.md
+- **Ports / adapters affected:** none (harness-only)
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress (Stage 6.3.4 DoD unchanged: mean ≥5/6 F1-F6, no final_unverified_urls, no [unsupported] markers, no post_retry_mismatches). Awaiting Colossus 3-trial run.
+- **Test status:** 1167 passed, 19 skipped (unchanged).
+- **GPU cap:** 435 W (persisted this session).

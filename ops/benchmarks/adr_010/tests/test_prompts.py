@@ -171,7 +171,7 @@ def test_prompts_module_never_names_canonical_facts() -> None:
 def test_odr_config_injects_kosmos_mcp_prompt() -> None:
     config = odr_module.build_odr_config(
         ollama_base_url="http://127.0.0.1:11434/v1",
-        ollama_model="qwen2.5:32b-instruct-q4_K_M",
+        ollama_model="qwen2.5:32b-instruct-q5_K_M",
         mcp_server_url="http://127.0.0.1:8000",
     )
     assert config["configurable"]["mcp_prompt"] is KOSMOS_MCP_PROMPT

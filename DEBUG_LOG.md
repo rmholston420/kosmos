@@ -253,3 +253,19 @@ Entry format per `kosmos-log-maintenance` skill:
   - ops/benchmarks/adr_010/tests/test_enterprise_license_grounding.py (new)
   - ops/benchmarks/adr_010/tests/conftest.py (new — hermetic default)
 - **Related BUILD_LOG entry:** 2026-07-30 16:32 EDT
+
+## 2026-07-30 17:11 EDT — Stage 6.3.4f: shims land correctly but q4_K_M ignores SYSTEM CORRECTION directives on long reports
+
+- **Symptom:** All three Stage 6.3.4f trials show `directive_emitted=true` + `retry_outcome=retry_ok` on shims 4, 9, and 10 — every canonical fact grounded, every directive emitted, every retry succeeded. Despite this, final reports:
+  - Trial 01 (b1e9b0): claims DozerDB uses "commercial (proprietary) license" (contradicts grounded GPL-3.0).
+  - Trial 02 (30612e): claims DozerDB is Apache-2.0 (contradicts grounded GPL-3.0); 4 fabricated URLs survive to `final_unverified_urls`; post_retry_omissions shows all 4 features negated/omitted.
+  - Trial 03 (d639ad): mentions multi_database only; omits telemetry_disabled + hardened_containers; still cites backup/restore as a DozerDB feature (F6 anti-pattern); no "3.5 / source withdrawn" phrasing.
+  - Mean rating 3.0/6 (vs 6.3.4e 2.75/6 — marginal gain).
+- **Affected stage / plugin / port:** Stage 6.3.4f · ADR-010 harness · model layer (NOT the shims)
+- **Root cause:** The Ollama model default was `qwen2.5:32b-instruct-q4_K_M`. 4-bit quantization loses instruction-precision on long (400+ line) structured reports — the model treats SYSTEM CORRECTION directives as advisory context, not rewrite mandates. Two independent shims (feature_grounding + enterprise_license_grounding) both landed their facts and directives correctly and were ignored identically. This is a model-capacity problem, not a shim-architecture problem.
+- **Fix applied:** Stage 6.3.5 — bump quant to `qwen2.5:32b-instruct-q5_K_M`. Same 32B parameter count; 5-bit K-quant preserves directive-following precision (perplexity delta from q6_K ~0.5-1%; vs q4_K_M ~4-5%). VRAM budget: ~28-30 GB total (fits under 32 GB). q8_0 (34.8 GB weights) will not fit; q6_K (26.9 GB weights + KV) is borderline and risks CPU spill.
+- **Files changed:**
+  - ops/benchmarks/adr_010/runner.py
+  - ops/benchmarks/adr_010/harness/odr.py
+  - ops/benchmarks/adr_010/tests/test_prompts.py
+- **Related BUILD_LOG entry:** 2026-07-30 17:11 EDT

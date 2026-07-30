@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ollama-model",
-        default=os.environ.get("OLLAMA_MODEL", "qwen2.5:32b-instruct-q4_K_M"),
+        default=os.environ.get("OLLAMA_MODEL", "qwen2.5:32b-instruct-q5_K_M"),
     )
     parser.add_argument(
         "--mcp-url",
@@ -576,9 +576,10 @@ def main() -> int:
     ) or []
     rubric_lines = build_rubric_lines_from_facts(canonical_facts)
     logger.info(
-        "Stage 6.3.4 shims: license_grounding=%s feature_grounding=%s "
+        "Stage 6.3.5 shims (model=%s): license_grounding=%s feature_grounding=%s "
         "enterprise_license_grounding=%s rubric_critique=%s cove=%s "
         "claim_support_gate=%s n_consistency=%d rubric_points=%d",
+        args.ollama_model,
         not args.no_license_grounding,
         not args.no_feature_grounding,
         not args.no_enterprise_license_grounding,

@@ -5,7 +5,7 @@ search + visit through the MCP server in harness/mcp_search_server.py. This
 gives ODR the same tool contract as AREX, so ADR-010 measures loop quality,
 not search quality.
 
-Model: qwen2.5:32b-instruct-q4_K_M served by Ollama at 127.0.0.1:11434,
+Model: qwen2.5:32b-instruct-q5_K_M served by Ollama at 127.0.0.1:11434,
 addressed via LangChain's OpenAI-compatible provider (langchain-openai +
 base_url override).
 
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 def build_odr_config(
     *,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
-    ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
+    ollama_model: str = "qwen2.5:32b-instruct-q5_K_M",
     mcp_server_url: str = "http://127.0.0.1:8000",
 ) -> dict[str, Any]:
     """Assemble the RunnableConfig ODR needs.
@@ -74,8 +74,8 @@ def build_odr_config(
     `model_provider` keyword. LangChain's `init_chat_model` therefore has to
     infer the provider from the model string. We force provider=openai by
     prefixing the model tag with `openai:` — LangChain splits on the first
-    colon, so the tag `openai:qwen2.5:32b-instruct-q4_K_M` parses as
-    (provider=openai, model=qwen2.5:32b-instruct-q4_K_M) and the model name
+    colon, so the tag `openai:qwen2.5:32b-instruct-q5_K_M` parses as
+    (provider=openai, model=qwen2.5:32b-instruct-q5_K_M) and the model name
     is forwarded verbatim to the OpenAI-compatible endpoint (Ollama).
     """
     prefixed_model = f"openai:{ollama_model}"
@@ -128,7 +128,7 @@ async def run_odr_trial(
     question_id: str,
     trial_id: str,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
-    ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
+    ollama_model: str = "qwen2.5:32b-instruct-q5_K_M",
     mcp_server_url: str = "http://127.0.0.1:8000",
     thermal_event: Any | None = None,
     thermal_poll_seconds: float = 1.0,
