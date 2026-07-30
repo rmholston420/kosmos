@@ -1,6 +1,21 @@
 # ADR-015 — Oikos-Ahead-of-Zetesis Build Sequencing
 
-**Status:** Ratified (v24) · **Lock-in phase:** Stage 5
+**Status:** Ratified (v24) · Amended 2026-07-30 (Stage-5 deferred by user) · **Lock-in phase:** Stage 5
+
+> **STATUS AMENDMENT (2026-07-30):** At Stage 4.6 landing (commit `5ce3917`,
+> tag `stage-4-6-complete`), the user elected to **defer Stage 5** (Oikos +
+> APEX-in-plugin + Nomisma-adjacent Phase-5 work) until later, jumping
+> directly from Stage 4.6 into Stage 6.1 (Zetesis skeleton — see ADR-052).
+>
+> This ADR is **amended, not superseded**. Stage 5 remains valid future
+> work; when the user returns to it, the original decision text below
+> ("Build Oikos in Stage 5, Zetesis in Stage 6") re-activates as
+> guidance for the order in which Phase-5 substages should land relative
+> to any remaining Phase-6 work.
+>
+> The immediate practical effect: Stage 6.1 lands before Stage 5.1. See
+> `docs/adrs/ADR-052-stage-6-1-zetesis-skeleton.md` §Q1 for the lock-in.
+
 
 ## Context
 

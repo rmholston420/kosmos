@@ -335,7 +335,9 @@ Reference: Spec §18. This is the largest single-plugin build.
 
 ---
 
-## Stage 5 — Oikos (Household Administration) (Weeks 7-8)
+## Stage 5 — Oikos (Household Administration) (Weeks 7-8) — **DEFERRED (2026-07-30, ADR-052 §Q1 amends ADR-015)**
+
+> **Deferral note (2026-07-30):** At Stage 4.6 landing (commit `5ce3917`, tag `stage-4-6-complete`), the user elected to defer all of Stage 5 (Oikos skeleton + bill tracking + maintenance schedule + household inventory + benefit-assist + Stage-5 exit gate) and jump directly to Stage 6.1 (Zetesis skeleton). ADR-015's Oikos-ahead-of-Zetesis rationale is preserved but amended; when the user returns to Stage 5, ADR-015 re-activates as guidance for the order of Phase-5 substages. Stage 6.1 landed 2026-07-30 (see §6.1 below + ADR-052).
 
 Reference: Spec §19.
 
@@ -362,11 +364,22 @@ Reference: Spec §19.
 
 ---
 
-## Stage 6 — Zetesis (Research) + ADR-010 Resolution (Weeks 9-10)
+## Stage 6 — Zetesis (Research) + ADR-010 Resolution (Weeks 9-10) — **STARTED EARLY (Stage-5 deferred; see §5 note + ADR-052 §Q1)**
 
-### 6.1 Zetesis skeleton
-- **Ports:** LLMPort, MemoryPort, VectorPort, DataPort
+### 6.1 Zetesis skeleton — **LANDED** (2026-07-30, ADR-052)
+- **Ports (10 required + 1 optional — Q7=B-plus, corrects the pre-2026-07-30 4-port list):**
+  - **Required (non-None):** FrontendContractPort, LLMPort, MemoryPort, VectorPort, DataPort, SearchPort, EventBusPort, ResourcePort, NotificationPort, ObservabilityPort.
+  - **Optional (defaults to `None`):** SecretsPort (wired when Zetesis first consumes a non-local SearXNG backend or paywalled data source).
+- **Action:** Kernel-plugin at `plugins/zetesis/` with dataclass-plus-async-start-stop shape mirroring Praxis (Stage 2.1) / Phrouros (Stage 2.3) / Tektos (Stage 3.1+). `build_zetesis_descriptor()` returns a `PluginDescriptor` with **zero panels, zero routes, empty design tokens** — kernel discovers Zetesis via `FrontendContractPort.register_plugin` but nothing renders yet; UI surface lands at Stage 6.3/6.4 when real research output exists (Q2=A). Skeleton is **inner-loop-agnostic**: all 10 required business ports are held as constructor dependencies but **called zero times** at 6.1; no `ResearchInnerLoop` Protocol seam; ADR-010 head-to-head (AREX vs. LangChain Open Deep Research) remains fully open pre-§6.2 (Q3=A). Locked MemoryPort constants at 6.1 (Q4=confirmed): `ZETESIS_MEMORY_PROVENANCE="zetesis_research"`, `ZETESIS_MEMORY_PREDICATE="zetesis.research.completed"`, `ZETESIS_MEMORY_DEFAULT_CONFIDENCE=0.75` (mirrors ADR-036 Tektos pre-Reflexion default; sits in `(0,1]` per ADR-008). The real `ZetesisPlugin` **is** the `zetesis-stub` from spec §191 + §1.6 (Q5=C); no separate stub package; Phase-1 stub-role debt closes at 6.1 landing — Tektos Phase-10 model-swap-under-load rig will bind to `ZetesisPlugin` directly via ResourcePort priority-queue arbitration (spec §172). Enforcement: `test_start_touches_no_business_port` binds all 10 required ports to `_UntouchablePort` sentinels that raise `AssertionError` on any attribute access; `start()` completing without raising proves zero business-port calls at 6.1. `SecretsPort` optional-slot verified both with `None` (default) and with a real port instance. New files: `plugins/zetesis/{__init__.py, plugin.py, tests/__init__.py, tests/test_zetesis_plugin.py}`. No new pip deps; no PORTING_LEDGER change (skeleton is purpose-written, no OSS port).
+- **ADR-007:** Enforced at test time by an AST scan (`test_zetesis_package_never_imports_other_plugins_adr_007`) that walks `plugins/zetesis/**/*.py` and asserts no `import plugins.praxis`/`plugins.phrouros`/`plugins.tektos` or `from plugins.{praxis,phrouros,tektos} import` statement exists. Cross-plugin coupling routes through `EventBusPort` only (once exercised at Stage 6.3+).
+- **ADR-008:** Zero-trust write invariants pinned at 6.1 — every Stage-6.3+ Zetesis write path will carry `ZETESIS_MEMORY_PROVENANCE` + `ZETESIS_MEMORY_DEFAULT_CONFIDENCE ∈ (0,1]`. No writes fire at 6.1.
+- **ADR-010:** Preserved OPEN. Zetesis at 6.1 makes zero `LLMPort` calls; head-to-head eval at §6.2 remains pristine apples-to-apples.
+- **ADR-015:** Amended (see ADR-052 §Q1 + the status-amendment block at the head of `docs/adrs/ADR-015-oikos-before-zetesis.md`). Stage 5 deferred, not cancelled.
+- **ADR-021:** SearchPort promoted to a required Zetesis constructor slot at 6.1 (Q7=B-plus) — reinforces "web search is first-class."
+- **ADR-029:** ResourcePort slot wired at 6.1 so Stage 6.3's first LLM inference call will pass through the fixed priority order (`Phrouros anomaly > Tektos active > Synedrion/Zetesis background`) by construction.
 - **DoD:** Plugin loads.
+- **DoD anchor:** `pytest plugins/zetesis/` — 29 fast tests green (locked constants 8, descriptor shape 5, construction/lifecycle/idempotency 11, ADR-007 AST guard 1, port-surface holds 2, `_UntouchablePort` proof 1, SecretsPort optional-slot 1). Whole-repo fast tier: **986 passed / 19 skipped** (up from 957 / 19 at Stage 4.6, delta +29 = new Zetesis tier exactly).
+- **Tag:** `stage-6-1-complete`.
 
 ### 6.2 **ADR-010 head-to-head eval (PRE-Phase-6.2)**
 - **Options:** AREX vs LangChain Open Deep Research
