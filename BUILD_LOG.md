@@ -101,3 +101,36 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** LLMPort — now satisfied by **two** adapters (Ollama + llama-swap); Protocol swappability proven at runtime
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §LLM stack — llama-swap VENDORED entry added; references ADR-009 + ADR-022
 - **Stop-condition status:** met — 35/35 tests pass; `test_two_adapters_satisfy_same_llm_port` verifies both adapters isinstance-check against LLMPort simultaneously
+
+---
+
+## 2026-07-29 21:32 EDT — ADR-023 authored: EventBusPort envelope-first MVP
+
+- **Stage / plugin / port:** Stage 1.4 · EventBusPort
+- **What changed:** Authored ADR-023 to amend Kosmos-Build-Spec-v25.md §4.1's EventBusPort row from the aspirational 3-method surface (`publish/subscribe/ack`) to the donor-derived envelope-first surface (`publish(envelope)/subscribe/unsubscribe/read_recent/is_healthy/close`). Option B chosen over A (verbatim spec — `ack` cannot be responsibly designed at Stage 1.4 because no cross-process consumer exists to validate it) and C (full consumer-group surface — high API-drift risk without a real workload). Envelope discipline (`event_type/producer_plugin/payload/event_id/occurred_at/schema_version`) locked in at Protocol layer so downstream `MemoryPort.write_event()` gets provenance from `envelope.producer_plugin` by construction, satisfying ADR-008 zero-trust write contract. Consumer-group semantics deferred to future ADR-024, which MUST land before Stage 2 (Tektos) begins consuming events out-of-process.
+- **Files touched:**
+  - `docs/adrs/ADR-023-eventbusport-envelope-first-mvp.md` (new)
+  - `docs/adrs/README.md` (ADR-023 row)
+  - `docs/Kosmos-Build-Spec-v25.md` §4.1 EventBusPort Contract column expanded; §17 ADR-023 row
+- **Ports / adapters affected:** EventBusPort surface + EventEnvelope shape defined
+- **PORTING_LEDGER / ADR updated:** ADR-023 Ratified v25
+- **Stop-condition status:** met
+
+---
+
+## 2026-07-29 21:34 EDT — Stage 1.4 EventBusPort formalized; Valkey adapter vendored
+
+- **Stage / plugin / port:** Stage 1.4 · EventBusPort
+- **What changed:** Implemented `ports/event_envelope.py` (frozen dataclass with `__post_init__` validation) and `ports/event_bus.py` (`EventBusPort` runtime-checkable Protocol per ADR-023). Wrote `adapters/event_bus/valkey/adapter.py` — stream-append + in-process fan-out; injectable `StreamClient` Protocol with `InMemoryStreamClient` fake so tests need no live Valkey. Publish accepts only `EventEnvelope` (raw-dict publish raises `TypeError`). `is_healthy` non-throwing (ADR-023 rule 5). `redis` imported lazily so unit tests don't require it installed. Extended contract test to 19 tests covering envelope invariants, Protocol conformance for both `EventBusPort` and `StreamClient`, publish round-trip via `read_recent`, in-process fan-out delivery + `unsubscribe`, keyword-only kwargs on `read_recent`, non-throwing `is_healthy`, idempotent `close`, and singleton behavior.
+- **Files touched:**
+  - `ports/event_envelope.py` (new)
+  - `ports/event_bus.py` (new)
+  - `adapters/event_bus/__init__.py` (new)
+  - `adapters/event_bus/valkey/__init__.py` (new)
+  - `adapters/event_bus/valkey/adapter.py` (new)
+  - `adapters/event_bus/valkey/test_contract.py` (new)
+  - `docs/PORTING_LEDGER.md` — new §Event Bus with redis-py VENDORED + Rigpa envelope/stream-client pattern VENDORED
+  - `pyproject.toml` — adapter subpackages enumerated for editable install
+- **Ports / adapters affected:** EventBusPort declared and satisfied by ValkeyEventBusAdapter; ADR-007 (events-only cross-plugin coupling) is now executable for the first time
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Event Bus — 2 VENDORED entries (redis-py + Rigpa envelope pattern)
+- **Stop-condition status:** met — 54/54 tests pass across `adapters/` (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19); Protocol conformance verified via `isinstance(adapter, EventBusPort)`

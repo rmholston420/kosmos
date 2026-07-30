@@ -63,6 +63,39 @@
 - **ADR:** ADR-009
 - **Logged:** —
 
+### Event Bus
+
+#### redis-py (async) — `VENDORED` (Stage 1.4)
+- **Source:** https://github.com/redis/redis-py
+- **Commit / Version:** dependency — pinned via pyproject `redis>=5.0` (installed on Colossus at run time)
+- **License:** MIT
+- **Kosmos location:** `adapters/event_bus/valkey/` (HTTP-client adapter; Valkey/Redis runs as external service)
+- **Port(s):** `EventBusPort` (ADR-023)
+- **Modifications:**
+  - `redis.asyncio` imported lazily so unit tests using the in-memory fake do not require `redis` to be installed
+  - Adapter uses only `xadd` / `xrange` / `ping` / `aclose` — consumer-group calls (`xgroup_create`/`xreadgroup`/`xack`/`xpending`/`xclaim`) deferred to ADR-024
+  - Envelope-first: adapter refuses raw-dict publish (`TypeError`); every published payload is a validated `EventEnvelope`
+  - In-process fan-out via `asyncio.Queue.put_nowait()` runs alongside stream append (matches Rigpa `KernelEventBus` two-layer pattern)
+- **ADR:** ADR-007 (events-only cross-plugin coupling) + ADR-023 (EventBusPort envelope-first MVP)
+- **Logged:** 2026-07-29 21:32 EDT
+
+#### Rigpa event envelope + stream-client pattern — `VENDORED` (Stage 1.4)
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (user's own repo; permissively-licensed donor)
+  - `backend/src/rigpa/core/events/envelope.py`
+  - `backend/src/rigpa/core/events/valkey.py` (StreamClient Protocol + InMemoryStreamClient fake)
+  - `backend/src/rigpa/core/events/kernel_bus.py` (two-layer publish + in-process fan-out)
+- **Commit / Version:** inspected at donor `main` on 2026-07-29
+- **License:** user's own code; treated as permissive donor
+- **Kosmos location:** `ports/event_envelope.py`, `adapters/event_bus/valkey/adapter.py`
+- **Modifications:**
+  - Envelope reimplemented as stdlib `@dataclass(frozen=True, slots=True)` (kernel has no Pydantic dependency at Stage 1.4)
+  - Envelope adds explicit `__post_init__` validation for empty `event_type` / `producer_plugin` / `schema_version`
+  - `StreamClient` Protocol extended to include `ping()` and `aclose()` (health + lifecycle per ADR-023)
+  - `InMemoryStreamClient` adds `ping_should_fail` toggle so tests can exercise non-throwing `is_healthy` path
+  - Two-layer publish pattern simplified: no transactional outbox (deferred until MemoryPort is online in Stage 5+); Stage 1.4 does stream-append + in-process fan-out only
+- **ADR:** ADR-023 (envelope-first MVP)
+- **Logged:** 2026-07-29 21:32 EDT
+
 ### Memory / Graph
 
 #### DozerDB — `PLANNED`

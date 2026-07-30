@@ -1,12 +1,13 @@
-# Kosmos Session Handoff — 2026-07-29 21:38 EDT
+# Kosmos Session Handoff — 2026-07-29 21:34 EDT
 
 ## Current build-sequencing position
 
-- **Stage / phase:** Stage 1.3 complete → next is Stage 1.4 (per sequence — SecretsPort/Vault wrapper OR EventBusPort/Valkey, whichever the sequence puts next)
+- **Stage / phase:** Stage 1.4 complete → next is Stage 1.5 (per sequence — VectorPort/Qdrant OR SecretsPort/Vault, whichever the sequence puts next)
 - **Plugin / kernel component:** Kernel · `ports/` + `adapters/`
-- **Ports formalized:** LLMPort (Stage 1.2), SearchPort (Stage 1.1)
-- **LLMPort adapters:** Ollama (Stage 1.1), llama-swap (Stage 1.3) — **both isinstance-check against LLMPort at runtime**
+- **Ports formalized:** LLMPort (Stage 1.2), SearchPort (Stage 1.1), EventBusPort (Stage 1.4)
+- **LLMPort adapters:** Ollama (Stage 1.1), llama-swap (Stage 1.3) — both isinstance-check against LLMPort
 - **SearchPort adapters:** SearXNG (Stage 1.1)
+- **EventBusPort adapters:** Valkey/Redis Streams (Stage 1.4)
 
 ## Completed this session
 
@@ -18,25 +19,27 @@
 - **Stage 1.2** — `ports/llm.py` LLMPort Protocol formalized
 - **ADR-022** Ratified v25 — LLMPort surface expansion (3→10 methods, spec §4.1 amended)
 - **Stage 1.3** — llama-swap vendored as second LLMPort adapter; swappability proven
-- **35/35 contract tests pass** (Ollama 12 + llama-swap 15 + SearXNG 8)
-- Spec §4.1 amended (Ten→Eleven ports, LLMPort surface expanded)
-- PORTING_LEDGER: 3 VENDORED entries (Ollama, llama-swap, SearXNG)
-- BUILD_LOG: 6 timestamped entries
+- **Stage 1.4** — `ports/event_bus.py` + `ports/event_envelope.py` formalized; Valkey adapter with in-memory fake
+- **ADR-023** Ratified v25 — EventBusPort envelope-first MVP (spec §4.1 amended); consumer-group `ack` deferred to future ADR-024 (MUST land before Stage 2 Tektos out-of-process consumers)
+- **54/54 contract tests pass** (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19)
+- Spec §4.1 amended twice (LLMPort surface, EventBusPort surface); Ten→Eleven ports
+- PORTING_LEDGER: 5 VENDORED entries (Ollama, llama-swap, SearXNG, redis-py, Rigpa envelope pattern)
+- BUILD_LOG: 8 timestamped entries
+- ADR-007 (events-only cross-plugin coupling) is executable for the first time
 
-## Remaining before current Definition of Done (Stage 1.3)
+## Remaining before current Definition of Done (Stage 1.4)
 
-- Push Stage 1.3 changes to `main` (pending — this session's final commit)
+- Push Stage 1.4 changes to `main` (pending — this session's final commit)
 - Verify on Colossus (`git pull && pytest adapters/ ports/`)
-- **Deferred to Phase 1.7 (per ADR-009):** llama-swap cold-load/warm-swap benchmarks against the target envelope
 
 ## Open questions / awaiting user answer
 
-- None for Stages 1.1 / 1.2 / 1.3
-- **Stage 1.4 direction TBD:** which port next? Options in the sequence:
-  - **SecretsPort** (Vault/hvac wrapper) — needed before any adapter that reads a secret
-  - **EventBusPort** (Valkey/Redis Streams) — needed before any cross-plugin coupling
-  - **VectorPort** (Qdrant) — needed before memory subsystem work
-  - Recommendation: SecretsPort first (cheapest, unblocks the others)
+- None for Stages 1.1 / 1.2 / 1.3 / 1.4
+- **Stage 1.5 direction TBD:** which port next?
+  - **SecretsPort** (Vault/hvac) — small; unblocks any adapter needing a secret
+  - **VectorPort** (Qdrant) — needed before memory subsystem work in Stage 5+
+  - **ResourcePort** (APEX priority-queue) — needed before Colossus GPU scheduling (relevant once Tektos exists)
+  - Recommendation: **SecretsPort** — smallest and unblocks the others; also unblocks any future connector needing credentials
 
 ## Exact next action
 
@@ -49,4 +52,4 @@ pip install -e '.[dev]'
 pytest adapters/ ports/ -v
 ```
 
-Expect: `35 passed`. If green, ask user to confirm Stage 1.4 direction.
+Expect: `54 passed`. If green, confirm Stage 1.5 direction (SecretsPort recommended).
