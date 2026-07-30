@@ -95,6 +95,7 @@ if __name__ == "__main__":
 #   .venv-eval/bin/python -m ops.benchmarks.adr_010.harness.mcp_search_server \
 #     --transport streamable-http
 #
-# and point ODR at http://127.0.0.1:8000/mcp/ (FastMCP default mount). SSE
+# and point ODR at http://127.0.0.1:8000 (base URL only — langchain-mcp
+# appends /mcp itself; passing /mcp/ produces /mcp/mcp → 404). SSE
 # transport is retained for backward compatibility but does NOT interoperate
 # with the current langchain-mcp client.
