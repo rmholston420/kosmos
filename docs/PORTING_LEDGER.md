@@ -445,6 +445,40 @@
 - **ADR:** ADR-029
 - **Logged:** 2026-07-29 22:40 EDT
 
+### NotificationPort
+
+#### httpx (already vendored at ADR-021) — `VENDORED (reused)`
+- **Source:** https://github.com/encode/httpx
+- **Commit / Version:** existing project dep declared in `pyproject.toml` since Stage 1.1 (SearchPort)
+- **License:** BSD-3-Clause (verified at ADR-021)
+- **Kosmos location:** lazy-imported inside `adapters/notification/kernel/adapter.py::NtfySink._ensure_client`
+- **Port(s):** `NotificationPort` (Sink seam via `NtfySink` stub)
+- **Modifications:** none — upstream client used unmodified with `timeout=0.4` to protect Build-Sequence §1.12 <500ms DoD.
+- **Notes:** no new runtime dep added at Stage 1.12; NtfySink reuses the existing httpx vendoring.
+- **ADR:** ADR-030
+- **Logged:** 2026-07-29 22:52 EDT
+
+#### Rigpa-v2 `NotificationCenterService` pattern — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-v2 (files: `backend/src/rigpa/notifications/service.py`, `backend/src/rigpa/routers/notifications.py`, `backend/src/rigpa/routers/alerts.py`, `backend/src/rigpa/tektos/alert_service.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-notif/`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `adapters/notification/kernel/adapter.py::InProcessSink` (ring-buffer FIFO semantics + read/dismiss bookkeeping)
+- **Port(s):** `NotificationPort` (primary Sink)
+- **Modifications:** dropped FastAPI dependency-graph glue (Rigpa donor uses `Depends()` and `str` severity, domain-locked to Rigpa REST handlers); reused pattern (200-cap FIFO ring buffer, newest-first, per-notification UUID, thread-safe `RLock`, `read`/`dismissed` set bookkeeping, four-severity taxonomy); replaced open-set `str` severity with `AlgedonicTier` enum (INFO/WARN/ACTION/ALGEDONIC per spec §30/§280/§344); made verbs async; wrapped behind `Sink` Protocol seam so external sinks slot in without port-surface change.
+- **Notes:** matches ADR-028/029 domain-locking rejection pattern. Kosmos ports the ring-buffer + read/dismiss pattern, not the FastAPI class.
+- **ADR:** ADR-030
+- **Logged:** 2026-07-29 22:52 EDT
+
+#### Forge-OH `bff/routers/notifications.py` pattern — `PATTERN-VENDORED (reference only)`
+- **Source:** https://github.com/rmholston420/Forge-OH (file: `bff/routers/notifications.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-notif/forge-notifications.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** reference for future kernel-dashboard-native `WebSocketSink` (deferred to Stage 1.14 FrontendContractPort landing)
+- **Port(s):** `NotificationPort` (future dashboard-native Sink)
+- **Modifications:** none at Stage 1.12; used as design reference for how the kernel dashboard will poll `InProcessSink.snapshot(limit)` at Stage 1.14.
+- **ADR:** ADR-030
+- **Logged:** 2026-07-29 22:52 EDT
+
 ---
 
 ## Governance (Praxis / Phrouros)

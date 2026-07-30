@@ -123,9 +123,10 @@ Write pure Python `Protocol` interfaces (no implementations) at `ports/`:
 - **DoD:** Attempt to reserve 40 GB VRAM on a 32 GB card → clean rejection (Build-Sequence §1.13 DoD). 54 contract tests green.
 - **Locked:** 2026-07-29 EDT (ADR-029).
 
-### 1.12 NotificationPort adapter — algedonic channel
-- **Action:** Direct plugin → kernel dashboard, bypasses coordination latency
-- **DoD:** Priority alert delivered within 500ms end-to-end.
+### 1.12 NotificationPort adapter — algedonic channel (landed 2026-07-29 22:52 EDT per ADR-030)
+- **Status:** Ratified v25 — shipped in this session.
+- **Action:** `KernelNotificationAdapter` implements full `NotificationPort` surface (spec §4.1 `notify` / `subscribe_channel` / `ack_receipt` **plus** Q1=B `deliver_algedonic` fast-path + `check_delivery_slo` self-probe) with `AlgedonicTier` enum (INFO/WARN/ACTION/ALGEDONIC per spec §30/§280/§344). One injectable Protocol seam: `Sink` — primary `InProcessSink` (thread-safe 200-cap FIFO ring buffer, newest-first, matches Rigpa `NotificationCenterService` donor pattern; kernel dashboard polls `snapshot(limit)`; `mark_read`/`mark_dismissed` bookkeeping) + stub `NtfySink` (lazy `httpx` import, 0.4s timeout to protect DoD, `AlgedonicTier`→ntfy-priority mapping). Algedonic fast-path fans out to all sinks concurrently via `asyncio.gather(*, return_exceptions=True)` so latency is bounded by slowest sink, not the sum. Port-level non-bypassable zero-trust `validate_notification` guard rejects missing/invalid `tier`/`source`/`title`/`body`. `is_healthy` sync non-throwing (ADR-023 rule 5); `close` idempotent async, cascades to sinks. SMS mobile-fallback deferred to §344.4 (requires Stage 5 governance-key wiring).
+- **DoD:** Priority alert delivered within 500ms end-to-end. ✔ (literally verified by `test_algedonic_delivery_under_500ms_dod`: `deliver_algedonic` → `InProcessSink` → `receipt.latency_ms < 500`; 59/59 contract tests pass; full suite 336/336 pass.)
 
 ### 1.13 ResourcePort adapter — GPU/RAM reservation (satisfied at Stage 1.11 per ADR-029)
 - **Status:** Historically listed here in the aspirational sequence; the actual landing shipped at Stage 1.11 with ADR-029. Retained as a numbering-slot placeholder; DoD satisfied.

@@ -1,30 +1,23 @@
-# Kosmos Session Handoff — 2026-07-29 22:41 EDT
+# Kosmos Session Handoff — 2026-07-29 22:53 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 1.11 (**complete**)
-- **Plugin / kernel component:** ResourcePort · APEX substrate + priority queue
-- **Port(s) in progress:** none — Stage 1.11 landed; next is Stage 1.12 NotificationPort
+- **Stage / phase:** Stage 1.12 complete → next Stage 1.14 (Stage 1.13 already satisfied at Stage 1.11 per ADR-029)
+- **Plugin / kernel component:** NotificationPort landed; FrontendContractPort next (Stage 1.14)
+- **Port(s) in progress:** none (Stage 1.12 shipped)
 
 ## Completed this session
-- ADR-029 authored (`docs/adrs/ADR-029-resourceport-apex-substrate-priority-queue.md`, 422 lines, Ratified v25)
-- `ports/resource.py` (378 lines) — `ResourcePort` + `Storage` Protocols; `ResourceKind` + `PriorityClass` + `RequestStatus` enums; value objects; `RESOURCE_REQUIRED_FIELDS` + `validate_resource_request` guard; `ResourceRequestRejected` + `ResourceExhausted` exceptions
-- `adapters/resource/sqlite/adapter.py` (547 lines) — `SqliteResourceAdapter` + `AioSqliteStorage` (lazy `aiosqlite` import, WAL, one shared conn) + `InMemoryStorage` (pure stdlib test double)
-- `adapters/resource/sqlite/test_contract.py` (750 lines, 54 contract tests, all green)
-- Cumulative test count: **277/277 pass** (was 223; +54 new)
-- Full fan-out: spec §4.1 line 92 row + spec §17 ADR-029 row + Build-Sequence §1.11 (rewritten as landing) + §1.13 (marked satisfied) + adrs/README.md + PORTING_LEDGER §ResourcePort (3 entries: `aiosqlite` VENDORED, APEX ResourceProtocol pattern PATTERN-VENDORED, Rigpa-v2 priority-queue router pattern PATTERN-VENDORED) + pyproject.toml (`aiosqlite>=0.20` + package registration) + BUILD_LOG (2 timestamped entries)
+- ADR-030 authored (Q1=B full surface + AlgedonicTier + SLO probe; Q2=B InProcessSink primary + NtfySink stub)
+- `ports/notification.py` (326 lines: `NotificationPort` + `Sink` Protocols + `AlgedonicTier` + `NotificationStatus` enums + value objects + `NOTIFICATION_REQUIRED_FIELDS` + `ALGEDONIC_SLO_MS=500` + `validate_notification` guard + `NotificationRejected`)
+- `adapters/notification/kernel/adapter.py` (446 lines: `KernelNotificationAdapter` + `InProcessSink` (200-cap ring buffer + snapshot/mark_read/mark_dismissed) + `NtfySink` (lazy httpx, 0.4s timeout, AlgedonicTier→ntfy-priority mapping))
+- `adapters/notification/kernel/test_contract.py` (642 lines, 59 tests including `test_algedonic_delivery_under_500ms_dod` literally satisfying Build-Sequence §1.12 DoD)
+- Fan-out: spec §4.1 line 94 + §17 ADR-030 row + Build-Sequence §1.12 landing + adrs/README + PORTING_LEDGER §NotificationPort (3 entries: httpx-reused + Rigpa-v2 NotificationCenterService pattern + Forge-OH bff/routers/notifications pattern-reference-only) + pyproject.toml (packages registered, no new deps) + BUILD_LOG (2 entries at 22:52 + 22:53 EDT)
+- 336/336 tests pass (was 277 → +59 NotificationPort)
 
 ## Remaining before current Definition of Done
-- Stage 1.11 Definition of Done **met**:
-  - Build-Sequence §1.13 DoD ("Attempt to reserve 40 GB VRAM on a 32 GB card → clean rejection") satisfied literally by `test_over_subscription_rejected_build_sequence_1_13_dod`
-  - 54 contract tests green (277/277 cumulative)
-  - Full surface (8 verbs + `is_healthy` + `close`) landed
-  - Priority queue fixed order (Phrouros > Tektos > Background) verified
-  - Storage seam swap verified (InMemoryStorage ↔ AioSqliteStorage)
-  - Decimal precision preserved end-to-end (no float drift)
+- none — Stage 1.12 landed and pushed
 
 ## Open questions / awaiting user answer
-- none.
+- none — next Stage 1.14 direction (FrontendContractPort) is user's call
 
 ## Exact next action
-- Commit + push Stage 1.11 to `github.com/rmholston420/kosmos` main.
-- Then: Stage 1.12 (NotificationPort — algedonic channel, spec Build-Sequence §1.12: "Direct plugin → kernel dashboard, bypasses coordination latency. DoD: Priority alert delivered within 500ms end-to-end.").
+- User: pick next stage direction; agent stands ready to inventory FrontendContractPort donors and present locked scope questions.

@@ -38,7 +38,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["ports", "adapters", "adapters.llm", "adapters.llm.ollama", "adapters.llm.llama_swap", "adapters.search", "adapters.search.searxng", "adapters.event_bus", "adapters.event_bus.valkey", "adapters.secrets", "adapters.secrets.age_file", "adapters.observability", "adapters.observability.otel_stack", "adapters.vector", "adapters.vector.qdrant", "adapters.memory", "adapters.memory.dozerdb", "adapters.data", "adapters.data.filesystem", "adapters.resource", "adapters.resource.sqlite"]
+packages = ["ports", "adapters", "adapters.llm", "adapters.llm.ollama", "adapters.llm.llama_swap", "adapters.search", "adapters.search.searxng", "adapters.event_bus", "adapters.event_bus.valkey", "adapters.secrets", "adapters.secrets.age_file", "adapters.observability", "adapters.observability.otel_stack", "adapters.vector", "adapters.vector.qdrant", "adapters.memory", "adapters.memory.dozerdb", "adapters.data", "adapters.data.filesystem", "adapters.resource", "adapters.resource.sqlite", "adapters.notification", "adapters.notification.kernel"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
