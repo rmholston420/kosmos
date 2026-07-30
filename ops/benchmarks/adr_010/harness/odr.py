@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import sys
 import time
 import uuid
@@ -56,6 +57,37 @@ if str(_ODR_SRC) not in sys.path:
     sys.path.insert(0, str(_ODR_SRC))
 
 logger = logging.getLogger(__name__)
+
+
+# Character class of URL-body characters used by
+# ``_strip_url_boundary_aware``. Kept in sync with `_URL_EXTRACT_RE` in
+# url_verify.py: what the extractor accepts in the URL body is what we
+# must treat as "still part of the URL" here.
+_URL_BODY_CHARS = r"[A-Za-z0-9/?&=\-_.~:+%#@,;']"
+
+
+def _strip_url_boundary_aware(text: str, url: str) -> tuple[str, bool]:
+    """Remove ``url`` from ``text``, boundary-aware.
+
+    Strips the URL only where it is NOT followed by another URL-body
+    character. This prevents a short bad URL from mutating a longer
+    good URL that shares its prefix (e.g. stripping
+    ``https://a.example/`` must not touch ``https://a.example/x``).
+
+    Also strips a trailing ``[unverified]`` marker (with or without a
+    preceding space) attached to the same boundary.
+
+    Returns ``(new_text, changed)``.
+    """
+    if not url or url not in text:
+        return text, False
+    esc = re.escape(url)
+    boundary = r"(?!" + _URL_BODY_CHARS + r")"
+    out = text
+    out = re.sub(esc + boundary + r"\s\[unverified\]", "", out)
+    out = re.sub(esc + boundary + r"\[unverified\]", "", out)
+    out = re.sub(esc + boundary, "", out)
+    return out, out != text
 
 
 def build_odr_config(
@@ -538,20 +570,12 @@ async def run_odr_trial(
                     retry_report = str(result.get("final_report", ""))
                     stripped_urls: list[str] = []
                     for bad in unverified_first:
-                        if bad and bad in retry_report:
-                            # Remove the URL AND a trailing dangling
-                            # `[unverified]` (or `[unverified]` with
-                            # preceding whitespace) that was attached to
-                            # it. Only these positional markers get
-                            # stripped: legitimately unverified NEW URLs
-                            # emitted by the retry writer keep their
-                            # markers untouched and are handled by the
-                            # finalize `annotate_unverified` pass.
-                            retry_report = retry_report.replace(
-                                f"{bad} [unverified]", ""
-                            ).replace(
-                                f"{bad}[unverified]", ""
-                            ).replace(bad, "")
+                        if not bad:
+                            continue
+                        retry_report, changed = _strip_url_boundary_aware(
+                            retry_report, bad
+                        )
+                        if changed:
                             stripped_urls.append(bad)
                     if stripped_urls:
                         fact_check_events.append(
@@ -593,14 +617,11 @@ async def run_odr_trial(
                         for bad in unverified_after:
                             if bad in already or not bad:
                                 continue
-                            if bad not in retry_report:
-                                continue
-                            retry_report = retry_report.replace(
-                                f"{bad} [unverified]", ""
-                            ).replace(
-                                f"{bad}[unverified]", ""
-                            ).replace(bad, "")
-                            newly_stripped.append(bad)
+                            retry_report, changed = _strip_url_boundary_aware(
+                                retry_report, bad
+                            )
+                            if changed:
+                                newly_stripped.append(bad)
                         if newly_stripped:
                             stripped_urls.extend(newly_stripped)
                             fact_check_events.append(
@@ -1104,17 +1125,29 @@ async def run_odr_trial(
                     final_verifs = await verify_urls(final_urls)
                 except Exception:  # noqa: BLE001
                     final_verifs = {}
+                # Strip each bad URL, but only where it is NOT followed
+                # by a URL-body character (letters, digits, `/`, `?`,
+                # `&`, `=`, `-`, `_`, `.`, `~`, `:`, `+`, `%`, `#`,
+                # `@`, `,`, `;`, `'`). Otherwise a bad short URL like
+                # `https://a.example/` would also strip a good longer
+                # URL like `https://a.example/x` that shares its prefix.
+                # This is the finalize equivalent of a boundary-aware
+                # replace.
                 for u, r in final_verifs.items():
                     if r.ok or not u:
                         continue
-                    if u not in final_report:
-                        continue
-                    final_report = final_report.replace(
-                        f"{u} [unverified]", ""
-                    ).replace(
-                        f"{u}[unverified]", ""
-                    ).replace(u, "")
-                    final_unverified_urls.append(u)
+                    final_report, changed = _strip_url_boundary_aware(
+                        final_report, u
+                    )
+                    if changed:
+                        final_unverified_urls.append(u)
+                # Sweep any orphan ``[unverified]`` marker left behind
+                # (e.g. from a URL that was stripped upstream by shim
+                # 3, or a model-emitted decorative marker). Idempotent.
+                if "[unverified]" in final_report:
+                    final_report = re.sub(
+                        r"\s?\[unverified\]", "", final_report
+                    )
         # Legacy alias for downstream trajectory expectations.
         annotation_urls = final_unverified_urls
 

@@ -1586,3 +1586,18 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (harness-internal).
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress. Hermetic tests green (ADR-010 188 passed, whole-repo 1174 passed + 19 skipped). Colossus 3-trial re-run pending; expect `final_unverified_urls == []` on every trial and no `[unverified]` markers anywhere.
+
+## 2026-07-30 18:45 EDT — Stage 6.3.6b hardening: boundary-aware URL strip + orphan-marker sweep
+
+- **Stage / plugin / port:** ADR-010 ODR harness · finalize enforcement + shim-3 retry strip
+- **What changed:**
+  - Extracted `_strip_url_boundary_aware(text, url) -> (str, bool)` helper. Uses `re.sub` with a negative lookahead against URL-body characters so a bad URL that is a prefix of a good URL no longer corrupts the good URL. Also strips the attached `[unverified]` marker (with or without preceding space).
+  - Wired the helper into all three strip sites: shim-3 `unverified_first` (retry-time strip), shim-3 `unverified_after` (retry-time new-URL strip), and the finalize block. Every site now records the URL only when the strip actually mutated the text.
+  - Added orphan-`[unverified]`-marker sweep at end of finalize block (`re.sub(r"\s?\[unverified\]", "", final_report)`).
+  - Added regression test `test_finalize_strip_boundary_aware_prefix_collision`: long good URL `https://a.example/x` survives when short bad URL `https://a.example/` is stripped.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/odr.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress. Whole-repo pytest **1175 passed, 19 skipped**.

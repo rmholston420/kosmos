@@ -1,4 +1,4 @@
-# Kosmos Session Handoff — 2026-07-30 18:36 EDT
+# Kosmos Session Handoff — 2026-07-30 18:45 EDT
 
 ## Current build-sequencing position
 
@@ -12,7 +12,8 @@
 - Stage 6.3.6b: replaced finalize-time `annotate_unverified` with a strip loop that removes bad URLs + trailing `[unverified]` markers from the report body and records the URLs as `final_unverified_urls` in `metrics.trajectory`.
 - Cleanup: dropped now-unused `annotate_unverified` import from `odr.py`; fixed runner banner to say `Stage 6.3.6b shims`.
 - New hermetic test `test_finalize_strip_removes_bad_url_from_body` proves the finalize strip catches URLs that pass the shim-3 verify but fail at finalize.
-- Whole-repo pytest green: **1174 passed, 19 skipped** (was 1173; +1 test).
+- Whole-repo pytest green: **1175 passed, 19 skipped** (was 1173; +2 tests).
+- Pre-flight audit caught a prefix-collision bug in the raw `str.replace` strip: a short bad URL would corrupt a longer good URL sharing its prefix. Added `_strip_url_boundary_aware` helper using a negative-lookahead against URL-body characters and wired it into all three strip sites (shim-3 pre-strip, shim-3 new-URL strip, finalize strip). Added orphan-`[unverified]`-marker sweep at end of finalize.
 
 ## Remaining before current Definition of Done is met
 

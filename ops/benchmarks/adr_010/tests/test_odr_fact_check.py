@@ -458,6 +458,79 @@ def test_finalize_strip_removes_bad_url_from_body(monkeypatch):
     assert "https://late-bad.example/" in entry["final_unverified_urls"]
 
 
+def test_finalize_strip_boundary_aware_prefix_collision(monkeypatch):
+    """Stage 6.3.6b: a SHORT bad URL that is a prefix of a LONG good
+    URL must NOT corrupt the long good URL when stripped.
+
+    Regression guard against a bug in an earlier 6.3.6b draft: using
+    plain `.replace(bad_url, '')` would also strip the prefix from any
+    longer URL sharing that prefix, silently mutating a valid citation.
+    """
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": (
+                    "long good https://a.example/x and short bad "
+                    "https://a.example/ inline"
+                ),
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            },
+        ],
+    )
+    call_state = {"n": 0}
+
+    async def _fake_verify(urls, **kw):
+        from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+        call_state["n"] += 1
+        is_finalize = call_state["n"] >= 2
+        out = {}
+        for u in urls:
+            # Long good URL: always ok. Short URL: ok at shim 3,
+            # bad at finalize (simulates late DNS/HTTP failure or
+            # downstream shim adding a variant that fails).
+            if u == "https://a.example/x":
+                ok = True
+            elif u == "https://a.example/":
+                ok = not is_finalize
+            else:
+                ok = True
+            out[u] = VerifyResult(
+                url=u, ok=ok,
+                kind="ok" if ok else "http_4xx",
+                status_code=200 if ok else 404,
+                elapsed_seconds=0.001,
+            )
+        return out
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    monkeypatch.setattr(odr_mod, "verify_urls", _fake_verify)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    # Long good URL survives INTACT (this is the regression guard).
+    assert "https://a.example/x" in metrics.final_answer
+    # Short bad URL removed.
+    assert "https://a.example/ " not in metrics.final_answer
+    assert "https://a.example/i" not in metrics.final_answer  # sanity: no glue
+    # Trajectory records the short URL as stripped.
+    entry = next(
+        (
+            e for e in metrics.trajectory
+            if isinstance(e, dict) and "final_unverified_urls" in e
+        ),
+        None,
+    )
+    assert entry is not None
+    assert "https://a.example/" in entry["final_unverified_urls"]
+    assert "https://a.example/x" not in entry["final_unverified_urls"]
+
+
 def test_no_fact_check_disables_shim(monkeypatch):
     invocations: list[dict] = []
     _install_stub_deep_researcher(

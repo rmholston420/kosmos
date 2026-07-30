@@ -345,3 +345,15 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/runner.py` (banner)
   - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py` (new hermetic test)
 - **Related BUILD_LOG entry:** 2026-07-30 18:36 EDT
+
+## 2026-07-30 18:41 EDT — 6.3.6b pre-flight audit found prefix-collision bug
+
+- **Symptom (audit-caught, not yet observed in the wild):** In the 6.3.6b finalize strip, a bad URL that is a PREFIX of a good URL would corrupt the good URL. Reproduced with `"good https://a.example/x and bad https://a.example/".replace("https://a.example/", "")` → `"good x and bad "`. Bug also present in shim-3's `unverified_first` / `unverified_after` strip loops (retry path).
+- **Affected stage / plugin / port:** ADR-010 ODR harness · finalize enforcement + shim-3 retry strip
+- **Root cause:** `str.replace` is unaware of URL boundaries. Any occurrence of the bad URL as a substring — including as a prefix of a longer URL — is replaced. In practice the bug is exposed when a plugin release page (bad) shares its domain root with a documentation deep-link (good).
+- **Fix applied:** New helper `_strip_url_boundary_aware(text, url)` uses a `re.sub` with a negative-lookahead against URL-body characters (`[A-Za-z0-9/?&=\-_.~:+%#@,;']`) after the URL, so a match only fires where the next character is NOT part of another URL. Also strips a trailing `[unverified]` (with or without a preceding space) attached to the same boundary. Returns `(new_text, changed)`; the caller records the URL only when `changed` is True. Applied at all three strip sites: shim-3 `unverified_first`, shim-3 `unverified_after`, and the finalize block.
+- **Also added:** an orphan-`[unverified]`-marker sweep at the end of the finalize block, so any bare marker left behind by the upstream shims (or a decorative model emission) is scrubbed. `re.sub(r"\s?\[unverified\]", "", final_report)`.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/odr.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py` (added `test_finalize_strip_boundary_aware_prefix_collision`)
+- **Related BUILD_LOG entry:** 2026-07-30 18:41 EDT
