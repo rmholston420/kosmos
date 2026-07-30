@@ -1,75 +1,79 @@
-# Kosmos v25 Bundle
+# Kosmos
 
-**Everything needed to build Kosmos, ready to execute Stage 1 immediately.**
+Single-user local-first Life Management System, targeted at **Colossus**
+(AMD Ryzen 9 7900X · 128 GB RAM · RTX 5090 32 GB VRAM · Kubuntu 26.04 LTS).
 
-## What's in this bundle
+## Repo layout (Stage 0.1)
 
-| Path | Purpose |
-|---|---|
-| `Kosmos-Build-Spec-v25.md` | Definitive unified master spec. Supersedes v19–v24 and all addenda. Stand-alone. |
-| `Kosmos-Build-Sequence-v25.md` | Executable stage → plugin → port → DoD order. Follow top-to-bottom. |
-| `PORTING_LEDGER.md` | Every OSS component to vendor. Log to this file **before** first commit that uses it. |
-| `adrs/` | 22 ADR files (numbered ADR-001…ADR-020, plus DozerDB variant of 008 and DeepSWE variant of 007). Only ADR-010 is OPEN. |
-| `adrs/README.md` | ADR index. |
-| `perplexity/skills/` | Four Perplexity Computer skills that automate spec/log/ADR/port discipline. |
-| `perplexity/prompts/` | Two reusable system prompts (build, debug). |
-| `templates/` | `BUILD_LOG.md`, `DEBUG_LOG.md`, `KNOWN_ISSUES.md`, `SESSION_HANDOFF.md` starter files. |
-| `archive/` | Every source file this bundle was compiled from (v22, v23, v24, addenda, agentic scans, ADRs, etc.). Provenance only — do not reference from live docs. |
-
-## Stage 1 quickstart
-
-```bash
-# 1. Unpack this bundle at the repo location of your choice
-unzip kosmos-v25.zip -d ~/dev/
-cd ~/dev/kosmos-v25/
-
-# 2. Copy templates to the future Kosmos repo root
-mkdir -p ~/dev/kosmos/
-cp templates/*.md ~/dev/kosmos/
-cp Kosmos-Build-Spec-v25.md Kosmos-Build-Sequence-v25.md PORTING_LEDGER.md ~/dev/kosmos/docs/ 2>/dev/null || mkdir -p ~/dev/kosmos/docs && cp Kosmos-Build-Spec-v25.md Kosmos-Build-Sequence-v25.md PORTING_LEDGER.md ~/dev/kosmos/docs/
-cp -r adrs ~/dev/kosmos/docs/
-cp -r perplexity/skills ~/dev/kosmos/.perplexity/ 2>/dev/null || mkdir -p ~/dev/kosmos/.perplexity && cp -r perplexity/skills ~/dev/kosmos/.perplexity/
-
-# 3. Follow Kosmos-Build-Sequence-v25.md from Stage 0.1
+```
+kosmos/
+├── README.md                    # this file
+├── .gitignore
+├── .perplexity/                 # Perplexity Computer skills + prompts
+│   ├── skills/
+│   │   ├── kosmos-port-workflow/SKILL.md
+│   │   ├── kosmos-adr-authoring/SKILL.md
+│   │   ├── kosmos-log-maintenance/SKILL.md
+│   │   └── kosmos-spec-diff/SKILL.md
+│   └── prompts/
+│       ├── kosmos-build-system-prompt.md
+│       └── kosmos-debug-system-prompt.md
+│
+├── BUILD_LOG.md                 # append-only — every completed step
+├── DEBUG_LOG.md                 # append-only — search FIRST before diagnosing
+├── KNOWN_ISSUES.md              # running open list
+├── SESSION_HANDOFF.md           # overwrite at end of every session; READ at start of next
+│
+├── docs/                        # all spec + decision content lives here
+│   ├── Kosmos-Build-Spec-v25.md          # master spec (stand-alone; supersedes v19–v24)
+│   ├── Kosmos-Build-Sequence-v25.md      # executable stage → plugin → port → DoD order
+│   ├── PORTING_LEDGER.md                 # every OSS port logged BEFORE first commit that uses it
+│   ├── Kosmos-ADRs-Bundle.md             # all 22 ADRs in one file
+│   ├── Kosmos-Perplexity-Skills-Bundle.md# 4 skills + 2 prompts in one file
+│   └── adrs/                             # individual ADR files (ADR-001 … ADR-020)
+│
+├── templates/                   # starter copies of the four log files
+│
+├── kernel/                      # System 5 (identity) + System 2/3 (coordination)
+├── plugins/                     # System 1 units (Tektos, Gnosis, Oikos, Zetesis, …)
+├── ports/                       # formal Protocol interfaces (LLMPort, MemoryPort, …)
+├── adapters/                    # concrete implementations of ports (vendored OSS wrapped here)
+├── governance/                  # Praxis + Phrouros
+└── ops/                         # deploy, benchmarks, DR runbooks
 ```
 
-## Perplexity Computer skills — install
+## Start-of-session ritual (HARD)
 
-Each skill under `perplexity/skills/kosmos-*` is a stand-alone directory containing a `SKILL.md` file. Install via the Perplexity Computer skill library — the `save_custom_skill` tool accepts either the directory zipped or the `SKILL.md` directly.
+```bash
+cat SESSION_HANDOFF.md
+cat KNOWN_ISSUES.md
+less docs/Kosmos-Build-Sequence-v25.md   # find your current stage/step
+```
 
-Once installed:
+## The four non-negotiable disciplines
 
-- `kosmos-port-workflow` — load before writing any component
-- `kosmos-adr-authoring` — load before making an architectural decision
-- `kosmos-log-maintenance` — load after every completed step and at end of session
-- `kosmos-spec-diff` — load before editing the spec, sequence, ledger, or any ADR
+1. **Vendor before hand-build.** Log every port in `docs/PORTING_LEDGER.md` before first use.
+2. **No plugin imports another plugin.** Cross-plugin coupling via event bus / formal ports only (ADR-007).
+3. **Zero-trust memory writes.** No `MemoryPort.write` without `provenance` + `confidence`.
+4. **Maintain the four logs.** BUILD_LOG (append), DEBUG_LOG (search first, then append),
+   KNOWN_ISSUES (edit), SESSION_HANDOFF (overwrite each session end).
 
-## Resolved decisions in v25 (vs. v24)
+## Perplexity Computer skills
 
-| ADR | Decision |
-|---|---|
-| ADR-004 | Bernstein Janitor spike-test **approved** — adopt iff Tektos Phase 4 fixture wins |
-| ADR-008-DozerDB | **DozerDB fork** adopted as MemoryPort graph store |
-| ADR-009 | **llama-swap primary** + router-mode fallback (contingent on Stage 1.7 SLO benchmark) |
-| ADR-011 | **a2a-sdk** as Koinonia standalone transport (not on Moltbook) |
-| ADR-012 | Consolidate `ollama.py` / `searxng.py` duplicates in Stage 1.1 |
-| ADR-013 | Memory-bridge redundancy comparison during Stage 1 pre-Phase-2 |
+Load the appropriate skill before every relevant action:
 
-## The only remaining OPEN decision
+- `kosmos-port-workflow` — before writing any component
+- `kosmos-adr-authoring` — before making an architectural decision
+- `kosmos-log-maintenance` — after every completed step + at session end
+- `kosmos-spec-diff` — before editing any spec / sequence / ADR
 
-**ADR-010** — AREX vs. LangChain Open Deep Research for the Zetesis inner loop. Head-to-head evaluation runs immediately before Phase 6.2. Winner locked at that point; loser recorded as `REJECTED` in PORTING_LEDGER.
+## Current status
 
-## Non-negotiables (verbatim from project custom instructions)
+Stage 0.1 monorepo skeleton — docs and Perplexity skills in place; kernel/plugin/port
+directories seeded as empty scaffolds. Next: Stage 0.2 (copy log templates to root
+— already done at bootstrap) and Stage 0.3 (install skills into Perplexity user library),
+then Stage 1.1 (donor adapter consolidation).
 
-- Target Colossus first. Single-user, local-first. No cloud control planes, no multi-user assumptions, no GitHub-native CI unless explicitly asked.
-- Be terse. Bullets, exact commands. No filler.
-- Never ask the user to manually edit files. Give exact bash commands / scripts.
-- Never guess. Inspect donor code before porting.
-- Vendor before hand-build. Log every port in `PORTING_LEDGER.md`.
-- No plugin imports another plugin — event bus / formal ports only (ADR-007).
-- Zero-trust memory writes: `provenance` + `confidence` mandatory.
-- Maintain `BUILD_LOG.md`, `DEBUG_LOG.md`, `KNOWN_ISSUES.md`, `SESSION_HANDOFF.md`.
-
-## Bundle version
-
-**Kosmos-v25** · compiled 2026-07-29 (America/Detroit).
+**Only OPEN ADR:** [ADR-010](docs/adrs/ADR-010-zetesis-inner-loop-eval.md) —
+AREX vs. LangChain Open Deep Research head-to-head immediately before Phase 6.2.
+All other ADRs are Ratified or Ratified v25.
