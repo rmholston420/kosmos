@@ -841,6 +841,36 @@
 - **ADR:** ADR-044
 - **Logged:** 2026-07-30 04:20 EDT
 
+#### htmx — `VENDORED (Stage 3.11, ADR-045)`
+- **Source:** https://github.com/bigskysoftware/htmx
+- **Commit / Version:** `b82cf843e47e575dd8c2ad8fee547d8e2c3bb87f` (release tag `v2.0.4`)
+- **License:** 0BSD (upstream `LICENSE` file, verified 2026-07-30; SPDX `0BSD`, permissively compatible)
+- **Kosmos location:** `plugins/tektos/ui/htmx.min.js` (50917 bytes, sha256 `e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447`); served in-process via `plugins.tektos.ui.server` route `/htmx.min.js`
+- **Port(s):** none (browser-side runtime asset — no server port surface)
+- **Modifications:** none — verbatim minified upstream artifact
+- **ADR:** ADR-045
+- **Logged:** 2026-07-30 05:14 EDT
+
+#### fastapi — `VENDORED (Stage 3.11, ADR-045)`
+- **Source:** https://github.com/fastapi/fastapi
+- **Commit / Version:** PyPI `fastapi>=0.115` (dev install pinned at 0.141.1)
+- **License:** MIT
+- **Kosmos location:** `pyproject.toml` `[project.optional-dependencies] ui = ["fastapi>=0.115", "uvicorn>=0.32", "httpx>=0.27"]`; imported inside `plugins.tektos.ui.server.build_tektos_ui_app` (lazy import guarded so absence does not break the kernel import graph)
+- **Port(s):** none (HTTP framework hosting the Tektos UI HTMX dashboard)
+- **Modifications:** none — public API only
+- **ADR:** ADR-045
+- **Logged:** 2026-07-30 05:14 EDT
+
+#### uvicorn — `VENDORED (Stage 3.11, ADR-045)`
+- **Source:** https://github.com/encode/uvicorn
+- **Commit / Version:** PyPI `uvicorn>=0.32` (dev install pinned at 0.52.0)
+- **License:** BSD-3-Clause
+- **Kosmos location:** `pyproject.toml` `[project.optional-dependencies] ui` (see htmx entry); invoked by `scripts/tektos_ui.py` for the env-gated interactive tier and `make ui-serve`
+- **Port(s):** none (ASGI server for the UI process)
+- **Modifications:** none — public CLI/API only
+- **ADR:** ADR-045
+- **Logged:** 2026-07-30 05:14 EDT
+
 #### ruff — `VENDORED (dev dep)`
 - **Source:** https://github.com/astral-sh/ruff
 - **License:** MIT

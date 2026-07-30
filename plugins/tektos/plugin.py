@@ -19,9 +19,9 @@ ADR-033 §Q1). Ordering is priority-DESC per ADR-031, so Praxis
 approvals render above Tektos plan cards in the same slot.
 
 ``ui_parity_status`` is :attr:`UiParityStatus.IN_PROGRESS` at 3.7;
-COMPLIANT lands at Stage 3.11 (full Tektos UI per Build-Sequence
-§3.11 DoD). This mirrors Praxis (ADR-032) and Phrouros (ADR-034),
-which both landed as IN_PROGRESS.
+COMPLIANT flips at Stage 3.11 (ADR-045) via the addition of a
+single :class:`~ports.frontend_contract.Route` below. Praxis
+(ADR-032) and Phrouros (ADR-034) remain IN_PROGRESS.
 
 ADR-007: this module imports only from ``ports.*`` and its own
 ``plugins.tektos.renderer`` subpackage. It MUST NOT import any other
@@ -38,6 +38,14 @@ from ports.frontend_contract import (
     PanelSlot,
     PluginDescriptor,
     PluginRegistration,
+    Route,
+)
+
+from .ui.policy import (
+    TEKTOS_UI_ROUTE_ICON,
+    TEKTOS_UI_ROUTE_LABEL,
+    TEKTOS_UI_ROUTE_LAZY_MODULE,
+    TEKTOS_UI_ROUTE_PATH,
 )
 
 __all__ = [
@@ -103,13 +111,19 @@ def build_tektos_descriptor() -> PluginDescriptor:
         lazy_module=TEKTOS_PLAN_APPROVAL_LAZY_MODULE,
         plugin_name=TEKTOS_PLUGIN_NAME,
     )
+    dashboard_route = Route(
+        path=TEKTOS_UI_ROUTE_PATH,
+        label=TEKTOS_UI_ROUTE_LABEL,
+        icon=TEKTOS_UI_ROUTE_ICON,
+        lazy_module=TEKTOS_UI_ROUTE_LAZY_MODULE,
+    )
     return PluginDescriptor(
         name=TEKTOS_PLUGIN_NAME,
         state_namespace=TEKTOS_STATE_NAMESPACE,
         version=TEKTOS_VERSION,
         kernel_compat=TEKTOS_KERNEL_COMPAT,
         design_tokens={},
-        routes=(),
+        routes=(dashboard_route,),
         panels=(plan_approval_panel,),
     )
 

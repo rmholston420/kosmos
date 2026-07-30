@@ -1,4 +1,4 @@
-.PHONY: help test stage1-gate eval-gate deepswe-fetch deepswe-gate ingest-doc
+.PHONY: help test stage1-gate eval-gate deepswe-fetch deepswe-gate ingest-doc ui-serve
 
 PY := .venv/bin/python
 
@@ -10,6 +10,7 @@ help:
 	@echo "  deepswe-fetch  Hydrate the pinned DeepSWE subset into .eval-cache/ (Stage 3.9)"
 	@echo "  deepswe-gate   Run the DeepSWE subset through Pier (Stage 3.9, ADR-007-DeepSWE)"
 	@echo "  ingest-doc     Ingest one document via docling + DataPort (Stage 3.10, ADR-043)"
+	@echo "  ui-serve       Serve the Tektos UI HTMX dashboard on 127.0.0.1:8765 (Stage 3.11, ADR-045)"
 
 test:
 	$(PY) -m pytest
@@ -34,3 +35,6 @@ ingest-doc:
 	$(PY) scripts/docling_ingest.py \
 		--path plugins/tektos/tests/fixtures/docling/sample.html \
 		--out-root .ingest-cache/docling
+
+ui-serve:
+	$(PY) scripts/tektos_ui.py

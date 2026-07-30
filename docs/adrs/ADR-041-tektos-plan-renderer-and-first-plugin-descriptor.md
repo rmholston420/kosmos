@@ -1,9 +1,21 @@
 # ADR-041 — Tektos plan renderer + first `PluginDescriptor` (Stage 3.7)
 
-**Status:** Ratified v25
+**Status:** Ratified v25 · Amended 2026-07-30 (ADR-045)
 **Lock-in phase:** Stage 3.7
 **Supersedes:** —
 **Amends:** ADR-036 (fires Q4=B `PluginDescriptor` deferral trigger). Preserves ADR-005 verbatim (see Q10 below).
+
+> **STATUS AMENDMENT (2026-07-30 · ADR-045):** `ui_parity_status` for
+> Tektos flips from `IN_PROGRESS` → `COMPLIANT` at Stage 3.11 landing.
+> `adapters/frontend_contract/kernel/adapter.py::_derive_parity` returns
+> `COMPLIANT` only when the descriptor carries **both** routes and
+> panels. Stage 3.11 (ADR-045) adds one
+> `Route(path="/tektos", label="Tektos", icon="📐",
+> lazy_module="tektos/pages/DashboardPage")` to `build_tektos_descriptor()`
+> so the derived parity status becomes `COMPLIANT`. The Stage 3.7
+> panel declaration and every locked constant in this ADR remain
+> authoritative. See ADR-045 for the renderer substrate, route
+> surface, and MemoryPort event contract that back the new Route.
 
 ## Context
 

@@ -35,7 +35,14 @@ from ports.frontend_contract import (
     PanelSlot,
     PluginDescriptor,
     PluginRegistration,
+    Route,
     UiParityStatus,
+)
+from plugins.tektos.ui.policy import (
+    TEKTOS_UI_ROUTE_ICON,
+    TEKTOS_UI_ROUTE_LABEL,
+    TEKTOS_UI_ROUTE_LAZY_MODULE,
+    TEKTOS_UI_ROUTE_PATH,
 )
 from ports.memory import (
     MemoryEventId,
@@ -208,20 +215,36 @@ class _FakeFrontendContract:
 
     def __init__(
         self,
-        ui_parity_status: UiParityStatus = UiParityStatus.IN_PROGRESS,
+        ui_parity_status: UiParityStatus | None = None,
     ) -> None:
         self.registrations: list[PluginDescriptor] = []
         self.unregistered: list[str] = []
-        self._ui_parity_status = ui_parity_status
+        self._ui_parity_override = ui_parity_status
+
+    @staticmethod
+    def _derive_parity(descriptor: PluginDescriptor) -> UiParityStatus:
+        """Mirror ``adapters/frontend_contract/kernel/adapter.py::_derive_parity``.
+
+        ADR-031: parity is COMPLIANT only when the descriptor carries
+        both routes and panels.
+        """
+        if descriptor.routes and descriptor.panels:
+            return UiParityStatus.COMPLIANT
+        return UiParityStatus.IN_PROGRESS
 
     async def register_plugin(
         self, descriptor: PluginDescriptor
     ) -> PluginRegistration:
         self.registrations.append(descriptor)
+        parity = (
+            self._ui_parity_override
+            if self._ui_parity_override is not None
+            else self._derive_parity(descriptor)
+        )
         return PluginRegistration(
             descriptor=descriptor,
             registered_at=datetime.now(timezone.utc),
-            ui_parity_status=self._ui_parity_status,
+            ui_parity_status=parity,
         )
 
     async def unregister_plugin(self, name: str) -> bool:
@@ -616,7 +639,15 @@ def test_build_tektos_descriptor_shape_matches_adr_041() -> None:
     assert d.state_namespace == TEKTOS_STATE_NAMESPACE == "tektos"
     assert d.version == TEKTOS_VERSION == "0.1.0"
     assert d.kernel_compat == TEKTOS_KERNEL_COMPAT == "0.1.x"
-    assert d.routes == ()
+    # ADR-045: Stage 3.11 adds one Route so `_derive_parity`
+    # returns COMPLIANT (routes AND panels populated).
+    assert len(d.routes) == 1
+    r = d.routes[0]
+    assert isinstance(r, Route)
+    assert r.path == TEKTOS_UI_ROUTE_PATH == "/tektos"
+    assert r.label == TEKTOS_UI_ROUTE_LABEL == "Tektos"
+    assert r.icon == TEKTOS_UI_ROUTE_ICON
+    assert r.lazy_module == TEKTOS_UI_ROUTE_LAZY_MODULE == "tektos/pages/DashboardPage"
     assert d.design_tokens == {}
     assert len(d.panels) == 1
     p = d.panels[0]
@@ -648,7 +679,9 @@ async def test_tektos_plugin_start_registers_descriptor() -> None:
     assert plugin.is_started is True
     assert plugin.registration is not None
     assert plugin.registration.descriptor.name == "tektos"
-    assert plugin.registration.ui_parity_status is UiParityStatus.IN_PROGRESS
+    # ADR-045 (Stage 3.11): Route + Panel → COMPLIANT via
+    # `adapters/frontend_contract/kernel/adapter.py::_derive_parity`.
+    assert plugin.registration.ui_parity_status is UiParityStatus.COMPLIANT
     assert len(fc.registrations) == 1
 
 
@@ -813,7 +846,8 @@ async def test_produce_plan_renders_as_approvable_card_via_frontend_contract_por
     assert panel.slot is PanelSlot.APPROVALS_QUEUE
     assert panel.priority == 90
     assert panel.lazy_module == "tektos/panels/PlanApprovalPanel"
-    assert reg.ui_parity_status is UiParityStatus.IN_PROGRESS
+    # ADR-045: Stage 3.11 flips ui_parity_status to COMPLIANT.
+    assert reg.ui_parity_status is UiParityStatus.COMPLIANT
 
     # Step 4: card completeness — the projection carries every field a
     # frontend needs to render an approvable card.

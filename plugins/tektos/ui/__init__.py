@@ -1,0 +1,84 @@
+"""Tektos UI HTMX dashboard subsystem (Stage 3.11, ADR-045).
+
+Public surface \u2014 everything else is implementation detail. Keep
+this import graph flat so ADR-007 AST guard tests never grow false
+positives.
+"""
+
+from __future__ import annotations
+
+from .executor import (
+    ExecutorPort,
+    NopExecutor,
+    compute_diff_sha256,
+    render_unified_diff,
+)
+from .models import DiffRender, ExecutionResult
+from .policy import (
+    TEKTOS_UI_HEALTHZ_PATH,
+    TEKTOS_UI_HOST,
+    TEKTOS_UI_HTMX_JS_PATH,
+    TEKTOS_UI_HTMX_SHA256,
+    TEKTOS_UI_HTMX_UPSTREAM_COMMIT,
+    TEKTOS_UI_HTMX_UPSTREAM_LICENSE,
+    TEKTOS_UI_HTMX_UPSTREAM_REPO,
+    TEKTOS_UI_HTMX_VERSION,
+    TEKTOS_UI_INDEX_PATH,
+    TEKTOS_UI_MAX_CONFIDENCE,
+    TEKTOS_UI_MIN_CONFIDENCE,
+    TEKTOS_UI_PLAN_APPROVED_PREDICATE,
+    TEKTOS_UI_PLAN_APPROVE_PATH,
+    TEKTOS_UI_PLAN_DETAIL_PATH,
+    TEKTOS_UI_PLAN_DIFF_PATH,
+    TEKTOS_UI_PLAN_DIFF_RENDERED_PREDICATE,
+    TEKTOS_UI_PLAN_EXECUTED_PREDICATE,
+    TEKTOS_UI_PLAN_EXECUTE_PATH,
+    TEKTOS_UI_PORT,
+    TEKTOS_UI_PROVENANCE,
+    TEKTOS_UI_RESOLVED_BY,
+    TEKTOS_UI_ROUTE_ICON,
+    TEKTOS_UI_ROUTE_LABEL,
+    TEKTOS_UI_ROUTE_LAZY_MODULE,
+    TEKTOS_UI_ROUTE_PATH,
+    TEKTOS_UI_SUCCESS_CONFIDENCE,
+    confidence_for_ui_event,
+)
+from .server import TEKTOS_UI_PROPOSING_DOMAIN, build_tektos_ui_app
+
+__all__ = [
+    "DiffRender",
+    "ExecutionResult",
+    "ExecutorPort",
+    "NopExecutor",
+    "TEKTOS_UI_HEALTHZ_PATH",
+    "TEKTOS_UI_HOST",
+    "TEKTOS_UI_HTMX_JS_PATH",
+    "TEKTOS_UI_HTMX_SHA256",
+    "TEKTOS_UI_HTMX_UPSTREAM_COMMIT",
+    "TEKTOS_UI_HTMX_UPSTREAM_LICENSE",
+    "TEKTOS_UI_HTMX_UPSTREAM_REPO",
+    "TEKTOS_UI_HTMX_VERSION",
+    "TEKTOS_UI_INDEX_PATH",
+    "TEKTOS_UI_MAX_CONFIDENCE",
+    "TEKTOS_UI_MIN_CONFIDENCE",
+    "TEKTOS_UI_PLAN_APPROVED_PREDICATE",
+    "TEKTOS_UI_PLAN_APPROVE_PATH",
+    "TEKTOS_UI_PLAN_DETAIL_PATH",
+    "TEKTOS_UI_PLAN_DIFF_PATH",
+    "TEKTOS_UI_PLAN_DIFF_RENDERED_PREDICATE",
+    "TEKTOS_UI_PLAN_EXECUTED_PREDICATE",
+    "TEKTOS_UI_PLAN_EXECUTE_PATH",
+    "TEKTOS_UI_PORT",
+    "TEKTOS_UI_PROPOSING_DOMAIN",
+    "TEKTOS_UI_PROVENANCE",
+    "TEKTOS_UI_RESOLVED_BY",
+    "TEKTOS_UI_ROUTE_ICON",
+    "TEKTOS_UI_ROUTE_LABEL",
+    "TEKTOS_UI_ROUTE_LAZY_MODULE",
+    "TEKTOS_UI_ROUTE_PATH",
+    "TEKTOS_UI_SUCCESS_CONFIDENCE",
+    "build_tektos_ui_app",
+    "compute_diff_sha256",
+    "confidence_for_ui_event",
+    "render_unified_diff",
+]

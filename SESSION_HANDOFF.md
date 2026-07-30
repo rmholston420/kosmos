@@ -1,31 +1,31 @@
-# Kosmos Session Handoff — 2026-07-30 04:20 EDT
+# Kosmos Session Handoff — 2026-07-30 05:14 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 3.10 LANDED → Stage 3.11 next.
-- **Plugin / kernel component:** Tektos plugin (`plugins/tektos/`) — moving from ingest subsystem (LANDED) to UI parity via `FrontendContractPort`.
-- **Port(s) in progress:** none. Next stage exercises the existing `FrontendContractPort` (ADR-031) + `ApprovalGatewayPort` (ADR-037) — no new port surface.
+- **Stage / phase:** Stage 3.12 · Stage-3 exit gate (next up)
+- **Plugin / kernel component:** Tektos (end-to-end refactor DoD)
+- **Port(s) in progress:** none (Stage 3.12 has no new port — it's an integration DoD proving Tektos can refactor a real Kosmos file end-to-end through the Stage 3.1–3.11 pipeline)
 
-## Completed this session
-- **2026-07-30 04:20 EDT — Stage 3.10 · docling document ingestion LANDED (ADR-044 ratified).** Full landing entry recorded in `BUILD_LOG.md`. Highlights:
-  - PATTERN-VENDORED `docling==2.116.0` (MIT; upstream `docling-project/docling@ba8251e9cda84bab44cebe3b884119d3f50cb12a`) as dev-only optional dep behind a **lazy** import.
-  - Shipped `plugins/tektos/ingest/{__init__,policy,models,harness}.py` + committed micro-fixtures (`.pdf`, `.docx`, `.html`) + kernel runner `scripts/docling_ingest.py` + `Makefile ingest-doc`.
-  - Envelope-first per ADR-023 — no new port; canonical JSON-LD emitted through existing `DataPort.export_canonical`.
-  - 26 new fast unit tests + 1 env-gated real-docling tier (`KOSMOS_STAGE_310_REAL_DOCLING=1`). Full suite **791 passed + 7 env-gated skips**. `make stage1-gate` **PASS**.
-  - Fan-out complete: `docs/adrs/ADR-044-tektos-docling-document-ingestion.md` (new), Spec §17 ADR-044 row appended, Spec §18.5 docling license corrected `Apache-2.0` → `MIT`, ADRs README index row appended, PORTING_LEDGER docling row `PLANNED` → `VENDORED (dev dep, Stage 3.10)`, Build-Sequence §3.10 rewritten as full LANDED block.
-  - ADR numbering: this ADR was originally planned as ADR-043 but ADR-042 forward-references "candidate ADR-043" for Pier event-driven auto-approve — this ADR takes the next unused slot (ADR-044) to preserve that reference.
+## Completed this session (Stage 3.11 · Tektos UI HTMX dashboard · ADR-045)
+- ADR-045 authored fresh at `Ratified v25 · Stage 3.11` (Q1=C · Q1a=A · Q1b=B · Q1c=A · Q1d=A · Q1e=A · Q1f=A · Q1g=A · Q2=A · Q3=A · Q4=A · Q5=A · Q6=A · Q7=B · Q8=C · Q9=A · Q10=A · Q_res_1=B · Q_res_2=B · Promotion=A)
+- ADR-041 STATUS AMENDMENT: ui_parity_status IN_PROGRESS → COMPLIANT with ADR-045 pointer
+- New port `ports/approval.py` promoted from intra-Praxis `ChangeApprovalProtocol`: `ChangeApprovalTier` + `ApprovalStatus` + `ApprovalRecord` (field `approval_id`) + `ApprovalGatewayPort` + `ApprovalResolverPort` (three verbs including `list_pending(*, proposing_domain=None)` port-level filter). `plugins/praxis/apex/models.py` re-exports for backward compat.
+- New adapter `adapters/approval_resolver/praxis/adapter.py` — `PraxisApprovalResolverAdapter` wraps `KernelChangeApprovalAdapter`; 5 contract tests pass
+- Tektos UI subsystem shipped at `plugins/tektos/ui/{__init__,policy,models,executor,templates,server}.py` + vendored `htmx.min.js` (50917 B, sha256 `e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447`, upstream `bigskysoftware/htmx@b82cf843e47e575dd8c2ad8fee547d8e2c3bb87f`, license `0BSD`)
+- `plugins/tektos/plugin.py` gains one `Route(path="/tektos", label="Tektos", icon="📐", lazy_module="tektos/pages/DashboardPage")` in `build_tektos_descriptor()` — flips parity to COMPLIANT
+- `scripts/tektos_ui.py` (uvicorn runner) + `Makefile` `ui-serve` target
+- `pyproject.toml` gains `[project.optional-dependencies] ui = ["fastapi>=0.115", "uvicorn>=0.32", "httpx>=0.27"]` + `plugins.tektos.ui` + `adapters.approval_resolver` + `adapters.approval_resolver.praxis` to setuptools packages + `[tool.setuptools.package-data] "plugins.tektos.ui" = ["htmx.min.js"]`
+- `docs/Kosmos-Build-Spec-v25.md` §17 (ADR-045 row), `docs/adrs/README.md` (ADR-045 row), `docs/PORTING_LEDGER.md` (htmx + fastapi + uvicorn VENDORED rows), `docs/Kosmos-Build-Sequence-v25.md` (§3.11 LANDED block)
+- 815 total green + 8 env-gated skips (was 791 + 7 at Stage 3.10 close). `make stage1-gate` PASS.
+- DoD literal anchor `test_plan_approve_execute_diff_flow_visible_in_kernel_dashboard_build_sequence_3_11_dod` PASS
 
-## Remaining before current Definition of Done
-- **Stage 3.10 DoD met.** Nothing remains for Stage 3.10.
-- Session-close housekeeping (this session): commit + tag `stage-3-10-complete` + push to `https://git-agent-proxy.perplexity.ai/rmholston420/kosmos.git`; refresh shared project-files assets (`Kosmos-v25-Bundle.zip`, `Kosmos ADRs Bundle`, mirrored Spec/Sequence/BUILD_LOG/PORTING_LEDGER/SESSION_HANDOFF) via `pplx project files submit` and re-`share_file` under the same names for versioning.
+## Remaining before current Definition of Done (Stage 3.12)
+- Choose one non-trivial refactor on a real Kosmos file that the Stage 3.1–3.11 Tektos pipeline can execute end-to-end
+- Drive Tektos: agent (3.1) → MCP tool call (3.2) → repomap (3.3) → OpenSpec plan (3.6) → plan renderer + APEX HUMAN_REVIEW gate (3.7) → Pier eval verdict (3.8) → docling ingest if applicable (3.10) → UI Approve/Execute/Diff (3.11)
+- DoD: refactor commit passes `ruff` + `bandit` + `pytest`
+- Fan-out: BUILD_LOG entry, SESSION_HANDOFF overwrite → Stage 4.1, PORTING_LEDGER updates only if new components are vendored
 
 ## Open questions / awaiting user answer
-- **Stage 3.11 kickoff.** Build-Sequence §3.11 DoD: "Plan → Approve → Execute → Diff flow visible in kernel dashboard." This is the Tektos UI parity stage — locks `ui_parity_status=IN_PROGRESS` → `COMPLIANT` per ADR-041's Stage 3.11 handoff. Before starting, ask user whether to:
-  1. Proceed under Q-lock defaults (A) with `FrontendContractPort` UI parity contract met by wiring the existing Panel(s) from ADR-041 into a minimal kernel dashboard renderer, backed by fake plan/approve/execute/diff flows for the DoD test — no new port surface;
-  2. Introduce a new `DiffPort` (envelope-first defer or a real port) to cover the "Diff" leg of the flow;
-  3. Prefer an alternative render substrate (Rich TUI vs. Textual vs. a minimal web dashboard).
-- **Pier auto-approve slot.** ADR-042's "candidate ADR-043 event-driven auto-approve" remains an open forward reference. Not blocking Stage 3.11 but worth confirming before Stage 3.12 exit gate whether that ADR-043 slot should be authored or removed.
+- **User must run Q-lock for Stage 3.12** — which real Kosmos file to refactor, whether the refactor is scoped to a single spec or spans multiple, whether to run through the real Pier tier (`KOSMOS_STAGE_38_REAL_PIER=1`) or the fake shim, and whether to launch the interactive UI tier (`KOSMOS_STAGE_311_INTERACTIVE=1`) for approval or use TestClient-only
 
 ## Exact next action
-- Session close: `cd /home/user/workspace/kosmos-repo && git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 add -A && git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 commit -m "Stage 3.10 · docling document ingestion LANDED (ADR-044)" && git tag stage-3-10-complete && git push origin main && git push origin stage-3-10-complete`
-  Then mirror docs into project-files repo, `pplx project files submit`, and re-`share_file` the v25 zip + ADRs bundle under their existing names.
-- **At start of next session:** re-read this file first, then read `docs/Kosmos-Build-Sequence-v25.md` §3.11 and confirm Q-lock defaults with the user before touching any code.
+- Start Stage 3.12 by presenting Q-lock questions (mirror the Stage 3.11 lock-question format). Read `docs/Kosmos-Build-Spec-v25.md` §3.12 + `docs/Kosmos-Build-Sequence-v25.md` §3.12 verbatim first, then draft ambiguity list from real-Kosmos-file selection, refactor scope, Pier tier choice, and UI tier choice.
