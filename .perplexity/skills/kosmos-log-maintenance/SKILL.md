@@ -1,6 +1,6 @@
 ---
 name: kosmos-log-maintenance
-description: Load before writing to any of the four Kosmos operational logs — BUILD_LOG.md (append-only), DEBUG_LOG.md (append-only, search FIRST before diagnosing), KNOWN_ISSUES.md, and SESSION_HANDOFF.md (overwrite each session end). Enforces timestamp format (YYYY-MM-DD HH:MM EDT), append-only discipline, and the search-DEBUG_LOG-first rule from Kosmos custom instructions. Load automatically after any completed build step, decision, bug fix, or at end of session.
+description: 'Load before writing to any of the four Kosmos operational logs — BUILD_LOG.md (append-only), DEBUG_LOG.md (append-only, search FIRST before diagnosing), KNOWN_ISSUES.md, and SESSION_HANDOFF.md (overwrite each session end). Enforces the timestamp format YYYY-MM-DD HH:MM EDT, append-only discipline, and the search-DEBUG_LOG-first rule from Kosmos custom instructions. Load automatically after any completed build step, decision, bug fix, or at end of session.'
 ---
 
 # Kosmos Log Maintenance

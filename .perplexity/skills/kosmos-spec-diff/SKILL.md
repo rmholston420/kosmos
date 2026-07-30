@@ -1,6 +1,6 @@
 ---
 name: kosmos-spec-diff
-description: Load before editing Kosmos-Build-Spec-v25.md, Kosmos-Build-Sequence-v25.md, PORTING_LEDGER.md, or any ADR under adrs/. Enforces the newer-wins conflict rule, prevents silent duplication of decisions across specs, and ensures every spec edit is paired with an ADR (if load-bearing) and a BUILD_LOG entry. Use whenever the user asks to update the spec, revise a section, resolve an ambiguity, or version-bump anything under docs/.
+description: 'Load before editing Kosmos-Build-Spec-v25.md, Kosmos-Build-Sequence-v25.md, PORTING_LEDGER.md, or any ADR under adrs/. Enforces the newer-wins conflict rule, prevents silent duplication of decisions across specs, and ensures every spec edit is paired with an ADR (if load-bearing) and a BUILD_LOG entry. Use whenever the user asks to update the spec, revise a section, resolve an ambiguity, or version-bump anything under docs/.'
 ---
 
 # Kosmos Spec Diff

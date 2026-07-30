@@ -1,6 +1,6 @@
 ---
 name: kosmos-port-workflow
-description: Load before writing any new component in the Kosmos monorepo. Enforces the vendor-before-hand-build rule from Kosmos-Build-Spec-v25.md — inspects donor repos (Rigpa-LMS, Forge-OH, PlexClaw, axiom, plus permissively-licensed OSS candidates), logs the port in PORTING_LEDGER.md with source URL / commit SHA / SPDX license / modification notes, then wraps the port behind a formal port from ports/. Use for any task worded as "add X", "implement Y", "wire up Z", or "port from A" inside the Kosmos project.
+description: 'Load before writing any new component in the Kosmos monorepo. Enforces the vendor-before-hand-build rule from Kosmos-Build-Spec-v25.md — inspects donor repos (Rigpa-LMS, Forge-OH, PlexClaw, axiom, plus permissively-licensed OSS candidates), logs the port in PORTING_LEDGER.md with source URL, commit SHA, SPDX license, and modification notes, then wraps the port behind a formal port from ports/. Use for any task worded as add-X, implement-Y, wire-up-Z, or port-from-A inside the Kosmos project.'
 ---
 
 # Kosmos Port Workflow

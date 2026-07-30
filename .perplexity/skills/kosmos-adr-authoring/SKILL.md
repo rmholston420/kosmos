@@ -1,6 +1,6 @@
 ---
 name: kosmos-adr-authoring
-description: Load before making any architectural decision in Kosmos that reshapes ports, adapters, plugin scope, governance tiers, storage backends, or the porting-vs-hand-build boundary. Enforces the ADR template, filing procedure, and index update. Also load when amending an existing ADR (status change, contingency triggered, or scope shift). Common triggers: choosing between two OSS candidates, adding a new formal port, changing a plugin boundary, altering approval thresholds, resolving a Kosmos v25 OPEN item.
+description: 'Load before making any architectural decision in Kosmos that reshapes ports, adapters, plugin scope, governance tiers, storage backends, or the porting-vs-hand-build boundary. Enforces the ADR template, filing procedure, and index update. Also load when amending an existing ADR (status change, contingency triggered, or scope shift). Common triggers include choosing between two OSS candidates, adding a new formal port, changing a plugin boundary, altering approval thresholds, or resolving a Kosmos v25 OPEN item.'
 ---
 
 # Kosmos ADR Authoring

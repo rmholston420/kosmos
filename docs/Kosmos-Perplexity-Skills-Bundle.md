@@ -12,14 +12,14 @@
 
 ---
 
-# 1. Skill — kosmos-port-workflow
+# Skill — kosmos-port-workflow
 
 **Install path in Kosmos repo:** `.perplexity/skills/kosmos-port-workflow/SKILL.md`
 
 ```markdown
 ---
 name: kosmos-port-workflow
-description: Load before writing any new component in the Kosmos monorepo. Enforces the vendor-before-hand-build rule from Kosmos-Build-Spec-v25.md — inspects donor repos (Rigpa-LMS, Forge-OH, PlexClaw, axiom, plus permissively-licensed OSS candidates), logs the port in PORTING_LEDGER.md with source URL / commit SHA / SPDX license / modification notes, then wraps the port behind a formal port from ports/. Use for any task worded as "add X", "implement Y", "wire up Z", or "port from A" inside the Kosmos project.
+description: 'Load before writing any new component in the Kosmos monorepo. Enforces the vendor-before-hand-build rule from Kosmos-Build-Spec-v25.md — inspects donor repos (Rigpa-LMS, Forge-OH, PlexClaw, axiom, plus permissively-licensed OSS candidates), logs the port in PORTING_LEDGER.md with source URL, commit SHA, SPDX license, and modification notes, then wraps the port behind a formal port from ports/. Use for any task worded as add-X, implement-Y, wire-up-Z, or port-from-A inside the Kosmos project.'
 ---
 
 # Kosmos Port Workflow
@@ -125,14 +125,14 @@ Delegated to `kosmos-log-maintenance` skill. Do not skip.
 
 ---
 
-# 2. Skill — kosmos-adr-authoring
+# Skill — kosmos-adr-authoring
 
 **Install path in Kosmos repo:** `.perplexity/skills/kosmos-adr-authoring/SKILL.md`
 
 ```markdown
 ---
 name: kosmos-adr-authoring
-description: Load before making any architectural decision in Kosmos that reshapes ports, adapters, plugin scope, governance tiers, storage backends, or the porting-vs-hand-build boundary. Enforces the ADR template, filing procedure, and index update. Also load when amending an existing ADR (status change, contingency triggered, or scope shift). Common triggers: choosing between two OSS candidates, adding a new formal port, changing a plugin boundary, altering approval thresholds, resolving a Kosmos v25 OPEN item.
+description: 'Load before making any architectural decision in Kosmos that reshapes ports, adapters, plugin scope, governance tiers, storage backends, or the porting-vs-hand-build boundary. Enforces the ADR template, filing procedure, and index update. Also load when amending an existing ADR (status change, contingency triggered, or scope shift). Common triggers include choosing between two OSS candidates, adding a new formal port, changing a plugin boundary, altering approval thresholds, or resolving a Kosmos v25 OPEN item.'
 ---
 
 # Kosmos ADR Authoring
@@ -239,14 +239,14 @@ Delegated to `kosmos-log-maintenance`. Every ADR author or amend gets a BUILD_LO
 
 ---
 
-# 3. Skill — kosmos-log-maintenance
+# Skill — kosmos-log-maintenance
 
 **Install path in Kosmos repo:** `.perplexity/skills/kosmos-log-maintenance/SKILL.md`
 
 ```markdown
 ---
 name: kosmos-log-maintenance
-description: Load before writing to any of the four Kosmos operational logs — BUILD_LOG.md (append-only), DEBUG_LOG.md (append-only, search FIRST before diagnosing), KNOWN_ISSUES.md, and SESSION_HANDOFF.md (overwrite each session end). Enforces timestamp format (YYYY-MM-DD HH:MM EDT), append-only discipline, and the search-DEBUG_LOG-first rule from Kosmos custom instructions. Load automatically after any completed build step, decision, bug fix, or at end of session.
+description: 'Load before writing to any of the four Kosmos operational logs — BUILD_LOG.md (append-only), DEBUG_LOG.md (append-only, search FIRST before diagnosing), KNOWN_ISSUES.md, and SESSION_HANDOFF.md (overwrite each session end). Enforces the timestamp format YYYY-MM-DD HH:MM EDT, append-only discipline, and the search-DEBUG_LOG-first rule from Kosmos custom instructions. Load automatically after any completed build step, decision, bug fix, or at end of session.'
 ---
 
 # Kosmos Log Maintenance
@@ -376,14 +376,14 @@ At the **start** of a new session, `read SESSION_HANDOFF.md` before doing anythi
 
 ---
 
-# 4. Skill — kosmos-spec-diff
+# Skill — kosmos-spec-diff
 
 **Install path in Kosmos repo:** `.perplexity/skills/kosmos-spec-diff/SKILL.md`
 
 ```markdown
 ---
 name: kosmos-spec-diff
-description: Load before editing Kosmos-Build-Spec-v25.md, Kosmos-Build-Sequence-v25.md, PORTING_LEDGER.md, or any ADR under adrs/. Enforces the newer-wins conflict rule, prevents silent duplication of decisions across specs, and ensures every spec edit is paired with an ADR (if load-bearing) and a BUILD_LOG entry. Use whenever the user asks to update the spec, revise a section, resolve an ambiguity, or version-bump anything under docs/.
+description: 'Load before editing Kosmos-Build-Spec-v25.md, Kosmos-Build-Sequence-v25.md, PORTING_LEDGER.md, or any ADR under adrs/. Enforces the newer-wins conflict rule, prevents silent duplication of decisions across specs, and ensures every spec edit is paired with an ADR (if load-bearing) and a BUILD_LOG entry. Use whenever the user asks to update the spec, revise a section, resolve an ambiguity, or version-bump anything under docs/.'
 ---
 
 # Kosmos Spec Diff
@@ -474,9 +474,9 @@ Do **not** commit a partial fan-out. Either commit the full set or none.
 
 ---
 
-# 5. Prompt — Build System Prompt
+# Prompt — Build System Prompt
 
-**Install path in Kosmos repo:** `.perplexity/prompts/kosmos-build-system-prompt.md`
+**Install path:** `.perplexity/prompts/kosmos-build-system-prompt.md`
 
 # Kosmos Build System Prompt
 
@@ -547,9 +547,9 @@ Stop and ask if:
 
 ---
 
-# 6. Prompt — Debug System Prompt
+# Prompt — Debug System Prompt
 
-**Install path in Kosmos repo:** `.perplexity/prompts/kosmos-debug-system-prompt.md`
+**Install path:** `.perplexity/prompts/kosmos-debug-system-prompt.md`
 
 # Kosmos Debug System Prompt
 
@@ -593,9 +593,3 @@ Use `kosmos-log-maintenance` skill. Entry must include: symptom (verbatim), affe
 ## No cascading rewrites
 
 A bug fix is one minimal change per bug. Do not refactor while debugging. If refactoring is needed, note it in `KNOWN_ISSUES.md` and address separately.
-
----
-
-## Split-back script
-
-To reconstitute the four individual `SKILL.md` files plus two prompt files from this bundle, save the four fenced `markdown` code blocks above (sections 1–4) into their respective `.perplexity/skills/kosmos-*/SKILL.md` paths, and save sections 5–6 as-is (no fence) into `.perplexity/prompts/`. The frontmatter (`---` blocks) at the top of each SKILL is what Perplexity Computer's skill loader keys off of; do not omit it.
