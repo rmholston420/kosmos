@@ -77,10 +77,39 @@ class PyrageBackend:
             return
         import pyrage  # lazy
 
-        text = self._identity_path.read_text(encoding="utf-8").strip()
-        self._identity = pyrage.x25519.Identity.from_str(text)
+        raw = self._identity_path.read_text(encoding="utf-8")
+        secret_key = self._extract_secret_key(raw)
+        self._identity = pyrage.x25519.Identity.from_str(secret_key)
         # Public key -> recipient for encrypt round-trip
         self._recipient = self._identity.to_public()
+
+    @staticmethod
+    def _extract_secret_key(raw: str) -> str:
+        """Return the AGE-SECRET-KEY line from an identity file.
+
+        ``age-keygen -o path`` writes a multi-line file:
+
+            # created: 2026-07-29T...
+            # public key: age1...
+            AGE-SECRET-KEY-1...
+
+        ``pyrage.x25519.Identity.from_str`` wants the Bech32 secret only.
+        This helper strips comments and blank lines and returns the
+        single secret-key line. Raises ``ValueError`` if none is found
+        so a bad identity file fails loudly at first use rather than
+        surfacing as an opaque ``IdentityError: invalid Bech32 encoding``.
+        """
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.startswith("AGE-SECRET-KEY-"):
+                return stripped
+        raise ValueError(
+            "identity file does not contain an AGE-SECRET-KEY- line; "
+            "generate one with 'age-keygen -o <path>' or pass the raw "
+            "Bech32 secret string in the file."
+        )
 
     def decrypt(self, ciphertext: bytes) -> bytes:
         import pyrage  # lazy

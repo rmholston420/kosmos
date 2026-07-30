@@ -191,3 +191,16 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** ObservabilityPort surface + `Span` Protocol defined; downstream LLMPort cost-accountability wiring path defined
 - **PORTING_LEDGER / ADR updated:** ADR-025 Ratified v25 (spec §4.1 + §17 amendments + PORTING_LEDGER entries pending Stage 1.6 code)
 - **Stop-condition status:** met (ADR authored); Stage 1.6 code + fan-out pending
+
+---
+
+## 2026-07-29 21:47 EDT — Stage 1.5 hotfix: PyrageBackend parses age-keygen identity file
+
+- **Stage / plugin / port:** Stage 1.5 · SecretsPort · `PyrageBackend`
+- **What changed:** Live smoke test surfaced `pyrage.IdentityError: invalid Bech32 encoding` when loading a standard `age-keygen -o` identity file. Root cause: `age-keygen` writes three lines (two `#` comments + the `AGE-SECRET-KEY-` secret line); donor Rigpa `.strip()` worked only because Rigpa's operator hand-stored a bare secret-key string. Added `PyrageBackend._extract_secret_key()` static helper that skips blank lines and comment lines, returns the first `AGE-SECRET-KEY-` line, and raises `ValueError` with remediation guidance when absent. `_ensure_identity` now routes through the helper. Four regression tests locked the fix into the contract suite.
+- **Files touched:**
+  - `adapters/secrets/age_file/adapter.py` (added `_extract_secret_key` static helper; `_ensure_identity` uses it)
+  - `adapters/secrets/age_file/test_contract.py` (4 new regression tests)
+- **Ports / adapters affected:** SecretsPort live path (`PyrageBackend`) now correctly loads `age-keygen`-formatted identity files
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — 81/81 tests pass (77 + 4 new regression tests)

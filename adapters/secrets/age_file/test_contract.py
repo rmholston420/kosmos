@@ -90,6 +90,39 @@ def test_pyrage_backend_type_satisfies_age_backend_protocol_shape() -> None:
 
 
 # ---------------------------------------------------------------------------
+# PyrageBackend._extract_secret_key regression tests (DEBUG_LOG 21:46 EDT)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_secret_key_from_age_keygen_output() -> None:
+    # Real shape of `age-keygen -o path` output.
+    raw = (
+        "# created: 2026-07-29T21:40:00Z\n"
+        "# public key: age1y9xgmystrqlft4m60m4kg57p0lfyun0qe6flr20e2u5zzpge7qvqmdngjg\n"
+        "AGE-SECRET-KEY-1EXAMPLEKEYVALUEDOESNOTNEEDTOBEVALIDFORPARSING\n"
+    )
+    key = PyrageBackend._extract_secret_key(raw)
+    assert key.startswith("AGE-SECRET-KEY-")
+    assert "#" not in key
+    assert "public key" not in key
+
+
+def test_extract_secret_key_tolerates_blank_lines() -> None:
+    raw = "\n\n# comment\n\nAGE-SECRET-KEY-1XYZ\n\n"
+    assert PyrageBackend._extract_secret_key(raw) == "AGE-SECRET-KEY-1XYZ"
+
+
+def test_extract_secret_key_accepts_bare_key() -> None:
+    raw = "AGE-SECRET-KEY-1BARE"
+    assert PyrageBackend._extract_secret_key(raw) == "AGE-SECRET-KEY-1BARE"
+
+
+def test_extract_secret_key_raises_when_missing() -> None:
+    with pytest.raises(ValueError, match="AGE-SECRET-KEY-"):
+        PyrageBackend._extract_secret_key("# just a comment\n\n")
+
+
+# ---------------------------------------------------------------------------
 # get / put / rotate round-trip
 # ---------------------------------------------------------------------------
 
