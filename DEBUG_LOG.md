@@ -101,3 +101,27 @@ Entry format per `kosmos-log-maintenance` skill:
   - `adapters/secrets/age_file/adapter.py` (added `_extract_secret_key`)
   - `adapters/secrets/age_file/test_contract.py` (4 regression tests)
 - **Related BUILD_LOG entry:** 2026-07-29 21:47 EDT (Stage 1.5 hotfix)
+
+## 2026-07-30 12:50 EDT — RTX 5090 hit 88 C repeatedly during Stage 6.3.2 run, driver crashed / screen died / reboot required
+
+- **Symptom:** During the second-attempt run (post-Stage-6.3.2 shims, with the retrieval gate now driving up to 3 ainvoke calls per trial), GPU temperature climbed above 85 C repeatedly, hit 88 C multiple times, eventually crashed the display driver. Screen died. User had to hard-reboot Colossus.
+- **Affected stage / plugin / port:** Stage 6.3.2 · Zetesis inner-loop ODR substrate benchmark. Runner: `ops.benchmarks.adr_010.runner`. Substrate: ODR + qwen2.5:32b-instruct-q4_K_M via Ollama.
+- **Root cause:**
+  1. `policy.GPUMonitor` is observation-only — it samples temperature at 1 Hz and tracks peak, but has NO abort/signal path. The trial ran to completion regardless of thermal state.
+  2. `_cooldown_between_trials` only fires AFTER a trial completes. A single Stage 6.3.2 trial with 3 ainvoke calls (2 vendor + 1 gate retry, or gate-triggered second full research pass) sustains GPU load long enough to blow past 85 C mid-trial.
+  3. Pre-flight cooldown target was 70 C — too warm as a starting point when a single trial can climb 15+ C under sustained token generation.
+  4. Default Ollama `OLLAMA_KEEP_ALIVE` keeps the 32B model (28 GB VRAM) resident between trials; VRAM stays energized, idle temp does not fully release during between-trial cooldown.
+  5. On Blackwell RTX 5090 with the display attached to the same GPU, driver-level throttling at TjMax (~90 C) can lose to `nvidia-drm` display driver stability well before hardware throttling engages.
+- **Fix applied:**
+  1. `policy.GPUMonitor` gains `thermal_abort_at_c` threshold + `thermal_exceeded()` predicate + `abort_reason` recorder. Sampling thread signals a `threading.Event` when threshold breaches.
+  2. `harness/odr.run_odr_trial` accepts a monitor reference (or spawns an asyncio task that polls the event) and cancels the in-flight `ainvoke` task via `asyncio.wait` + task cancel when the event fires. Trial artifact records `error: "thermal_abort: peak <T> C >= threshold <threshold> C"`.
+  3. Runner default `--cooldown-target-c` lowered from 70 -> 60. Pre-flight cooldown added BEFORE each trial (currently only runs between trials).
+  4. Runner default `--thermal-abort-c` = 85. New flag: `--thermal-abort-c` (overridable).
+  5. Runner exports `OLLAMA_KEEP_ALIVE=60s` at startup so the 32B model releases VRAM during the inter-trial cooldown window; reloads warmly on the next trial (60s < between-trial cooldown wait).
+- **Files changed:**
+  - `ops/benchmarks/adr_010/policy.py` — GPUMonitor gains thermal abort surface
+  - `ops/benchmarks/adr_010/harness/odr.py` — thermal-abort watchdog wraps every ainvoke
+  - `ops/benchmarks/adr_010/runner.py` — pre-flight cooldown, --thermal-abort-c flag, OLLAMA_KEEP_ALIVE env, default target 60 C
+  - `ops/benchmarks/adr_010/tests/test_policy_thermal.py` — new fast tests (no real GPU) with a stubbed sample_gpu
+  - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` — add thermal-abort case
+- **Related BUILD_LOG entry:** `2026-07-30 12:39 EDT` (Stage 6.3.2 shims that unintentionally increased per-trial thermal load)

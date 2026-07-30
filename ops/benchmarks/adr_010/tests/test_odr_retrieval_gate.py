@@ -272,6 +272,64 @@ def test_gate_is_bounded_to_one_retry(monkeypatch):
     assert metrics.final_answer == "a2"
 
 
+def test_thermal_abort_cancels_ainvoke_and_does_not_retry(monkeypatch):
+    """When the thermal watchdog fires mid-ainvoke, the harness must:
+    (1) raise ThermalAbort and cancel the in-flight task,
+    (2) NOT retry (physical envelope, not a schema bug),
+    (3) skip the retrieval-gate shim entirely,
+    (4) surface the abort in trajectory.attempts with outcome='thermal_abort'.
+    """
+    import threading
+
+    invocations: list[dict] = []
+
+    # Stub ainvoke as a coroutine that yields until cancelled. That mimics
+    # a real long-running LangGraph call so the watchdog can race it.
+    async def _slow_ainvoke(payload: dict, config: dict):
+        invocations.append({"payload": payload, "config": config})
+        # Yield forever; the harness must cancel this task on thermal abort
+        await asyncio.sleep(3600)
+        return {"final_report": "never reaches here"}
+
+    fake_dr = types.SimpleNamespace(ainvoke=_slow_ainvoke)
+    fake_module = types.ModuleType("open_deep_research.deep_researcher")
+    fake_module.deep_researcher = fake_dr  # type: ignore[attr-defined]
+    parent = types.ModuleType("open_deep_research")
+    parent.deep_researcher = fake_module  # type: ignore[attr-defined]
+    sys.modules["open_deep_research"] = parent
+    sys.modules["open_deep_research.deep_researcher"] = fake_module
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    # Pre-set the thermal event so the watchdog trips on the very first
+    # poll. That short-circuits waiting for a real breach.
+    thermal = threading.Event()
+    thermal.set()
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?",
+            question_id="q1",
+            trial_id="t8",
+            thermal_event=thermal,
+            thermal_poll_seconds=0.01,
+        )
+    )
+
+    assert len(invocations) == 1, "thermal abort must NOT retry (envelope, not bug)"
+    assert metrics.error.startswith("ThermalAbort:"), metrics.error
+    attempts_entry = next(
+        e for e in metrics.trajectory if isinstance(e, dict) and "attempts" in e
+    )
+    outcomes = [a["outcome"] for a in attempts_entry["attempts"]]
+    assert outcomes == ["thermal_abort"], outcomes
+    # Retrieval gate must be skipped on thermal abort
+    assert not any(
+        isinstance(e, dict) and e.get("raw_notes_count") is not None
+        for e in metrics.trajectory
+    ), "gate must not run after thermal abort"
+
+
 def test_maximum_ainvoke_calls_never_exceeds_three(monkeypatch):
     """Vendor-bug retry (2) + retrieval-gate retry (1) = 3 hard cap.
 

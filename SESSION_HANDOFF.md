@@ -1,34 +1,46 @@
-# Kosmos Session Handoff — 2026-07-30 12:40 EDT
+# Kosmos Session Handoff — 2026-07-30 12:57 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 6.3.2 code landed; awaiting empirical benchmark run on Colossus.
+- **Stage / phase:** Stage 6.3.2 landed. Thermal envelope hardened post-incident. Awaiting Colossus empirical run.
 - **Plugin / kernel component:** Zetesis inner-loop ODR substrate tuning.
-- **Port(s) in progress:** none formal. Shims live in `ops/benchmarks/adr_010/harness/odr.py` and stay harness-scoped until promotion.
+- **Port(s) in progress:** none formal. Thermal + retrieval-gate shims live in `ops/benchmarks/adr_010/` (harness-scoped) until promotion.
 
 ## Completed this session
-- Stage 6.3.1 rating: 0/6 on n=2 (trial 3 aborted with vendor bug). Threshold missed. Escalation ratified.
-- Stage 6.3.2 shims landed (commit forthcoming):
-  - Shim 1: vendor-bug retry (2 attempts max on `KeyError: 'reflection'` and any other vendor exception; fresh thread_id per attempt).
-  - Shim 2: MCP retrieval gate (1 retry max when `raw_notes` is empty; escalated user-turn directive requiring >=3 distinct MCP calls).
-  - Hard cap per trial: 3 ainvoke invocations.
-  - 7 new fast contract tests in `test_odr_retrieval_gate.py` using `sys.modules` stub injection.
-- Whole-repo tests: 1026 passed / 19 skipped (was 1019: +7 exact).
+- Stage 6.3.1 rating: 0/6 on n=2 (parametric answers, MCP bypassed, hallucinated URLs). Threshold missed. Escalation ratified.
+- Stage 6.3.2 shims landed (commit `206cc93`):
+  - Shim 1: vendor-bug retry on `KeyError: 'reflection'` and other ODR schema-drift exceptions (2 attempts).
+  - Shim 2: MCP retrieval gate — re-invokes with escalated directive when `raw_notes` empty (1 retry).
+- 88 C driver-crash incident on Colossus during Stage 6.3.2 test run (fans and pump at max; cooling ceiling exceeded).
+  - Logged to DEBUG_LOG.
+  - Root cause: workload > cooler capacity + observation-only GPUMonitor.
+- Stage 6.3.2 thermal hardening landed (this commit):
+  - `nvidia-smi -pl 400W` at runner startup (RTX 5090 stock 575W).
+  - Watchdog on GPUMonitor: `thermal_event` latches at 85 C.
+  - `_invoke_once` races ainvoke vs watchdog; on breach cancels ainvoke + raises `ThermalAbort`.
+  - `ThermalAbort` never retried (physical envelope); retrieval gate skipped after thermal abort.
+  - Pre-flight cooldown added (60 C target, 60 s min) applied BEFORE every trial including the first.
+  - `OLLAMA_KEEP_ALIVE=60s` so 32B model releases VRAM during between-trial window.
+- Whole-repo tests: **1033 passed / 19 skipped** (was 1019 at Stage 6.3.1 authoring: +14 exact — 7 retrieval-gate + 6 thermal-policy + 1 thermal-abort harness case).
 
 ## Remaining before current Definition of Done
-- On Colossus: pull main, run `.venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr` for a fresh 3-trial run under the retrieval-gate substrate. Cooldown flags default to safe values.
-- Blind-rate all 3 trials against F1-F6 and write `RATING_STAGE_6_3_2.md` next to the trial artifacts.
+- On Colossus: `cd ~/dev/kosmos && git pull` then confirm 47/47 in adr_010 tests, then run the benchmark.
+- Expected run behavior:
+  - Runner exports `OLLAMA_KEEP_ALIVE=60s`, tries `sudo -n nvidia-smi -pl 400W` (may warn if sudo unavailable — non-fatal).
+  - Pre-flight cooldown waits until GPU <=60 C before every trial (60 s min).
+  - Each trial's ainvoke racing a watchdog; abort at 85 C.
+  - Between-trial cooldown also at 60 C target, 60 s min.
+- If any trial aborts on thermal watchdog: reduce workload further. Options in escalation order: (a) drop `--power-cap-watts` further (350 W), (b) reduce `--trials` to 2, (c) accept that qwen2.5:32b is over-budget and downshift to qwen2.5:14b-instruct-q4_K_M.
+- If all 3 trials complete under 85 C: blind-rate against F1-F6; write `RATING_STAGE_6_3_2.md`.
 - Threshold: mean answer_correctness >=4/6 AND `raw_notes_count > 0` on every trial.
-- If pass: promote substrate to `adapters/zetesis/inner_loop/` under a formal port (Stage 6.3.3 wire-up) and close ADR-010 with substrate benchmark evidence.
-- If retrieval gate fires but `raw_notes` still empty on retry (means model refuses MCP even under structural directive): step to quantization uplift (`qwen2.5:32b-instruct-q5_K_M`, ~22 GB VRAM, in envelope) before authoring Stage 6.3.3 model-swap ADR.
 
 ## Open questions / awaiting user answer
-- None. Optimal-choice authorization was used to (a) implement two orthogonal shims instead of one, (b) set retry caps at 2 vendor + 1 gate = 3 total ainvoke calls per trial, (c) preserve pre-gate result when gate retry itself raises (rather than losing the trial), (d) surface all retry accounting in `metrics.trajectory` for the rater.
+- If sudo password prompt appears (`sudo -n` returns rc!=0 because passwordless sudo isn't configured for nvidia-smi), the power cap is skipped and the run continues without it. Optional follow-up: `sudo visudo` to add `<user> ALL=(root) NOPASSWD: /usr/bin/nvidia-smi` so the cap applies automatically. Not blocking.
 
 ## Exact next action
 On Colossus:
 ```
 cd ~/dev/kosmos && git pull
-.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/  # confirm 40/40 green
+.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/  # confirm 47/47
 .venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr
 ```
-Then paste the run output for blind rating.
+Watch the log for `power cap applied` (or warning if sudo denied) and `pre-flight cooldown done: waited Ns, temp=NC`. Any `thermal watchdog fired` is expected safety, not failure.

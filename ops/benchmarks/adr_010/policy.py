@@ -102,9 +102,25 @@ def wait_for_cooldown(
 
 
 class GPUMonitor:
-    """Background thread sampling nvidia-smi at 1 Hz, tracking peak metrics."""
+    """Background thread sampling nvidia-smi at 1 Hz, tracking peak metrics.
 
-    def __init__(self, device_id: int = 0, sample_hz: float = 1.0) -> None:
+    In addition to observation-only peak tracking, the monitor supports an
+    optional in-trial thermal-abort threshold. Callers pass
+    ``thermal_abort_at_c`` at construction; if any sample meets or exceeds
+    that temperature, ``thermal_exceeded()`` returns True and
+    ``abort_reason`` captures the breach for the artifact.
+
+    This gives the harness (see ``harness/odr._invoke_once``) an actionable
+    signal to cancel a running ``ainvoke`` task before the RTX 5090 climbs
+    into driver-crash territory (~88 C on Colossus, empirically).
+    """
+
+    def __init__(
+        self,
+        device_id: int = 0,
+        sample_hz: float = 1.0,
+        thermal_abort_at_c: float | None = None,
+    ) -> None:
         self.device_id = device_id
         self._interval = 1.0 / sample_hz
         self._peak_util = 0.0
@@ -112,6 +128,13 @@ class GPUMonitor:
         self._peak_temp = 0.0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        # Thermal-abort surface. When ``thermal_abort_at_c`` is set and any
+        # sample meets/exceeds it, ``_thermal_event`` is set and
+        # ``_abort_reason`` records the breach.
+        self._thermal_abort_at_c = thermal_abort_at_c
+        self._thermal_event = threading.Event()
+        self._abort_reason: str | None = None
+        self._abort_temp: float | None = None
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._loop, daemon=True)
@@ -131,7 +154,37 @@ class GPUMonitor:
                 self._peak_vram = sample.memory_used_gb
             if sample.temperature_c > self._peak_temp:
                 self._peak_temp = sample.temperature_c
+            # Thermal-abort check: if a threshold is configured and this
+            # sample meets/exceeds it, latch the event exactly once.
+            if (
+                self._thermal_abort_at_c is not None
+                and sample.temperature_c > 0.0
+                and sample.temperature_c >= self._thermal_abort_at_c
+                and not self._thermal_event.is_set()
+            ):
+                self._abort_temp = sample.temperature_c
+                self._abort_reason = (
+                    f"thermal_abort: sample {sample.temperature_c:.1f} C "
+                    f">= threshold {self._thermal_abort_at_c:.1f} C"
+                )
+                self._thermal_event.set()
             time.sleep(self._interval)
+
+    def thermal_exceeded(self) -> bool:
+        return self._thermal_event.is_set()
+
+    @property
+    def thermal_event(self) -> threading.Event:
+        """Expose the raw event for cross-thread / asyncio polling."""
+        return self._thermal_event
+
+    @property
+    def abort_reason(self) -> str | None:
+        return self._abort_reason
+
+    @property
+    def abort_temperature_c(self) -> float | None:
+        return self._abort_temp
 
     @property
     def peak_utilization_pct(self) -> float:

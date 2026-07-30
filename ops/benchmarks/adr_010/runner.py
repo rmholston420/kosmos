@@ -14,6 +14,8 @@ import asyncio
 import json
 import logging
 import os
+import shutil
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -74,14 +76,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cooldown-target-c",
         type=float,
-        default=float(os.environ.get("ADR010_COOLDOWN_TARGET_C", "70")),
-        help="target GPU temperature (C) before starting the next trial",
+        default=float(os.environ.get("ADR010_COOLDOWN_TARGET_C", "60")),
+        help=(
+            "target GPU temperature (C) before starting the next trial. "
+            "Lowered from 70->60 after Colossus 88C driver-crash incident "
+            "(2026-07-30). Applied both as pre-flight before every trial "
+            "AND between trials."
+        ),
     )
     parser.add_argument(
         "--cooldown-min-seconds",
         type=float,
-        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "30")),
-        help="minimum cooldown between trials, always applied",
+        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "60")),
+        help=(
+            "minimum cooldown seconds, applied both pre-flight and between "
+            "trials. Raised from 30->60 after 88C incident so the 32B model "
+            "can shed VRAM heat (esp. when OLLAMA_KEEP_ALIVE=60s)."
+        ),
     )
     parser.add_argument(
         "--cooldown-max-seconds",
@@ -92,7 +103,43 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-cooldown",
         action="store_true",
-        help="disable inter-trial cooldown (not recommended on Colossus)",
+        help="disable both pre-flight and inter-trial cooldown (dangerous)",
+    )
+    parser.add_argument(
+        "--thermal-abort-c",
+        type=float,
+        default=float(os.environ.get("ADR010_THERMAL_ABORT_C", "85")),
+        help=(
+            "hard-abort in-flight trial when GPU >= this many degrees C. "
+            "Set to 85 after RTX 5090 driver crash at 88C on 2026-07-30. "
+            "Colossus runs the display on the same GPU as compute, so a "
+            "driver crash takes down the desktop."
+        ),
+    )
+    parser.add_argument(
+        "--power-cap-watts",
+        type=int,
+        default=int(os.environ.get("ADR010_POWER_CAP_WATTS", "400")),
+        help=(
+            "apply nvidia-smi -pl <watts> at startup to reduce sustained "
+            "board-power draw. RTX 5090 stock TDP is 575W; 400W is the "
+            "post-incident conservative default. Requires sudo; if not "
+            "available, the runner logs and continues (does NOT fail)."
+        ),
+    )
+    parser.add_argument(
+        "--no-power-cap",
+        action="store_true",
+        help="skip nvidia-smi -pl entirely (accepts full thermal risk)",
+    )
+    parser.add_argument(
+        "--ollama-keep-alive",
+        default=os.environ.get("ADR010_OLLAMA_KEEP_ALIVE", "60s"),
+        help=(
+            "OLLAMA_KEEP_ALIVE value exported before invoking ODR. Default "
+            "60s so the 32B model releases VRAM during the 60s+ between-"
+            "trial cooldown window and reloads warmly on the next trial."
+        ),
     )
     return parser.parse_args()
 
@@ -122,9 +169,16 @@ async def run_odr(args: argparse.Namespace, question_id: str, question: str) -> 
     # Point the OpenAI client at Ollama via env vars instead.
     os.environ["OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY", "ollama")
     os.environ["OPENAI_BASE_URL"] = args.ollama_base_url
+    # Ollama VRAM release policy — see runner --ollama-keep-alive help.
+    os.environ["OLLAMA_KEEP_ALIVE"] = args.ollama_keep_alive
     for i in range(args.trials):
+        # Pre-flight cooldown BEFORE every trial (including the first).
+        # Post-incident (2026-07-30 88C driver crash) discipline: never
+        # start a trial with the GPU already above cooldown_target_c.
+        _pre_flight_cooldown(args, i)
+
         trial_id = f"trial_{i + 1:02d}_{uuid.uuid4().hex[:6]}"
-        monitor = GPUMonitor()
+        monitor = GPUMonitor(thermal_abort_at_c=args.thermal_abort_c)
         monitor.start()
         try:
             metrics = await run_odr_trial(
@@ -134,19 +188,39 @@ async def run_odr(args: argparse.Namespace, question_id: str, question: str) -> 
                 ollama_base_url=args.ollama_base_url,
                 ollama_model=args.ollama_model,
                 mcp_server_url=args.mcp_url,
+                thermal_event=monitor.thermal_event,
             )
         finally:
             monitor.stop()
         metrics.gpu_utilization_peak_pct = monitor.peak_utilization_pct
         metrics.vram_peak_gb = monitor.peak_vram_gb
+        # If the watchdog fired, annotate the artifact with the exact
+        # threshold breach for the blind rater.
+        if monitor.thermal_exceeded():
+            metrics.trajectory.append(
+                {
+                    "thermal_watchdog": {
+                        "aborted": True,
+                        "reason": monitor.abort_reason,
+                        "abort_temp_c": monitor.abort_temperature_c,
+                        "threshold_c": args.thermal_abort_c,
+                    }
+                }
+            )
+            logger.warning(
+                "trial %d aborted by thermal watchdog: %s",
+                i + 1,
+                monitor.abort_reason,
+            )
         emit(metrics)
         _cooldown_between_trials(args, i, monitor.peak_temperature_c)
 
 
 def run_arex(args: argparse.Namespace, question_id: str, question: str) -> None:
     for i in range(args.trials):
+        _pre_flight_cooldown(args, i)
         trial_id = f"trial_{i + 1:02d}_{uuid.uuid4().hex[:6]}"
-        monitor = GPUMonitor()
+        monitor = GPUMonitor(thermal_abort_at_c=args.thermal_abort_c)
         monitor.start()
         try:
             metrics = run_arex_trial(
@@ -163,6 +237,33 @@ def run_arex(args: argparse.Namespace, question_id: str, question: str) -> None:
         metrics.vram_peak_gb = monitor.peak_vram_gb
         emit(metrics)
         _cooldown_between_trials(args, i, monitor.peak_temperature_c)
+
+
+def _pre_flight_cooldown(args: argparse.Namespace, trial_index: int) -> None:
+    """Wait for GPU to reach cooldown_target_c BEFORE starting a trial.
+
+    Added after the 2026-07-30 88C incident. Between-trial cooldown alone
+    doesn't help the first trial or trials that inherit heat from other
+    workloads; pre-flight closes that gap.
+    """
+    if args.no_cooldown:
+        return
+    logger.info(
+        "pre-flight cooldown for trial %d (target=%.1fC, min=%.0fs, max=%.0fs)",
+        trial_index + 1,
+        args.cooldown_target_c,
+        args.cooldown_min_seconds,
+        args.cooldown_max_seconds,
+    )
+    waited, final_temp = wait_for_cooldown(
+        target_c=args.cooldown_target_c,
+        min_seconds=args.cooldown_min_seconds,
+        max_seconds=args.cooldown_max_seconds,
+        logger=logger,
+    )
+    logger.info(
+        "pre-flight cooldown done: waited %.1fs, temp=%.1fC", waited, final_temp
+    )
 
 
 def _cooldown_between_trials(
@@ -197,16 +298,62 @@ def _cooldown_between_trials(
     )
 
 
+def _apply_power_cap(args: argparse.Namespace) -> None:
+    """Apply nvidia-smi -pl <watts> at startup. Never fail the run on this.
+
+    Post-2026-07-30-incident hardening. On Colossus the RTX 5090 stock TDP
+    is 575W; capping to 400W drops sustained wattage ~30% at the cost of
+    ~20-30% slower token generation. Requires sudo. If sudo is not
+    available or nvidia-smi is missing, logs and continues — do not
+    hard-fail the benchmark on a defense-in-depth measure.
+    """
+    if args.no_power_cap:
+        logger.warning("--no-power-cap: skipping nvidia-smi -pl; full thermal risk accepted")
+        return
+    nvsmi = shutil.which("nvidia-smi")
+    if nvsmi is None:
+        logger.warning("nvidia-smi not on PATH; skipping power cap")
+        return
+    sudo = shutil.which("sudo")
+    if sudo is None:
+        logger.warning("sudo not on PATH; skipping power cap (nvidia-smi -pl requires root)")
+        return
+    cmd = [sudo, "-n", nvsmi, "-pl", str(args.power_cap_watts)]
+    logger.info("applying power cap: %s", " ".join(cmd))
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=10.0
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("power cap command failed to execute: %s", exc)
+        return
+    if result.returncode != 0:
+        logger.warning(
+            "power cap returned rc=%d; stderr=%s",
+            result.returncode,
+            result.stderr.strip(),
+        )
+        return
+    logger.info("power cap applied: %s", result.stdout.strip() or f"{args.power_cap_watts}W")
+
+
 def main() -> int:
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     args = parse_args()
+    _apply_power_cap(args)
     fixture = load_question()
     question_id = fixture["question_id"]
     question = fixture["question"]
-    logger.info("ADR-010 run: contender=%s trials=%d", args.contender, args.trials)
+    logger.info(
+        "ADR-010 run: contender=%s trials=%d thermal_abort=%sC cooldown_target=%sC",
+        args.contender,
+        args.trials,
+        args.thermal_abort_c,
+        args.cooldown_target_c,
+    )
     logger.info("question_id=%s", question_id)
 
     if args.contender == "arex":

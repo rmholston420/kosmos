@@ -16,6 +16,7 @@ assembly only.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 import time
@@ -26,6 +27,15 @@ from typing import Any
 from ..metrics import TrialMetrics
 from .prompts import KOSMOS_MCP_PROMPT, build_anchored_user_turn
 from .search_backend import unique_domain_count
+
+
+class ThermalAbort(RuntimeError):
+    """Raised when the GPU thermal watchdog fires during an ainvoke call.
+
+    Not a vendor bug — an operator-visible physical-envelope breach. The
+    trial artifact records this distinctly from ``vendor_error`` so the
+    blind rater can filter thermal-aborted trials out of the sample.
+    """
 
 _ROOT = Path(__file__).resolve().parents[4]
 _ODR_SRC = _ROOT / "vendor" / "adr_010" / "open_deep_research" / "src"
@@ -107,6 +117,8 @@ async def run_odr_trial(
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
     ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
     mcp_server_url: str = "http://127.0.0.1:8000",
+    thermal_event: Any | None = None,
+    thermal_poll_seconds: float = 1.0,
 ) -> TrialMetrics:
     """Run a single ODR trial. Async because ODR is LangGraph async."""
     try:
@@ -165,9 +177,49 @@ async def run_odr_trial(
         cfg = dict(config)
         cfg["configurable"] = dict(config["configurable"])
         cfg["configurable"]["thread_id"] = str(uuid.uuid4())
-        return await deep_researcher.ainvoke(
+
+        # Stage 6.3.2 thermal watchdog. When ``thermal_event`` is set by
+        # GPUMonitor upon crossing the abort threshold, race the ainvoke
+        # against a poller task; on breach, cancel ainvoke and raise
+        # ThermalAbort. Colossus runs the display on the same RTX 5090 as
+        # Ollama, so a driver crash takes down the desktop — hence the
+        # hard cancel rather than a soft slowdown.
+        invoke_coro = deep_researcher.ainvoke(
             {"messages": [{"role": "user", "content": user_content}]},
             config=cfg,
+        )
+        if thermal_event is None:
+            return await invoke_coro
+
+        invoke_task = asyncio.create_task(invoke_coro)
+
+        async def _watchdog() -> None:
+            while not invoke_task.done():
+                if thermal_event.is_set():
+                    return
+                await asyncio.sleep(thermal_poll_seconds)
+
+        watchdog_task = asyncio.create_task(_watchdog())
+        done, _pending = await asyncio.wait(
+            {invoke_task, watchdog_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if invoke_task in done:
+            watchdog_task.cancel()
+            try:
+                await watchdog_task
+            except BaseException:  # noqa: BLE001
+                pass
+            return invoke_task.result()
+
+        # Thermal breach. Cancel ainvoke; give it up to 5s to unwind.
+        invoke_task.cancel()
+        try:
+            await asyncio.wait_for(invoke_task, timeout=5.0)
+        except BaseException:  # noqa: BLE001
+            pass
+        raise ThermalAbort(
+            "GPU thermal watchdog fired during ainvoke; task cancelled."
         )
 
     result: dict | None = None
@@ -175,12 +227,28 @@ async def run_odr_trial(
     attempts: list[dict] = []
 
     # ---- Shim 1: vendor-bug retry (max 2 attempts) ----
+    # A ThermalAbort is NEVER retried — the physical envelope is what it
+    # is, and re-attempting will just re-breach. Vendor bugs are retried
+    # once. This is the difference between a schema-drift bug (retriable)
+    # and a real-world constraint (not).
+    thermal_aborted = False
     for attempt in range(2):
         try:
             result = await _invoke_once(anchored_question)
             attempts.append({"attempt": attempt + 1, "outcome": "ok"})
             last_exc = None
             break
+        except ThermalAbort as exc:
+            last_exc = exc
+            thermal_aborted = True
+            attempts.append(
+                {
+                    "attempt": attempt + 1,
+                    "outcome": "thermal_abort",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            break  # no retry: physical envelope, not schema drift
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             attempts.append(
@@ -192,7 +260,8 @@ async def run_odr_trial(
             )
 
     # ---- Shim 2: retrieval gate (only if shim 1 landed a result) ----
-    if result is not None:
+    # Skip the gate on thermal abort — no point re-running under a breach.
+    if result is not None and not thermal_aborted:
         raw_notes = result.get("raw_notes", []) or []
         if not raw_notes:
             escalated = (
@@ -255,4 +324,4 @@ async def run_odr_trial(
     return metrics
 
 
-__all__ = ["build_odr_config", "run_odr_trial"]
+__all__ = ["ThermalAbort", "build_odr_config", "run_odr_trial"]
