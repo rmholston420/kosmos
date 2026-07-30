@@ -638,3 +638,205 @@ def test_license_grounding_shim_records_post_retry_mismatches(monkeypatch):
     ]
     for m in mismatches:
         assert m["expected"] == "GPL-3.0"
+
+
+# =========================================================================
+# Stage 6.3.4e \u2014 Shim 9 (feature_grounding) integration tests
+# =========================================================================
+
+
+def test_feature_grounding_shim_emits_directive_and_records_facts(monkeypatch):
+    """Shim 9 fires when fact_anchor_urls is populated; grounded present
+    features drive a directive + retry."""
+    from ops.benchmarks.adr_010.harness import feature_grounding, odr as odr_mod
+
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            # First real invocation — non-empty raw_notes so shim 2 skips.
+            {
+                "final_report": "Initial report with no feature mentions.",
+                "raw_notes": ["seed note"],
+            },
+            # Retry driven by shim 9 correction directive.
+            {
+                "final_report": (
+                    "DozerDB supports multi-database. Backup is available. "
+                    "Enterprise metrics via monitoring endpoint. "
+                    "Property-existence constraints re-enabled."
+                ),
+                "raw_notes": ["seed note"],
+            },
+        ],
+    )
+
+    async def _fake_ground_features(_urls, **kwargs):
+        return [
+            feature_grounding.FeatureFact(
+                owner="DozerDB", repo="dozerdb-plugin",
+                feature_id="multi_database",
+                label="Multi-database support",
+                status="present",
+                source_url="https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/README.md",
+                matched_keywords=("multi-database",),
+            ),
+            feature_grounding.FeatureFact(
+                owner="DozerDB", repo="dozerdb-plugin",
+                feature_id="backup_restore",
+                label="Backup and restore",
+                status="present",
+                source_url="https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/README.md",
+                matched_keywords=("backup",),
+            ),
+        ]
+
+    monkeypatch.setattr(feature_grounding, "ground_features", _fake_ground_features)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t_feat",
+            fact_anchor_urls=["https://github.com/DozerDB/dozerdb-plugin"],
+            enable_fact_check=False,
+            enable_license_grounding=False,
+            enable_feature_grounding=True,
+            enable_rubric_critique=False,
+            enable_cove=False,
+            enable_claim_support_gate=False,
+        )
+    )
+    assert len(invocations) == 2, invocations
+    correction_text = invocations[1]["payload"]["messages"][0]["content"]
+    assert "FEATURE GROUNDING" in correction_text
+    assert "MUST mention" in correction_text
+    assert "COMPLIANCE RULE" in correction_text
+
+    shim_events_entry = next(
+        e for e in metrics.trajectory
+        if isinstance(e, dict) and "shim_events" in e
+    )
+    feat = next(
+        s for s in shim_events_entry["shim_events"]
+        if s.get("shim") == "feature_grounding"
+    )
+    assert feat["directive_emitted"] is True
+    assert feat["retry_outcome"] == "retry_ok"
+    # The compliant retry mentions both features positively \u2192 no omissions.
+    assert feat["post_retry_omissions"] == []
+    grounded_ids = {f["feature_id"] for f in feat["facts"]}
+    assert grounded_ids == {"multi_database", "backup_restore"}
+
+
+def test_feature_grounding_shim_records_post_retry_omissions(monkeypatch):
+    """If the retried report still omits or negates a grounded-present
+    feature, the audit surfaces it on the shim event."""
+    from ops.benchmarks.adr_010.harness import feature_grounding, odr as odr_mod
+
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {"final_report": "Initial report.", "raw_notes": ["seed note"]},
+            {
+                # Model IGNORES the correction and negates both features.
+                "final_report": (
+                    "Multi-database is not supported in DozerDB. "
+                    "Backup is under development."
+                ),
+                "raw_notes": ["seed note"],
+            },
+        ],
+    )
+
+    async def _fake_ground_features(_urls, **kwargs):
+        return [
+            feature_grounding.FeatureFact(
+                owner="DozerDB", repo="dozerdb-plugin",
+                feature_id="multi_database",
+                label="Multi-database support",
+                status="present",
+                source_url="https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/README.md",
+                matched_keywords=("multi-database", "multi database"),
+            ),
+            feature_grounding.FeatureFact(
+                owner="DozerDB", repo="dozerdb-plugin",
+                feature_id="backup_restore",
+                label="Backup and restore",
+                status="present",
+                source_url="https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/README.md",
+                matched_keywords=("backup",),
+            ),
+        ]
+
+    monkeypatch.setattr(feature_grounding, "ground_features", _fake_ground_features)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t_feat_omit",
+            fact_anchor_urls=["https://github.com/DozerDB/dozerdb-plugin"],
+            enable_fact_check=False,
+            enable_license_grounding=False,
+            enable_feature_grounding=True,
+            enable_rubric_critique=False,
+            enable_cove=False,
+            enable_claim_support_gate=False,
+        )
+    )
+    # Exactly 2 invocations \u2014 no second re-retry after non-compliance.
+    assert len(invocations) == 2, invocations
+    shim_events_entry = next(
+        e for e in metrics.trajectory
+        if isinstance(e, dict) and "shim_events" in e
+    )
+    feat = next(
+        s for s in shim_events_entry["shim_events"]
+        if s.get("shim") == "feature_grounding"
+    )
+    assert feat["retry_outcome"] == "retry_ok"
+    omissions = feat["post_retry_omissions"]
+    reasons = {(o["feature_id"], o["reason"]) for o in omissions}
+    assert ("multi_database", "negated") in reasons
+    assert ("backup_restore", "negated") in reasons
+
+
+def test_feature_grounding_shim_skipped_when_no_fact_anchor_urls(monkeypatch):
+    """Shim 9 requires fixture-declared seed URLs. Without them the
+    shim is silently skipped (never touches the network)."""
+    from ops.benchmarks.adr_010.harness import feature_grounding, odr as odr_mod
+
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [{"final_report": "Report.", "raw_notes": ["seed note"]}],
+    )
+
+    # Sentinel that would raise if the shim wrongly invoked ground_features.
+    async def _boom(*_a, **_kw):
+        raise AssertionError("shim 9 should not run without fact_anchor_urls")
+
+    monkeypatch.setattr(feature_grounding, "ground_features", _boom)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t_feat_skip",
+            fact_anchor_urls=None,
+            enable_fact_check=False,
+            enable_license_grounding=False,
+            enable_feature_grounding=True,
+            enable_rubric_critique=False,
+            enable_cove=False,
+            enable_claim_support_gate=False,
+        )
+    )
+    shim_events_entries = [
+        e for e in metrics.trajectory
+        if isinstance(e, dict) and "shim_events" in e
+    ]
+    # No shim ran → no shim_events entry is appended at all (odr.py
+    # only appends when the list is non-empty).
+    if shim_events_entries:
+        assert not any(
+            s.get("shim") == "feature_grounding"
+            for s in shim_events_entries[0]["shim_events"]
+        )
+    assert len(invocations) == 1

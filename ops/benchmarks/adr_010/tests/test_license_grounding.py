@@ -219,6 +219,77 @@ async def test_ground_licenses_returns_empty_on_no_repos():
 
 
 @pytest.mark.asyncio
+async def test_ground_licenses_seed_urls_are_grounded_even_when_uncited(monkeypatch):
+    """Stage 6.3.4e: seed_urls MUST be grounded even if the cited URL
+    set doesn't include the repo. Fixes the 6.3.4c/6.3.4d hole where
+    shim 4 only saw whichever repo the model happened to cite."""
+    from ops.benchmarks.adr_010.harness import license_grounding as lg
+
+    canned = {
+        "https://raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE": _FakeResponse(
+            200, "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n"
+        ),
+        "https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/LICENSE": _FakeResponse(
+            200, "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n"
+        ),
+    }
+    fake = _FakeClient(canned)
+    monkeypatch.setattr(lg.httpx, "AsyncClient", lambda *a, **kw: fake)
+
+    facts = await lg.ground_licenses(
+        ["https://github.com/neo4j/neo4j"],  # cited: only neo4j
+        seed_urls=[
+            "https://github.com/neo4j/neo4j",
+            "https://github.com/DozerDB/dozerdb-plugin",
+        ],
+        per_request_timeout_s=1.0,
+    )
+    grounded = sorted((f.owner, f.repo) for f in facts if f.ok)
+    assert ("DozerDB", "dozerdb-plugin") in grounded
+    assert ("neo4j", "neo4j") in grounded
+    assert len(facts) == 2  # no duplicate for repo that was in BOTH lists
+
+
+@pytest.mark.asyncio
+async def test_ground_licenses_seed_urls_prepended_before_cited(monkeypatch):
+    """Seed repos appear first in the returned list so they're always
+    inside the max_repos window even when many URLs are cited."""
+    from ops.benchmarks.adr_010.harness import license_grounding as lg
+
+    fake = _FakeClient({})  # all 404; we care about ORDER, not content
+    monkeypatch.setattr(lg.httpx, "AsyncClient", lambda *a, **kw: fake)
+    cited = [f"https://github.com/cited{i}/repo{i}" for i in range(10)]
+    facts = await lg.ground_licenses(
+        cited,
+        seed_urls=["https://github.com/DozerDB/dozerdb-plugin"],
+        max_repos=3,
+        per_request_timeout_s=0.2,
+    )
+    assert len(facts) == 3
+    assert (facts[0].owner, facts[0].repo) == ("DozerDB", "dozerdb-plugin")
+
+
+@pytest.mark.asyncio
+async def test_ground_licenses_seed_urls_default_none_preserves_prior_behavior(monkeypatch):
+    """Callers who don't pass seed_urls behave exactly as before."""
+    from ops.benchmarks.adr_010.harness import license_grounding as lg
+
+    canned = {
+        "https://raw.githubusercontent.com/x/y/HEAD/LICENSE": _FakeResponse(
+            200, "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n"
+        ),
+    }
+    fake = _FakeClient(canned)
+    monkeypatch.setattr(lg.httpx, "AsyncClient", lambda *a, **kw: fake)
+
+    facts = await lg.ground_licenses(
+        ["https://github.com/x/y"], per_request_timeout_s=1.0
+    )
+    assert len(facts) == 1
+    assert (facts[0].owner, facts[0].repo) == ("x", "y")
+
+
+@pytest.mark.asyncio
 async def test_ground_licenses_max_repos_cap(monkeypatch):
     from ops.benchmarks.adr_010.harness import license_grounding as lg
 

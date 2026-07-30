@@ -94,13 +94,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cooldown-min-seconds",
         type=float,
-        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "3")),
+        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "1")),
         help=(
             "minimum cooldown seconds, applied both pre-flight and between "
             "trials. Progression: 30 -> 60 (post-88C incident) -> 45 -> 30 "
-            "-> 15 -> 10 -> 5 -> 3 (Stage 6.3.4d: Stage 6.3.4c 3-trial run "
-            "with 5s waits peaked at 77C \u2014 8C below the 85C watchdog "
-            "and 11C below the 88C driver-crash line. Target C held at 60.)"
+            "-> 15 -> 10 -> 5 -> 3 -> 1 (Stage 6.3.4e: Stage 6.3.4d 3-trial "
+            "run with 3s waits peaked at 76C \u2014 9C below the 85C watchdog "
+            "and 12C below the 88C driver-crash line. GPU power cap raised "
+            "to 425W (see kosmos-nvidia-power-cap.service). Target C held "
+            "at 60.)"
         ),
     )
     parser.add_argument(
@@ -155,6 +157,16 @@ def parse_args() -> argparse.Namespace:
         "--no-license-grounding",
         action="store_true",
         help="disable shim 4 (fetches LICENSE files for cited GitHub repos)",
+    )
+    parser.add_argument(
+        "--no-feature-grounding",
+        action="store_true",
+        help=(
+            "disable Stage 6.3.4e shim 9 (fetches the README of each fixture-"
+            "canonical GitHub repo and audits the retried report for grounded "
+            "features that are omitted or negated). Seeded from "
+            "fact_anchor_urls."
+        ),
     )
     parser.add_argument(
         "--no-rubric-critique",
@@ -357,6 +369,7 @@ async def run_odr(
                     fact_anchor_urls=fact_anchor_urls,
                     enable_fact_check=not args.no_fact_check,
                     enable_license_grounding=not args.no_license_grounding,
+                    enable_feature_grounding=not args.no_feature_grounding,
                     enable_rubric_critique=(
                         not args.no_rubric_critique and bool(rubric_lines)
                     ),
@@ -551,9 +564,11 @@ def main() -> int:
     ) or []
     rubric_lines = build_rubric_lines_from_facts(canonical_facts)
     logger.info(
-        "Stage 6.3.4 shims: license_grounding=%s rubric_critique=%s cove=%s "
-        "claim_support_gate=%s n_consistency=%d rubric_points=%d",
+        "Stage 6.3.4 shims: license_grounding=%s feature_grounding=%s "
+        "rubric_critique=%s cove=%s claim_support_gate=%s n_consistency=%d "
+        "rubric_points=%d",
         not args.no_license_grounding,
+        not args.no_feature_grounding,
         not args.no_rubric_critique and bool(rubric_lines),
         not args.no_cove,
         not args.no_claim_support_gate,

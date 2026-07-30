@@ -1432,3 +1432,27 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Test tiers:** `ops/benchmarks/adr_010/tests/` = **144 passed** (was 132: +12). Whole-repo pytest = **1130 passed, 19 skipped** (was 1118: +12). Vendor tree pristine.
 - **Ports / adapters affected:** none formal. Deferred escalation ladder if 6.3.4d misses: Stage 6.3.5 model uplift (qwen2.5:32b-q8_0). Reasoning: 6.3.4c already proved the harness was the previous bottleneck; if 6.3.4d's compliance-audited directive still can't override qwen2.5:7b's parametric license bias, the answer is model scale, not more harness layers.
 - **Stop-condition status:** Ready for another 3-trial ODR run on Colossus with 3s cooldown min. Stage 6.3.4 closing criterion carries forward. Every trial's `shim_events[license_grounding].post_retry_mismatches` should be `[]` if the directive strengthening worked; any non-empty list is a discipline-failure signal for the blind rater.
+
+## 2026-07-30 15:59 EDT — Stage 6.3.4e feature grounding + cooldown 3→1s + power 425W
+
+- **Stage / plugin / port:** Stage 6.3.4 · ADR-010 ODR contender · shim 9 (feature grounding), shim 4 (license grounding, seed_urls)
+- **What changed:**
+  - New `harness/feature_grounding.py` (shim 9): grounds canonical DozerDB features from repo README at HEAD; emits SYSTEM CORRECTION directive on retry; audits post-retry report for omission and both-side negation windows (200 chars, before OR after keyword).
+  - `harness/license_grounding.py`: `ground_licenses()` gains `seed_urls` kwarg; seed repos are ALWAYS grounded (prepended before cited URLs, deduped, capped by `max_repos`). Closes 6.3.4d hole where DozerDB was ungrounded whenever the model cited only Neo4j.
+  - `harness/odr.py`: shim 4 now passes fixture `fact_anchor_urls` as `seed_urls`; new shim 9 wired in between shim 4 and rubric critique (guarded by `enable_feature_grounding` and non-empty `fact_anchor_urls`).
+  - `runner.py`: cooldown default 3s → 1s, help text updated to 6.3.4e (peak 76°C at 3s → still 12°C below 88°C crash line at 1s + 425W); `--no-feature-grounding` flag.
+- **Files touched:**
+  - ops/benchmarks/adr_010/harness/feature_grounding.py (new)
+  - ops/benchmarks/adr_010/harness/license_grounding.py
+  - ops/benchmarks/adr_010/harness/odr.py
+  - ops/benchmarks/adr_010/runner.py
+  - ops/benchmarks/adr_010/tests/test_feature_grounding.py (new, 16 tests)
+  - ops/benchmarks/adr_010/tests/test_license_grounding.py (+3 seed_urls tests)
+  - ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py (+3 shim 9 integration tests)
+  - BUILD_LOG.md, SESSION_HANDOFF.md
+- **Ports / adapters affected:** none (harness-only)
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress (Stage 6.3.4 DoD unchanged: mean rated correctness ≥5/6, no unverified URLs, no [unsupported] markers, no post_retry_mismatches, no post_retry_omissions). Awaiting Colossus 3-trial run.
+- **Test status:** 166 adr_010 tests pass (was 144). Whole-repo 1152 passed, 19 skipped.
+- **GPU cap:** 425 W persisted via `/etc/systemd/system/kosmos-nvidia-power-cap.service` (enabled, verified live).
+

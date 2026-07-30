@@ -220,18 +220,38 @@ async def _fetch_one_license(
 async def ground_licenses(
     urls: Iterable[str],
     *,
+    seed_urls: Iterable[str] | None = None,
     max_repos: int = 8,
     per_request_timeout_s: float = 8.0,
     total_timeout_s: float = 20.0,
 ) -> list[LicenseFact]:
     """Ground GitHub repos cited in ``urls`` against their LICENSE files.
 
-    Returns a list of ``LicenseFact`` in the same order as
-    ``extract_github_repos`` yielded them, truncated to ``max_repos``.
-    Any fact with ``ok=False`` is a fetch/classification failure; the
+    Stage 6.3.4e: ``seed_urls`` is an optional iterable of
+    fixture-declared canonical GitHub URLs whose repos MUST be grounded
+    regardless of whether the model cited them in its report. Seed
+    repos are prepended to the cited-repo list so they appear first in
+    the returned ``LicenseFact`` list and are always inside the
+    ``max_repos`` window. This closes the Stage 6.3.4c/6.3.4d hole
+    where the shim only grounded whichever repo the model happened to
+    surface (Neo4j on 2/3 trials, DozerDB on 1/3), even though the
+    fixture pins both as canonical.
+
+    Returns a list of ``LicenseFact`` truncated to ``max_repos``. Any
+    fact with ``ok=False`` is a fetch/classification failure; the
     caller must not fabricate — treat those repos as "no ground truth".
     """
-    repos = extract_github_repos(urls)[:max_repos]
+    seeded = extract_github_repos(seed_urls or [])
+    cited = extract_github_repos(urls)
+    # Seed repos first; cited repos second; both dedup'd against each other.
+    seen: set[tuple[str, str]] = set()
+    merged: list[tuple[str, str]] = []
+    for pair in (*seeded, *cited):
+        if pair in seen:
+            continue
+        seen.add(pair)
+        merged.append(pair)
+    repos = merged[:max_repos]
     if not repos:
         return []
 

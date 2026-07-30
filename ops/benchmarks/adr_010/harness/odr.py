@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..metrics import TrialMetrics
-from . import claim_support, cove, license_grounding, rubric_critique
+from . import claim_support, cove, feature_grounding, license_grounding, rubric_critique
 from .prompts import (
     KOSMOS_MCP_PROMPT,
     build_anchored_user_turn,
@@ -128,6 +128,7 @@ async def run_odr_trial(
     fact_anchor_urls: list[str] | None = None,
     enable_fact_check: bool = True,
     enable_license_grounding: bool = True,
+    enable_feature_grounding: bool = True,
     enable_rubric_critique: bool = True,
     rubric_lines: list[str] | None = None,
     enable_cove: bool = True,
@@ -470,7 +471,8 @@ async def run_odr_trial(
             try:
                 cited_urls_now = extract_urls(current_report)
                 license_facts = await license_grounding.ground_licenses(
-                    cited_urls_now
+                    cited_urls_now,
+                    seed_urls=fact_anchor_urls or [],
                 )
                 directive = license_grounding.build_license_correction_directive(
                     license_facts
@@ -543,6 +545,85 @@ async def run_odr_trial(
                 shim_events.append(
                     {
                         "shim": "license_grounding",
+                        "outcome": "error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+
+        # ---- Shim 9: FEATURE-fact grounding (Stage 6.3.4e) ----
+        # Companion to shim 4. Shim 4 grounds LICENSE families from a
+        # repo's LICENSE file; shim 9 grounds FEATURE claims from the
+        # same repo's README. Seeded from fact_anchor_urls (the fixture's
+        # canonical supporting URLs), so it runs regardless of which
+        # URLs the model actually cited in the report.
+        if (
+            enable_feature_grounding
+            and current_report
+            and fact_anchor_urls
+            and not thermal_aborted
+        ):
+            try:
+                feature_facts = await feature_grounding.ground_features(
+                    fact_anchor_urls
+                )
+                directive = feature_grounding.build_feature_correction_directive(
+                    feature_facts
+                )
+                shim_events.append(
+                    {
+                        "shim": "feature_grounding",
+                        "facts": [
+                            {
+                                "owner": f.owner,
+                                "repo": f.repo,
+                                "feature_id": f.feature_id,
+                                "status": f.status,
+                                "source_url": f.source_url,
+                                "matched_keywords": list(f.matched_keywords),
+                                "error": f.error,
+                            }
+                            for f in feature_facts
+                        ],
+                        "directive_emitted": bool(directive),
+                    }
+                )
+                if directive:
+                    correction_turn = directive + "\n\n" + anchored_question
+                    try:
+                        retry_result = await _invoke_with_vendor_retry(correction_turn)
+                    except ThermalAbort as exc:
+                        shim_events[-1]["retry_outcome"] = "thermal_abort"
+                        shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                        thermal_aborted = True
+                    except Exception as exc:  # noqa: BLE001
+                        shim_events[-1]["retry_outcome"] = "retry_failed"
+                        shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                    else:
+                        shim_events[-1]["retry_outcome"] = "retry_ok"
+                        result = retry_result
+                        current_report = str(result.get("final_report", ""))
+                        current_notes = result.get("raw_notes") or []
+                        current_notes_text = "\n".join(
+                            str(n) for n in current_notes if n is not None
+                        )
+                        # Compliance audit: any grounded-present feature
+                        # that the retried report omits or negates is
+                        # surfaced for the blind rater / DoD gate.
+                        omissions = feature_grounding.detect_feature_omissions_or_negations(
+                            current_report, feature_facts
+                        )
+                        shim_events[-1]["post_retry_omissions"] = [
+                            {
+                                "repo": o.repo_slug,
+                                "feature_id": o.feature_id,
+                                "reason": o.reason,
+                            }
+                            for o in omissions
+                        ]
+            except Exception as exc:  # noqa: BLE001
+                shim_events.append(
+                    {
+                        "shim": "feature_grounding",
                         "outcome": "error",
                         "error": f"{type(exc).__name__}: {exc}",
                     }

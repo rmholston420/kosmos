@@ -207,3 +207,22 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Related BUILD_LOG entry:** 2026-07-30 15:28 EDT (Stage 6.3.4d).
 - **Related tests:** `test_correction_directive_lists_only_known_facts` (updated), `test_detect_license_mismatches_*` (9 new), `test_license_grounding_shim_prepends_directive_before_anchored_question` (new), `test_license_grounding_shim_records_post_retry_mismatches` (new).
 - **Supersedes:** 2026-07-30 14:49 EDT (which correctly diagnosed one-shot vendor-retry as insufficient but assumed the directive itself was sound).
+
+## 2026-07-30 15:59 EDT — feature_grounding phrase pattern miss ("metrics endpoint" not matched)
+
+- **Symptom:** `test_ground_features_reads_readme_md_and_matches_keywords` failed: `monitoring` fact came back `absent` even though README body contained "enterprise metrics via a metrics endpoint".
+- **Affected stage / plugin / port:** Stage 6.3.4e · ODR shim 9 · feature_grounding
+- **Root cause:** `_match_keywords` and `_keyword_positions` used a two-pass `str.replace` on `re.escape(needle)`. Second pass (`\-` → `[\s\-_]+`) rewrote the `\-` that the first pass inserted INSIDE `[\s\-_]+`, producing malformed regex like `metrics[\s[\s\-_]+_]+endpoint` — this regex never matched anything.
+- **Fix applied:** Replaced replace-chain with `_phrase_pattern(needle)` that splits on `[\s\-_]+` and joins escaped segments with the same char class. Also broadened trigger to include `_` and centralized both callers.
+- **Files changed:** ops/benchmarks/adr_010/harness/feature_grounding.py
+- **Related BUILD_LOG entry:** 2026-07-30 15:59 EDT
+
+## 2026-07-30 15:59 EDT — feature_grounding negation window missed post-keyword "is not supported"
+
+- **Symptom:** `test_detect_omissions_flags_negated_feature` failed: report "Multi-database is not supported in DozerDB." returned no omissions.
+- **Affected stage / plugin / port:** Stage 6.3.4e · ODR shim 9 · feature_grounding
+- **Root cause:** `_has_nearby_negation` only inspected the 200-char window BEFORE the keyword. English construction "X is not supported" places the negation AFTER the keyword — this is the dominant negation pattern the model actually emits, so the audit under-reported.
+- **Fix applied:** `_keyword_positions` now returns `(start, end)` spans; `_has_nearby_negation(text, pos, keyword_len)` scans both `[pos - 200, pos]` and `[pos + keyword_len, pos + keyword_len + 200]`.
+- **Files changed:** ops/benchmarks/adr_010/harness/feature_grounding.py
+- **Related BUILD_LOG entry:** 2026-07-30 15:59 EDT
+
