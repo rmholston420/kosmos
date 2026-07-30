@@ -732,3 +732,14 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** ADR-039 Ratified v25 (amends ADR-004 timing + ADR-025 concretely locks §3.5-blocked-on-Langfuse-defer). ADR-004 and ADR-025 body text unchanged; ADR-039 is the pointer.
 - **Stop-condition status:** met — docs-only ADR; `make stage1-gate` PASSes unchanged (675/675 green + 4 env-gated skips per Stage 3.3 landing). Next: Stage 3.6 (OpenSpec spec engine).
+
+## 2026-07-30 02:27 EDT — Stage 3.3 · Colossus env-gated timing evidence
+
+- **Stage / plugin / port:** Stage 3.3 · Tektos · repomap (post-landing evidence)
+- **What changed:** No code or docs changed. Recording Colossus wall-clock evidence for the two env-gated Stage 3.3 tests that are skipped in `make stage1-gate` to keep the sandbox fast. Both PASS on Colossus (Kubuntu, RTX 5090, 128GB RAM, Python 3.14.4, pytest-9.1.1).
+  - `KOSMOS_STAGE_33_LARGE_CORPUS=1 pytest plugins/tektos/tests/test_repomap.py::test_repomap_10k_file_corpus_writes_queryable_via_memoryport_build_sequence_3_3_dod`: **239.82s (3:59) — PASS.** 10,000-file synthetic corpus indexed end-to-end; asserts locked-provenance per-file writes, exactly one snapshot, `MemoryPort.query_temporal("tektos.repomap.indexed", limit=…)` queryability. Session log preserved at `/tmp/kosmos-3-3-10k.log` on Colossus.
+  - `KOSMOS_STAGE_33_REAL_CORPUS=1 pytest plugins/tektos/tests/test_repomap.py::test_index_against_real_cpython_corpus`: **1.81s — PASS.** Real CPython source sparse-checkout indexed end-to-end. Session log preserved at `/tmp/kosmos-3-3-cpython.log` on Colossus.
+- **Files touched:** none (this entry is timing-evidence only).
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** ADR-038 DoD evidence now includes concrete Colossus wall-clock; no ADR body change needed.
+- **Stop-condition status:** met — Stage 3.3 DoD is fully corroborated by Colossus execution across all three test tiers (fast 500-file smoke in stage1-gate ~3s; 10k literal 239.82s on Colossus; real CPython 1.81s on Colossus). Cache_version=4 diskcache under `<repo-root>/.kosmos.repomap.cache.v4` warmed on Colossus. No regressions.
