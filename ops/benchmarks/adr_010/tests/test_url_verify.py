@@ -304,3 +304,40 @@ def test_annotate_is_idempotent():
     twice, _ = annotate_unverified(once, results)
     assert once == twice
     assert once.count("[unverified]") == 1
+
+
+def test_canonicalize_strips_trailing_square_brackets():
+    """_canonicalize only strips pure trailing punctuation runs; the deeper
+    footnote-marker case like ``y[3]`` is handled at the extractor level
+    (see test_extract_urls_footnote_marker_suffix)."""
+    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    assert _canonicalize("https://x.example/y]") == "https://x.example/y"
+    assert _canonicalize("https://x.example/y[") == "https://x.example/y"
+    assert _canonicalize("https://x.example/y]]") == "https://x.example/y"
+    assert _canonicalize("https://x.example/y].") == "https://x.example/y"
+    assert _canonicalize("https://x.example/y[]") == "https://x.example/y"
+
+
+def test_canonicalize_strips_leading_open_bracket():
+    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    assert _canonicalize("[https://x.example/") == "https://x.example/"
+    assert _canonicalize("[https://x.example/]") == "https://x.example/"
+
+
+def test_extract_urls_footnote_marker_suffix():
+    """Regression: 6.3.4 Colossus run emitted `github.com/neo4j/neo4j[3]` and
+    the extractor smuggled `[3` into the URL. Now the bracket + digits stay
+    OUT of the URL and the clean URL is emitted."""
+    from ops.benchmarks.adr_010.harness.url_verify import extract_urls
+    text = (
+        "See https://github.com/neo4j/neo4j[3] for details, and "
+        "https://github.com/DozerDB/dozerdb-plugin[7]. Also "
+        "https://neo4j.com/open-core-and-neo4j/[1]."
+    )
+    urls = extract_urls(text)
+    for u in urls:
+        assert "[" not in u
+        assert "]" not in u
+    assert "https://github.com/neo4j/neo4j" in urls
+    assert "https://github.com/DozerDB/dozerdb-plugin" in urls
+    assert "https://neo4j.com/open-core-and-neo4j/" in urls

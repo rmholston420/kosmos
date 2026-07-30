@@ -43,16 +43,19 @@ logger = logging.getLogger(__name__)
 # Trailing punctuation that Markdown/plain-text writers glue to the end
 # of a URL. Includes the URL-encoded closing angle bracket `%3E` /
 # `%3e` produced when a model wraps citations in `<...>` and the outer
-# framework URL-encodes the whole thing before we ever see it.
+# framework URL-encodes the whole thing before we ever see it. Also
+# strips `[`/`]` (Stage 6.3.4b: model emitted footnote-marker citations
+# like `github.com/neo4j/neo4j[3]` where the `[3]` glued to the URL).
 _URL_STRIP_TRAILING = re.compile(
-    r"(?:%3[Ee]|[)>,.;\]\"'])+$",
+    r"(?:%3[Ee]|[)>\[\],.;\"'])+$",
 )
 
-# URL extractor for arbitrary text. Excludes whitespace, `)`, and `>`
-# in the body so that Markdown-style citations like `<https://x/>` or
-# `(https://x)` don't smuggle bracket characters into the URL. The
-# leading `<` (if any) is stripped by extract_urls() below.
-_URL_EXTRACT_RE = re.compile(r"https?://[^\s)>]+")
+# URL extractor for arbitrary text. Excludes whitespace, `)`, `>`, and
+# `[`/`]` in the body so that Markdown-style citations like
+# `<https://x/>`, `(https://x)`, or `https://x[3]` don't smuggle bracket
+# characters into the URL. The leading `<` or `[` (if any) is stripped
+# by extract_urls() below.
+_URL_EXTRACT_RE = re.compile(r"https?://[^\s)>\[\]]+")
 
 
 @dataclass(frozen=True)
@@ -77,8 +80,10 @@ def _canonicalize(url: str) -> str:
     Idempotent.
     """
     s = url.strip()
-    # Strip a single leading angle bracket if it's there.
-    if s.startswith("<"):
+    # Strip a single leading angle bracket or opening square bracket if
+    # present. Autolink flavours we've observed: `<https://x>` and
+    # `[https://x]`.
+    if s.startswith("<") or s.startswith("["):
         s = s[1:]
     return _URL_STRIP_TRAILING.sub("", s)
 

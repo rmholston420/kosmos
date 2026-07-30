@@ -1379,3 +1379,21 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none formal. All new code stays under `ops/benchmarks/adr_010/harness/` and `.../tests/`. Vendor tree pristine per ADR-007 substrate lock.
 - **PORTING_LEDGER / ADR updated:** none. All five shims sit inside ADR-010's LOCKED "operational tuning" band; ODR winner unchanged.
 - **Stop-condition status:** Ready for a fresh 3-trial ODR run on Colossus with 15 s cooldown min and shims 4/6/7/8 defaulted ON. New Stage 6.3.4 closing criterion: mean rated correctness ≥5/6 across 3 trials AND `final_unverified_urls` empty on every trial AND no `[unsupported]` markers survive to the final report for any of the six canonical facts. If threshold still missed with defaults, next escalation is `--n-consistency 3` (shim 5 opt-in) then quantization/model uplift as Stage 6.3.5 ADR-010 CONTINGENCY.
+
+
+## 2026-07-30 14:22 EDT — Stage 6.3.4b · footnote-marker extractor bug + cooldown 15→10s
+
+- **Stage / plugin / port:** Stage 6.3.4b · Zetesis ODR harness hotfix (same lock-in band as 6.3.4).
+- **What changed:** First Stage 6.3.4 Colossus 3-trial ODR run completed clean (128 tests green, shim 4 verified — `raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE.txt` 200, `raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/LICENSE` 200). Peak GPU 74C at 15s cooldowns; trial-start temps 34/39/43C. Two issues surfaced in the logs:
+  - **Extractor bug (footnote markers).** Model emitted citations of the form `github.com/neo4j/neo4j[3]` (bare footnote-marker suffix). The 6.3.3b extractor regex `https?://[^\s)>]+` did not exclude `[` or `]`, so the `[3` was smuggled into the URL body and the shim tried to `HEAD https://github.com/neo4j/[3` → 404. Sibling case: leading `[` from `[https://...]` autolinks was not stripped by `_canonicalize`.
+  - **Cooldown 15s → 10s.** Same headroom argument as 30→15: peak 74C is 11C below the 85C watchdog and 14C below the 88C driver-crash line. Target C held at 60.
+  - **Fix:** `harness/url_verify.py` — `_URL_EXTRACT_RE` widens to `https?://[^\s)>\[\]]+` (adds `[`, `]` to the excluded body set). `_URL_STRIP_TRAILING` also gains `[`/`]` in the trailing-punctuation run so `y]]` cleanup still works. `_canonicalize` strips a leading `[` in addition to `<`.
+  - **Cooldown default:** `--cooldown-min-seconds` default 15 → **10** in `runner.py`. Help text updated with the progression 30→60→45→30→15→10 and the 74C peak evidence.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/url_verify.py` — `_URL_EXTRACT_RE` and `_URL_STRIP_TRAILING` updated; `_canonicalize` handles leading `[`.
+  - `ops/benchmarks/adr_010/runner.py` — `--cooldown-min-seconds` default 15 → 10; help text records 6.3.4b evidence.
+  - `ops/benchmarks/adr_010/tests/test_url_verify.py` — +3 regression tests (trailing `]`/`[`/`]]`/`].`/`[]`; leading `[https://...]`; footnote-marker `github.com/neo4j/neo4j[3]` extracts cleanly).
+- **Test tiers:** `ops/benchmarks/adr_010/tests/` = **131 passed** (was 128: +3). Whole-repo pytest expected **1117 passed / 19 skipped**.
+- **Ports / adapters affected:** none formal. Vendor tree pristine.
+- **PORTING_LEDGER / ADR updated:** none. Footnote-marker suffix is a harness extractor bug, not a substrate decision.
+- **Stop-condition status:** Ready for another 3-trial ODR run on Colossus with 10s cooldown min. Stage 6.3.4 closing criterion carries forward. Note: the Neo4j-CE-vs-EE dual-licensing question is a separate rubric-modeling issue (shim 4 currently records a single license family per repo) — track separately if the rating still misses on F1/F2.

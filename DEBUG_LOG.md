@@ -161,3 +161,19 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:**
   - `ops/benchmarks/adr_010/harness/cove.py` — `_LICENSE_CLAIM_RE` object group + trailing anchor.
 - **Related BUILD_LOG entry:** 2026-07-30 14:06 EDT (Stage 6.3.4).
+
+
+## 2026-07-30 14:22 EDT — footnote-marker citation glued to URL: `github.com/neo4j/neo4j[3]`
+
+- **Symptom:** In the Stage 6.3.4 Colossus 3-trial ODR run, log shows `HEAD https://github.com/neo4j/[3 "HTTP/1.1 404 Not Found"`. Model emitted the citation `https://github.com/neo4j/neo4j[3]` (bare footnote marker) and the URL extractor pulled `https://github.com/neo4j/neo4j[3]` → `_canonicalize` stripped trailing `]` but left `[3` glued to the URL body.
+- **Affected stage / plugin / port:** Stage 6.3.4b · Zetesis ODR shim 3 (`ops/benchmarks/adr_010/harness/url_verify.py`).
+- **Root cause:** `_URL_EXTRACT_RE = re.compile(r"https?://[^\s)>]+")` — the character class excluded whitespace, `)`, and `>` but not `[` or `]`. When the model appended `[3]` to a URL, `[3]` entered the URL body. `_canonicalize`'s trailing-strip regex could remove `]` but the `[3` before it stopped the run.
+- **Fix applied:**
+  - `_URL_EXTRACT_RE` widened to `r"https?://[^\s)>\[\]]+"` — `[` and `]` are now hard boundaries that end URL body capture. `[3]` never enters the URL.
+  - `_URL_STRIP_TRAILING` character class widened to include `[` and `]` so pure-punctuation trails (e.g., `y]]`, `y].`) still clean up.
+  - `_canonicalize` also strips one leading `[` in addition to `<` (for `[https://...]` autolink flavor).
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/url_verify.py`
+  - `ops/benchmarks/adr_010/tests/test_url_verify.py` (+3 regression tests)
+- **Related BUILD_LOG entry:** 2026-07-30 14:22 EDT (Stage 6.3.4b).
+- **Supersedes:** 2026-07-30 13:48 EDT (Stage 6.3.3b bracket-suffix bug) — same class of hallucinated-citation-suffix problem; expanding the exclusion set now covers `<`, `>`, `[`, `]`, `%3E`.

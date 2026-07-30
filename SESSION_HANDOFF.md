@@ -1,39 +1,38 @@
-# Kosmos Session Handoff — 2026-07-30 14:06 EDT
+# Kosmos Session Handoff — 2026-07-30 14:22 EDT
 
 ## Current build-sequencing position
 
-- **Stage / phase:** Stage 6.3.4 · Zetesis inner-loop ODR substrate
+- **Stage / phase:** Stage 6.3.4b · Zetesis inner-loop ODR substrate (harness hotfix inside Stage 6.3.4 lock-in band)
 - **Plugin / kernel component:** ADR-010 head-to-head eval — ODR harness (`ops/benchmarks/adr_010/`)
 - **Port(s) in progress:** none formal; operational tuning inside ADR-010 LOCKED band.
 
 ## Completed this session
 
-- Stage 6.3.4 additive shims landed:
-  - Shim 4 (LICENSE grounding) — `harness/license_grounding.py`
-  - Shim 5 (self-consistency, opt-in via `--n-consistency N`) — `harness/self_consistency.py` + `runner._combine_self_consistency()`
-  - Shim 6 (rubric self-critique) — `harness/rubric_critique.py`
-  - Shim 7 (chain-of-verification) — `harness/cove.py`
-  - Shim 8 (claim-support gate) — `harness/claim_support.py`
-- All wired through `harness/odr.py` (`run_odr_trial` new kwargs: `enable_license_grounding`, `enable_rubric_critique`, `rubric_lines`, `enable_cove`, `enable_claim_support_gate`) and `runner.py` (new `--no-license-grounding`, `--no-rubric-critique`, `--no-cove`, `--no-claim-support-gate`, `--n-consistency N` flags; shims 4/6/7/8 default ON, shim 5 default 1 = off).
-- Rubric extracted at startup from `fixture.ground_truth.canonical_facts` and passed into `run_odr_trial` as `rubric_lines`.
-- Trajectory schema gains `{"shim_events": [...]}` with per-shim event shapes documented in the shim modules.
-- Cooldown min-seconds default 30 → **15** (Stage 6.3.3 3-trial run peaked 73 °C, trial-start 36/37/42 °C — 12 °C below the 85 °C watchdog).
-- One regex bug fixed inline in `cove.py` (object capture truncated `Apache-2.0` → `Apache-2`); DEBUG_LOG entry appended.
-- `ops/benchmarks/adr_010/tests/` = **128 passed** locally (was 76: +52).
+- Stage 6.3.4 shims 4/5/6/7/8 landed, ran clean on Colossus (peak 74 °C, all 3 trials wrote artifacts).
+- Stage 6.3.4b harness hotfix:
+  - **URL extractor** widened to exclude `[` and `]` from URL body — kills the `github.com/neo4j/neo4j[3]` footnote-marker bug the Stage 6.3.4 log surfaced.
+  - **Cooldown min-seconds default 15 → 10** (Stage 6.3.4 peak 74 °C, 11 °C below 85 °C watchdog, 14 °C below 88 °C driver-crash line).
+- `ops/benchmarks/adr_010/tests/` = **131 passed** locally (was 128: +3 regression tests).
 
 ## Remaining before current Definition of Done
 
 - **On Colossus**, after `git pull`:
-  1. `.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/` — expect **128 green**
-  2. `.venv/bin/python -m pytest` (whole repo) — expect **1114 passed / 19 skipped**
-  3. `.venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr`
-     - Startup line should say: `Stage 6.3.4 shims: license_grounding=True rubric_critique=True cove=True claim_support_gate=True n_consistency=1 rubric_points=6`
-     - New closing criterion: mean rated correctness ≥5/6 across 3 trials, `final_unverified_urls` empty on every trial, no `[unsupported]` markers survive to final report for any of the 6 canonical facts.
-  4. If threshold missed: try `--n-consistency 3` (opt-in shim 5). If still missed: escalate to Stage 6.3.5 quantization/model uplift ADR.
+  1. `.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/` — expect **131 green**
+  2. `.venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr`
+     - Cooldowns should be 10 s.
+     - No `[3` / `[7` / `[N` fragments in verifier URLs.
+- **Blind rate** the three artifacts against `fixture.ground_truth.canonical_facts`:
+  - `ops/benchmarks/artifacts/adr-010-2026-07-30/odr/trial_01_*.json`
+  - `.../trial_02_*.json`
+  - `.../trial_03_*.json`
+- **Stage 6.3.4 Definition of Done:** mean rated correctness ≥ 5/6 across 3 trials AND `final_unverified_urls` empty on every trial AND no `[unsupported]` markers survive to final report for any of the 6 canonical facts.
+- If missed:
+  1. First escalation: `--n-consistency 3` (shim 5 opt-in, ~3× runtime).
+  2. Second escalation: Stage 6.3.5 quantization/model uplift ADR.
 
 ## Open questions / awaiting user answer
 
-- none
+- **Neo4j CE-vs-EE dual-licensing.** Shim 4 records one license family per repo. Neo4j itself is dual-licensed (CE = GPLv3, EE = commercial). If the rating still misses F1/F2 after 6.3.4b, this needs a shim 4 upgrade (per-repo `license_families: [gpl-3.0, commercial]`) or a fixture-level dual-licensing directive.
 
 ## Exact next action
 

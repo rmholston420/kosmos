@@ -94,14 +94,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cooldown-min-seconds",
         type=float,
-        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "15")),
+        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "10")),
         help=(
             "minimum cooldown seconds, applied both pre-flight and between "
             "trials. Progression: 30 -> 60 (post-88C incident) -> 45 -> 30 "
-            "-> 15 (Stage 6.3.4: Stage 6.3.3 3-trial run with 30s waits "
-            "peaked at 73C and trial-start temps were 36/37/42C \u2014 12C "
-            "below the 85C watchdog and 21C below the 88C driver-crash line. "
-            "Target C held at 60.)"
+            "-> 15 -> 10 (Stage 6.3.4b: Stage 6.3.4 3-trial run with 15s "
+            "waits peaked at 74C and trial-start temps were 34/39/43C \u2014 "
+            "11C below the 85C watchdog and 14C below the 88C driver-crash "
+            "line. Target C held at 60.)"
         ),
     )
     parser.add_argument(
