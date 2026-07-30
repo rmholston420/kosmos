@@ -96,6 +96,48 @@
 - **ADR:** ADR-023 (envelope-first MVP)
 - **Logged:** 2026-07-29 21:32 EDT
 
+### Secrets
+
+#### pyrage — `VENDORED` (Stage 1.5)
+- **Source:** https://github.com/woodruffw/pyrage
+- **Commit / Version:** dependency — pinned via pyproject `pyrage>=1.1` (Rust-compiled wheel installed on Colossus)
+- **License:** Apache-2.0 / MIT (dual)
+- **Kosmos location:** `adapters/secrets/age_file/adapter.py` (used inside `PyrageBackend` only)
+- **Port(s):** `SecretsPort` (ADR-024)
+- **Modifications:**
+  - `pyrage` and `yaml` imported lazily so unit tests using `InMemoryAgeBackend` do not require either dependency installed
+  - Only two operations used: `pyrage.decrypt(ciphertext, [identity])` and `pyrage.encrypt(plaintext, [recipient])`
+  - Recipients derived from the identity file's public key so rotation writes are decryptable by the same identity; multi-recipient (§7 succession key escrow) is a future extension
+- **ADR:** ADR-024 (SecretsPort age-file primary)
+- **Logged:** 2026-07-29 21:36 EDT
+
+#### PyYAML — `VENDORED` (Stage 1.5)
+- **Source:** https://github.com/yaml/pyyaml
+- **Commit / Version:** dependency — pinned via pyproject `PyYAML>=6.0`
+- **License:** MIT
+- **Kosmos location:** `adapters/secrets/age_file/adapter.py` (safe_load/safe_dump of the decrypted secrets mapping)
+- **Port(s):** `SecretsPort`
+- **Modifications:** `yaml.safe_load` / `yaml.safe_dump` only (no arbitrary-object deserialization)
+- **ADR:** ADR-024
+- **Logged:** 2026-07-29 21:36 EDT
+
+#### Rigpa age-secrets loader pattern — `VENDORED` (Stage 1.5)
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (user's own repo; permissively-licensed donor)
+  - `backend/src/rigpa/core/secrets.py` (age-file loader, `SecretSettings` + `load_secrets`)
+  - `backend/src/rigpa/core/secrets_meta_model.py` (`SecretsMeta` ORM)
+  - `docs/adr/0002-single-user-knowsys-vaults.md` (single-user framing)
+- **Commit / Version:** inspected at donor `main` on 2026-07-29
+- **License:** user's own code; treated as permissive donor
+- **Kosmos location:** `ports/secrets.py`, `adapters/secrets/age_file/adapter.py`
+- **Modifications:**
+  - Rigpa uses `SecretSettings` Pydantic model wrapping every field in `SecretStr`; Kosmos uses `SecretValue` (stdlib frozen dataclass) so `ports/` has zero Pydantic dependency — same redaction guarantee, stricter accessor (`.reveal()` verb is grep-able audit anchor)
+  - `SecretValue.__eq__` compares redacted repr so distinct secrets never appear equal in logs; `SecretValue.__reduce__` refuses pickling (Rigpa's SecretStr permits both)
+  - Rotate is a filesystem operation on the whole file (§7 semantics) rather than field-level updates; write-to-temp + `os.replace` for POSIX atomicity
+  - `AgeBackend` Protocol isolates age crypto so tests can inject a fake without installing `pyrage` — mirrors the Stage 1.4 `StreamClient` pattern
+  - No Alembic migration for `SecretsMeta` at Stage 1.5; that lands with MemoryPort in Stage 5+
+- **ADR:** ADR-024
+- **Logged:** 2026-07-29 21:36 EDT
+
 ### Memory / Graph
 
 #### DozerDB — `PLANNED`

@@ -134,3 +134,35 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** EventBusPort declared and satisfied by ValkeyEventBusAdapter; ADR-007 (events-only cross-plugin coupling) is now executable for the first time
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Event Bus — 2 VENDORED entries (redis-py + Rigpa envelope pattern)
 - **Stop-condition status:** met — 54/54 tests pass across `adapters/` (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19); Protocol conformance verified via `isinstance(adapter, EventBusPort)`
+
+---
+
+## 2026-07-29 21:36 EDT — ADR-024 authored: SecretsPort age-file primary (Vault deferred)
+
+- **Stage / plugin / port:** Stage 1.5 · SecretsPort
+- **What changed:** Authored ADR-024 to reconcile spec §4.1 (`SecretsPort` → hvac/Vault, `get_secret/rotate/lease`) with the project's local-first custom instruction and with donor Rigpa-LMS's age-encrypted file pattern. Vault is a network daemon with a control plane; Kosmos custom instructions forbid cloud control planes without explicit opt-in. Option B chosen (age-file primary + Vault-adapter deferred behind a future ADR) over Option A (verbatim Vault now, violates local-first) and Option C (defer SecretsPort entirely, underexercises ADR-007 events-only rule). `lease()` deferred until Tektos per-task secret scoping (§18.6) creates a real requirement for TTL semantics — same shape as ADR-023's deferred consumer-group `ack()`. Adopted `SecretValue` (stdlib frozen dataclass) with strict redaction: `__repr__` returns `"SecretValue(***)"`, `__eq__` compares redacted repr so distinct secrets never appear equal in logs, `__reduce__` refuses pickling, `.reveal()` is the sole raw-value accessor and is grep-able as an audit anchor. `SecretsPort` Protocol shape: `get_secret / put_secret / rotate / is_healthy / close` — rotate is intentionally distinct from put (rotate rejects unknown keys) so the audit signal for intentional key-material replacement is preserved.
+- **Files touched:**
+  - `docs/adrs/ADR-024-secretsport-age-file-backend.md` (new)
+  - `docs/adrs/README.md` (ADR-024 row)
+  - `docs/Kosmos-Build-Spec-v25.md` §4.1 SecretsPort row rewritten; §7 key-management bullet updated; §17 ADR-024 row
+- **Ports / adapters affected:** SecretsPort surface + `SecretValue` shape defined
+- **PORTING_LEDGER / ADR updated:** ADR-024 Ratified v25
+- **Stop-condition status:** met
+
+---
+
+## 2026-07-29 21:37 EDT — Stage 1.5 SecretsPort formalized; age-file adapter vendored
+
+- **Stage / plugin / port:** Stage 1.5 · SecretsPort
+- **What changed:** Implemented `ports/secrets.py` (`SecretValue` frozen dataclass + `SecretsPort` runtime-checkable Protocol) and `adapters/secrets/age_file/adapter.py` (`AgeFileSecretsAdapter` with injectable `AgeBackend` Protocol + `PyrageBackend` real crypto + `InMemoryAgeBackend` deterministic fake for tests). `pyrage` and `yaml` imported lazily so unit tests do not require either dependency installed. Rotation writes to a sibling `.tmp` file then `os.replace` — POSIX-atomic so a crash mid-rotate cannot corrupt `secrets.age`. An `asyncio.Lock` serializes reads and writes so a rotate cannot land mid-decrypt. Missing secrets file treated as empty mapping so `put_secret` can bootstrap a fresh store. Non-string values rejected at both `put_secret` and `rotate`. Contract test has 23 tests covering `SecretValue` invariants (repr redaction, reveal, redacted-repr equality, hashability, pickle refusal), Protocol conformance for both `SecretsPort` and `AgeBackend`, get/put/rotate round-trip semantics, atomic file write (ciphertext prefix + no leftover `.tmp`), missing-file bootstrap, non-throwing `is_healthy` on bad ciphertext, idempotent `close`, and singleton behavior.
+- **Files touched:**
+  - `ports/secrets.py` (new — `SecretValue` + `SecretsPort` Protocol)
+  - `adapters/secrets/__init__.py` (new)
+  - `adapters/secrets/age_file/__init__.py` (new)
+  - `adapters/secrets/age_file/adapter.py` (new — `AgeFileSecretsAdapter` + `PyrageBackend` + `InMemoryAgeBackend`)
+  - `adapters/secrets/age_file/test_contract.py` (new — 23 tests)
+  - `docs/PORTING_LEDGER.md` — new §Secrets with pyrage VENDORED + PyYAML VENDORED + Rigpa age-secrets loader pattern VENDORED
+  - `pyproject.toml` — adapter subpackages enumerated for editable install
+- **Ports / adapters affected:** SecretsPort declared and satisfied by AgeFileSecretsAdapter; §7 key-management path is now executable end-to-end for long-lived secrets
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Secrets — 3 VENDORED entries (pyrage + PyYAML + Rigpa loader pattern)
+- **Stop-condition status:** met — 77/77 tests pass across `adapters/` (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19 + Secrets 23); Protocol conformance verified via `isinstance(adapter, SecretsPort)` and `isinstance(backend, AgeBackend)`

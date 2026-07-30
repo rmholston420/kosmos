@@ -86,7 +86,7 @@ Four governing principles: Ports & Adapters everywhere; black-box modules with s
 | `MemoryPort` | Graphiti + Neo4j/CIDOC CRM on **DozerDB fork**, wrapped in Agent Memory Guard middleware | `write_event()`, `query_temporal()`, `link_entities()`, `quarantine_write()` |
 | `VectorPort` | Qdrant | `upsert()`, `search()`, `delete()`, `snapshot()` |
 | `EventBusPort` | Valkey/Redis Streams | `publish(envelope)`, `subscribe()`, `unsubscribe()`, `read_recent()`, `is_healthy()`, `close()` — envelope-first; consumer-group `ack()` deferred to ADR-024 — see **ADR-023** |
-| `SecretsPort` | hvac/Vault | `get_secret()`, `rotate()`, `lease()` |
+| `SecretsPort` | age-encrypted file (primary) · hvac/Vault (deferred) | `get_secret()`, `put_secret()`, `rotate()`, `is_healthy()`, `close()` — age-file primary per **ADR-024**; `lease()` deferred until a future ADR triggered by Tektos per-task scoping (§18.6) |
 | `ObservabilityPort` | Langfuse + OpenTelemetry | `trace()`, `score()`, `log_cost()` |
 | `FrontendContractPort` | Next.js + React 19 + Radix + shadcn/ui + Tailwind + Zustand + TanStack Query | route registration, component lazy-load, state namespace; gated by `ui_parity_status` per UI Parity Rule |
 | `ResourcePort` | APEX `ResourceProtocol` | `can_allocate()`, `allocate()`, `replenish()`, `priority_queue_position()` |
@@ -145,7 +145,7 @@ External analysis of multi-agent reliability identifies a six-step pattern: self
 
 - **Disk-level** — full-disk LUKS covers boot and data volumes.
 - **Application-level (Restricted-tier)** — DozerDB and Qdrant volumes, plus all backups and canonical exports, additionally AES-256 encrypted at rest.
-- **Key management** — via `SecretsPort` (Vault/hvac); TTL-leased keys follow same rotation as secrets.
+- **Key management** — via `SecretsPort`. Stage 1.5+ primary adapter is age-encrypted file (ADR-024); Vault-style TTL-leased keys are deferred until a future ADR adds `lease()` alongside a Vault adapter (trigger: Tektos per-task scoping, §18.6).
 - **Key recovery** — documented, versioned step in the cold-start recovery runbook.
 - **Four-tier PII classification** — Public / Internal / Sensitive (financial, health, relationship) / Restricted (identifiers, credentials, counseling/spiritual). Tagged on every `MemoryPort.write_event` and `DataPort.export_canonical` record at ingestion; Restricted/Sensitive mandate application-level encryption and are excluded from any future multi-user/cloud-sync feature.
 - **Secrets-compromise incident response** — suspected compromise triggers immediate revoke+rotate via `SecretsPort`, full audit-log review, re-encryption sweep; Tier-2 algedonic event.
@@ -319,6 +319,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-021 | Introduce SearchPort as 11th Formal Port | **Ratified v25** | Stage 1.1 |
 | ADR-022 | LLMPort Surface Expansion (spec §4.1 tightening) | **Ratified v25** | Stage 1.2 |
 | ADR-023 | EventBusPort Envelope-First MVP (spec §4.1 tightening) | **Ratified v25** | Stage 1.4 |
+| ADR-024 | SecretsPort adopts age-encrypted file backend (Vault deferred) | **Ratified v25** | Stage 1.5 |
 
 ### 17.1 UI Parity Rule (ADR-014, in-line summary)
 
