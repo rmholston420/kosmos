@@ -54,3 +54,4 @@ skills/user/
 # Kosmos secrets — private keys, sealed secrets material
 .secrets/
 .playwright-mcp/
+.venv-eval/
