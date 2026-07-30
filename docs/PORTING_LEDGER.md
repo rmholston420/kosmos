@@ -39,15 +39,22 @@
 - **ADR:** ADR-012 (donor adapter consolidation) + ADR-022 (LLMPort surface expansion — defines the 10-method Protocol this adapter satisfies)
 - **Logged:** 2026-07-29 21:05 EDT
 
-#### llama-swap — `PLANNED`
+#### llama-swap — `VENDORED` (Stage 1.3)
 - **Source:** https://github.com/mostlygeek/llama-swap
-- **Commit / Version:** TBD (pin latest at Stage 1.3)
+- **Commit / Version:** `0c4233363ec589c439b7f7d12eaae2346811098d` (2026-07-28)
 - **License:** MIT
-- **Kosmos location:** `adapters/llm/llama_swap/`
-- **Port(s):** LLMPort
-- **Modifications:** wrap behind LLMPort protocol; add priority-queue hook
-- **ADR:** ADR-009 (llama-swap primary + router-mode fallback)
-- **Logged:** —
+- **Kosmos location:** `adapters/llm/llama_swap/` (HTTP-client adapter only; llama-swap runs as external Go daemon, not vendored source)
+- **Port(s):** `LLMPort` (second adapter satisfying the Protocol — proves swappability against ADR-022 surface)
+- **Modifications:**
+  - HTTP-client adapter targets the OpenAI-compatible endpoints (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`)
+  - `generate` / `generate_text` implemented via `/v1/completions`
+  - `chat` implemented via `/v1/chat/completions`
+  - `generate_stream` implemented via SSE on `/v1/completions?stream=true`
+  - `list_models` implemented via `/v1/models`
+  - `pull_model` / `delete_model` raise `NotImplementedError` — llama-swap does not manage weights (models are pre-declared in its `config.yaml`). Documented capability subset per ADR-022 Consequences §Downstream stages
+  - `is_healthy` uses `/health` (llama-swap-native), non-throwing per ADR-022 rule 3
+- **ADR:** ADR-009 (llama-swap primary sidecar) + ADR-022 (LLMPort surface)
+- **Logged:** 2026-07-29 21:35 EDT
 
 #### router-mode fallback — `PLANNED (fallback only)`
 - **Source:** internal build using llama.cpp server routes

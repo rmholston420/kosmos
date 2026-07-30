@@ -86,3 +86,18 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** LLMPort declared and satisfied by OllamaAdapter
 - **PORTING_LEDGER / ADR updated:** — (ADR-022 already logged above)
 - **Stop-condition status:** met — 20/20 tests pass across `adapters/` (Ollama 12 + SearXNG 8)
+
+---
+
+## 2026-07-29 21:38 EDT — Stage 1.3 llama-swap adapter vendored; LLMPort swappability proven
+
+- **Stage / plugin / port:** Stage 1.3 · LLMPort (second adapter)
+- **What changed:** Vendored `mostlygeek/llama-swap@0c42333` (MIT, external Go daemon) as `adapters/llm/llama_swap/`. HTTP-client adapter speaks llama-swap's OpenAI-compatible endpoints (`/v1/completions`, `/v1/chat/completions`, `/v1/embeddings`, `/v1/models`) and llama-swap-native `/health`. Satisfies LLMPort (ADR-022) with a documented capability subset: `pull_model` / `delete_model` raise `NotImplementedError` because llama-swap does not manage weights (models are declared in its `config.yaml`). All other LLMPort methods fully implemented. Cold-load/warm-swap benchmarks deferred to Phase 1.7 window per ADR-009.
+- **Files touched:**
+  - `adapters/llm/llama_swap/__init__.py` (new)
+  - `adapters/llm/llama_swap/adapter.py` (new)
+  - `adapters/llm/llama_swap/test_contract.py` (new)
+  - `docs/PORTING_LEDGER.md` — llama-swap flipped from PLANNED to VENDORED (Stage 1.3) with commit SHA, license, modifications, ADR refs; removed redundant SUPERSEDED provenance stub (git history preserves it)
+- **Ports / adapters affected:** LLMPort — now satisfied by **two** adapters (Ollama + llama-swap); Protocol swappability proven at runtime
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §LLM stack — llama-swap VENDORED entry added; references ADR-009 + ADR-022
+- **Stop-condition status:** met — 35/35 tests pass; `test_two_adapters_satisfy_same_llm_port` verifies both adapters isinstance-check against LLMPort simultaneously
