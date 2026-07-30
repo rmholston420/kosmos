@@ -216,17 +216,25 @@ Reference: Spec §18. This is the largest single-plugin build.
 - **DoD:** Tiered per Q5=C. Fast smoke (`make stage1-gate`): 500-file synthetic corpus with reference graph; asserts per-file writes (500 rows with provenance + confidence in `(0,1]`), exactly one snapshot write, and queryability via `MemoryPort.query_temporal("tektos.repomap.indexed", limit=100)` returning 100 rows. Env-gated 10k literal (`KOSMOS_STAGE_33_LARGE_CORPUS=1`): 10,000-file synthetic corpus, same contract, exercised on Colossus. Env-gated real-corpus (`KOSMOS_STAGE_33_REAL_CORPUS=1`): sparse-checkout of `cpython/Lib/json`, full pipeline end-to-end. **Landed** — 31 new repomap contract tests green (locked constants, freshness formula, tree-sitter tag extraction, PageRank ordering, tree-context render + token budget, indexer end-to-end + freshness fall-off + queryability, 500-file smoke); full pytest **675/675** green + 4 env-gated skips; `make stage1-gate` PASS.
 - **Locked answers:** Q1=A · Q2=A(revised) · Q3=C · Q4=B · Q5=C · Q6=A — see **ADR-038**.
 
-### 3.4 Bernstein Janitor spike test (ADR-004)
+### 3.4 Bernstein Janitor spike test (ADR-004) — **DEFERRED to Phase 4 per ADR-039**
+- **Status:** Deferred to a Stage 4.X slot in Phase 4 rollout planning. ADR-004 §Build-Order Placement literal: "scheduled immediately before Tektos Phase 4 begins." Prerequisites (`SandboxProvider` + `WorktreeProvider` in `ports/`, Postgres TaskState schema) named in ADR-004 §Evaluation Plan step 2 do not exist at Phase 3. See `docs/adrs/ADR-039-stage-3-4-and-3-5-defer.md`.
+- **Phase 3 action:** none. Phase 3 advances directly from Stage 3.3 (LANDED) to Stage 3.6 (OpenSpec).
+
+#### Original §3.4 scope (deferred)
 - **Action:**
   1. Set up minimal Bernstein Janitor fixture
   2. Run identical repo cleanup task on both Bernstein Janitor and `local-agentic-loop-sample`
   3. Compare: correctness, speed, resource footprint, integration surface area
 - **Decision rule:** **Adopt Bernstein Janitor iff fixture beats local-agentic-loop-sample**. Otherwise stay with local-agentic-loop-sample.
-- **DoD:** ADR-004 status = `LOCKED` with benchmark evidence in `ops/benchmarks/bernstein-vs-lals-2026-XX-XX.md`.
+- **DoD (when executed at Phase 4):** ADR-004 status = `LOCKED` with benchmark evidence in `ops/benchmarks/bernstein-vs-lals-<yyyy-mm-dd>.md`.
 
-### 3.5 Reflexion + Voyager port
+### 3.5 Reflexion + Voyager port — **DEFERRED to Phase 5 per ADR-039**
+- **Status:** Deferred to a Stage 5.X slot in Phase 5 rollout planning. §3.5 DoD literal ("Reflexion cycle logged in Langfuse") depends on Langfuse, which ADR-025 defers and ADR-034 §Stage 5 assigns to a primary `LangfuseTraceFeedAdapter` that lands at Stage 5. See `docs/adrs/ADR-039-stage-3-4-and-3-5-defer.md`.
+- **Phase 3 action:** none.
+
+#### Original §3.5 scope (deferred)
 - **Action:** Wrap for Tektos self-improvement loop; memory writes must carry provenance
-- **DoD:** Reflexion cycle logged in Langfuse.
+- **DoD (when executed at Phase 5):** Reflexion cycle logged in Langfuse.
 
 ### 3.6 OpenSpec (ADR-openspec-primary) — spec engine
 - **DoD:** Tektos accepts an OpenSpec doc and produces a plan.
