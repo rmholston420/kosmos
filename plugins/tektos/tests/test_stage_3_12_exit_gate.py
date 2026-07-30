@@ -512,9 +512,9 @@ async def test_stage_3_12_interactive_tier_runs_against_real_ollama() -> None:
     """
     if sys.platform != "linux":
         pytest.skip("Interactive tier requires Linux + Colossus GPU")
-    from adapters.llm.ollama import OllamaLLMAdapter
+    from adapters.llm.ollama import OllamaAdapter
 
-    llm = OllamaLLMAdapter()  # defaults to http://127.0.0.1:11434
+    llm = OllamaAdapter()  # defaults to http://127.0.0.1:11434
     memory = _FakeMemoryPort()
     apex = _build_apex()
     agent = TektosAgent(llm=llm, memory=memory, apex=apex)

@@ -123,7 +123,7 @@ _FAKE_PIER_TEMPLATE = textwrap.dedent(
     ap.add_argument("-p", "--path", required=True)
     ap.add_argument("--agent", required=True)
     ap.add_argument("--env", required=True)
-    ap.add_argument("--jobs-root", required=True)
+    ap.add_argument("--jobs-dir", required=True)
     args = ap.parse_args()
 
     task_name = Path(args.path).name
@@ -132,7 +132,7 @@ _FAKE_PIER_TEMPLATE = textwrap.dedent(
     task_map = %(task_map)r
     exit_code = task_map.get(task_name, 0)
 
-    jobs_root = Path(args.jobs_root)
+    jobs_root = Path(args.jobs_dir)
     jobs_root.mkdir(parents=True, exist_ok=True)
     trajectory = {
         "task": args.path,

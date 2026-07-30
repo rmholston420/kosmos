@@ -926,3 +926,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none added — Tektos plugin internal only. Fires real pipeline over `ports.approval` (`ApprovalGatewayPort` + `ApprovalResolverPort` + `ChangeApprovalTier` + `ApprovalRecord` + `ApprovalStatus`), `ports.mcp` (`MCPPort` via `_NopMCPPort` test double — HUMAN_REQUIRED gate raises before invocation), `ports.memory` (`MemoryPort` real writes at 3.3 repomap + 3.6 openspec + 3.7 plan-renderer + 3.11 UI transitions), `ports.frontend_contract` (Route + Panel unchanged), `ports.executor` (`NopExecutor`).
 - **PORTING_LEDGER / ADR updated:** ADR-046 Ratified v25; PORTING_LEDGER "bandit — VENDORED (dev dep)" entry filled in with commit/version, kernel location, port, modifications, ADR pointer, logged timestamp.
 - **Stop-condition status:** met — refactor commit `0b54230` passes ruff + bandit + pytest per DoD literal; 825 total green + 9 env-gated skips; `make stage1-gate` + `make stage3-gate` both PASS.
+
+## 2026-07-30 06:31 EDT — Stage 3.12 followup · interactive-tier bug fixes
+
+- **Stage / plugin / port:** Stage 3.12 followup · Tektos · LLMPort (Ollama), Praxis apex, eval harness
+- **What changed:**
+  - Fixed 3 latent bugs surfaced by first end-to-end env-gated run on Colossus (830 pass / 3 fail / 1 skip → 832 pass / 1 fail / 1 skip).
+  - `plugins/tektos/tests/test_stage_3_12_exit_gate.py:515` — imported `OllamaLLMAdapter`; class is `OllamaAdapter`. Renamed import + constructor call.
+  - `scripts/tektos_ui.py:109` — `asyncio.get_event_loop().run_until_complete(...)` raised `RuntimeError` on Python 3.14. Replaced with `asyncio.run(_seed_apex(engine))`.
+  - `plugins/tektos/eval/harness.py:233` + `plugins/tektos/tests/test_pier_eval.py:120,123` + `plugins/tektos/tests/test_deepswe_corpus.py:126,135` — pier 0.3.0 CLI renamed `--jobs-root` → `--jobs-dir` (attr `args.jobs_dir`). Updated harness call, both fake pier shims, and both `args.jobs_root` references.
+  - Filed remaining pier 0.3.0 real-tier failure (pier writes no `trajectory.json` even with `--jobs-dir`) in `KNOWN_ISSUES.md`; unblocks Stage 4.1 since fake-shim Stage-3 gate stays green.
+- **Files touched:**
+  - `plugins/tektos/tests/test_stage_3_12_exit_gate.py`
+  - `scripts/tektos_ui.py`
+  - `plugins/tektos/eval/harness.py`
+  - `plugins/tektos/tests/test_pier_eval.py`
+  - `plugins/tektos/tests/test_deepswe_corpus.py`
+  - `KNOWN_ISSUES.md` (append)
+- **Ports / adapters affected:** LLMPort (Ollama adapter symbol rename only), eval harness pier-CLI surface.
+- **PORTING_LEDGER / ADR updated:** — (bug fixes, no decision change; ADR-046 remains authoritative for Stage 3.12 exit gate)
+- **Stop-condition status:** met — fast tier `825 passed + 9 skipped`, `make stage3-gate` PASS, interactive Ollama + Playwright + docling + fake pier all green, real pier tier documented in KNOWN_ISSUES.

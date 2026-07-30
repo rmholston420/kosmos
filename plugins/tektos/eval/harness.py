@@ -230,7 +230,7 @@ async def run_pier_trial(
         agent,
         "--env",
         pier_env.value,
-        "--jobs-root",
+        "--jobs-dir",
         str(resolved_jobs_root),
     ]
     try:

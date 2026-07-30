@@ -1,38 +1,24 @@
-# Kosmos Session Handoff — 2026-07-30 05:47 EDT
+# Kosmos Session Handoff — 2026-07-30 06:35 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 4.1 (Knowsys → Gnosis merge) — Phase 4 (Gnosis / Knowledge)
-- **Plugin / kernel component:** `plugins/knowsys/` deletion → migrate any Knowsys-only functionality into `plugins/gnosis/` modules
-- **Port(s) in progress:** none yet (Stage 4.1 is intra-plugin migration; no port surface changes)
+- **Stage / phase:** Stage 4.1 (next — Knowsys → Gnosis merge kickoff)
+- **Plugin / kernel component:** Knowsys plugin (merge target: Gnosis)
+- **Port(s) in progress:** none yet — Stage 4.1 lock-in phase
 
 ## Completed this session
-- Landed Stage 3.12 (Stage-3 exit gate) end-to-end:
-  - Ratified ADR-046 `docs/adrs/ADR-046-stage-3-exit-gate-tektos-end-to-end-refactor.md`
-  - Refactor commit `0b54230` authored `Tektos <tektos@kosmos.local>`: extracted `_escape_record_fields(record) -> tuple[str,str,str,str]` helper in `plugins/tektos/ui/templates.py` (four duplicated `html.escape(str(...))` calls unified across `render_pending_row` + `render_plan_detail`)
-  - New DoD test `plugins/tektos/tests/test_stage_3_12_exit_gate.py` — 5 fast tests + 1 env-gated interactive tier; DoD literal green
-  - New OpenSpec fixture `plugins/tektos/tests/fixtures/openspec/refactor-tektos-ui-templates-extract-escape-helpers/{proposal.md, tasks.md, specs/tektos-ui-templates/spec.md}`
-  - `bandit>=1.7` in `[project.optional-dependencies] dev` + `[tool.bandit]` config in `pyproject.toml`
-  - `scripts/stage3_gate.py` (254 lines) + `Makefile` `stage3-gate` target
-  - Full fanout: `docs/PORTING_LEDGER.md` (bandit row filled), `docs/Kosmos-Build-Spec-v25.md` §17 (ADR-046 row), `docs/adrs/README.md` (ADR-046 index), `docs/Kosmos-Build-Sequence-v25.md` §3.12 (LANDED block)
-- `make stage1-gate` PASS; `make stage3-gate` PASS; full pytest **825 passed + 9 skipped** in 8.56s
+- Bootstrapped Kosmos fully on Colossus workstation (rebuilt `.venv` from scratch on Python 3.14.4).
+- Installed all extras: `.[dev,eval,ingest]` — pytest 9.1.1, bandit 1.9.4, ruff 0.16.0, datacurve-pier 0.3.0, docling 2.116.0.
+- Verified Ollama 0.30.7 live with `qwen3-coder:latest` (18GB, chosen model for interactive tier), Docker 29.6.2 + NVIDIA CDI runtime, npx (@playwright/mcp available), RTX 5090 driver 610.43.02.
+- Deferred DozerDB live-Bolt wiring to Stage 1.9 (Docker Compose ops-deploy) — `neo4j:5-community` image already local for that stage.
+- Full env-gated pytest run: **832 passed, 1 failed, 1 skipped in 4m58s** (real DeepSWE pier tier — see KNOWN_ISSUES).
+- Fixed 3 latent Stage 3.11/3.12 bugs: OllamaLLMAdapter symbol, tektos_ui.py Python 3.14 asyncio, pier 0.3.0 CLI flag rename. See BUILD_LOG 2026-07-30 06:31 EDT.
+- `make stage1-gate` PASS · `make stage3-gate` PASS.
 
 ## Remaining before current Definition of Done
-Stage 3.12 DoD is met. Next Stage-4.1 DoD literal: **no import of `knowsys` anywhere; ADR-016 status = `LOCKED`.**
-
-Immediate next actions to complete Stage 3.12 wrap-up:
-- Commit 2 (rmholston420): DoD test + gate script + ADR-046 + fixture + fanout + BUILD_LOG entry + this handoff
-- Tag `stage-3-12-complete` on commit 2
-- Push both commits + tag to origin (github_mcp_direct connector, `api_credentials=["github"]`)
-- Refresh shared assets (v25 zip, ADRs bundle, project files mirror + share)
+- Stage 4.1 scope not yet loaded — read `Kosmos-Build-Spec-v25.md` Stage 4.1 section and any Knowsys/Gnosis merge ADRs at session start.
 
 ## Open questions / awaiting user answer
 - none
 
 ## Exact next action
-```
-cd /home/user/workspace/kosmos-repo && git add -A && \
-  git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
-    commit -m "Stage 3.12 · exit gate · DoD test + stage3_gate + ADR-046 + fanout" && \
-  git tag stage-3-12-complete
-```
-Then push with `api_credentials=["github"]` and mirror final artifacts into the project file repo.
+- At start of next session: `read SESSION_HANDOFF.md` then `read Kosmos-Build-Spec-v25.md` (search for "Stage 4.1" and "Knowsys" / "Gnosis") to load Stage 4.1 scope + DoD + stop condition.

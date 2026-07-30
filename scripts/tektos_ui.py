@@ -106,7 +106,7 @@ def main() -> None:
         event_bus=_NullEventBus(),
         notification=_NullNotification(),
     )
-    asyncio.get_event_loop().run_until_complete(_seed_apex(engine))
+    asyncio.run(_seed_apex(engine))
     resolver = PraxisApprovalResolverAdapter(engine)
     memory = _StdoutMemory()
     app = build_tektos_ui_app(
