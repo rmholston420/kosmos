@@ -1,7 +1,9 @@
 # ADR: OpenSpec as Primary Spec-Driven Development Engine for Tektos Spec Studio
 
+> **STATUS AMENDMENT (2026-07-30):** Ratified · **amended by ADR-040**. The `## Context` claim that OpenSpec was "already a vendored dependency" was directionally correct for the delta-spec data model, but the tree state at Stage 3.6 kickoff still had `OpenSpec — PLANNED · Source: TBD` in `PORTING_LEDGER.md` — no actual vendor had happened. ADR-040 (Ratified v25) records the concrete pattern-vendor decision: reimplement the OpenSpec artifact parser in Python at `plugins/tektos/openspec/`, attribute to upstream `Fission-AI/OpenSpec@2b3d368…` (MIT), and defer any port-surface introduction (envelope-first per ADR-023) until a second consumer emerges. This ADR-005 remains the direction-setter; ADR-040 supplies the surface. See `docs/adrs/ADR-040-tektos-openspec-parser-vendoring.md`.
+
 ## Status
-Proposed (requires Tier-2 ADR ratification)
+Ratified · amended by ADR-040
 
 ## Context
 Tektos v1's Spec Studio (Phase 3) currently designates GitHub Spec-Kit (`github/spec-kit`, MIT) as the primary spec-pipeline donor for Entry Point B (natural-language prompt → `/speckit.specify` → delta proposal → three-dimension verify gate), with OpenSpec (`Fission-AI/OpenSpec`, MIT) used narrowly as the delta-spec (ADDED/MODIFIED/REMOVED) data-model donor only. Since Tektos v1 was drafted, community adoption data shows OpenSpec growing 863% over six months versus Spec-Kit's roughly 18% over the same period, and OpenSpec has undergone a v1 rewrite producing a lighter, faster workflow that multiple production users (including internal use at Toggl, per community reporting) now prefer for day-to-day spec-driven development over Spec-Kit's heavier structured pipeline.

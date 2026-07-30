@@ -1,39 +1,29 @@
-# Kosmos Session Handoff — 2026-07-30 02:25 EDT
+# Kosmos Session Handoff — 2026-07-30 02:44 EDT
 
 ## Current build-sequencing position
-
-- **Stage / phase:** Phase 3 · **Stage 3.6 (OpenSpec spec engine) is next**
-- **Plugin / kernel component:** Tektos (Stage 3.3 aider repomap LANDED at tag `stage-3-3-complete`; Stage 3.4 Bernstein Janitor spike and Stage 3.5 Reflexion+Voyager port both deferred per ADR-039)
-- **Port(s) in progress:** none yet at Stage 3.6-open; §3.6 DoD literal is "Tektos accepts an OpenSpec doc and produces a plan" — port surface (likely `DataPort` per PORTING_LEDGER `OpenSpec — PLANNED · Source: TBD · Port(s): DataPort · ADR: adr-openspec-primary`) will be decided in the Stage 3.6 Q-answer round.
+- **Stage / phase:** Stage 3.7 (next work — Phase 3 spec-kit plan renderer)
+- **Plugin / kernel component:** Tektos · spec-kit plan renderer
+- **Port(s) in progress:** `FrontendContractPort` (planned per `PORTING_LEDGER.md` `spec-kit — PLANNED` row; introduces first Tektos UI parity component per ADR-014 UI Parity Rule)
 
 ## Completed this session
-
-- Stage 3.3 (aider repomap PATTERN-VENDORED) LANDED and tagged `stage-3-3-complete` at commit `d07c2c3` on `main`; 675/675 green + 4 env-gated skips; `make stage1-gate` PASS. Shared assets `Kosmos v25 Bundle` (zip) and `Kosmos ADRs Bundle` (md) refreshed with ADR-038 appended.
-- Discovered §3.4 and §3.5 both reference substrate that other ratified ADRs defer or has not been built (§3.4 → `SandboxProvider`/`WorktreeProvider` absent from `ports/` + Postgres TaskState schema absent; §3.5 → Langfuse deferred per ADR-025 + ADR-034 §Stage 5).
-- Authored ADR-039 (Ratified v25) deferring §3.4 to Phase 4 and §3.5 to Phase 5. Fanned out to `docs/adrs/README.md`, `docs/Kosmos-Build-Spec-v25.md` §17 (row placed in ADR-ID order), `docs/Kosmos-Build-Sequence-v25.md` §3.4 and §3.5 (both rewritten as defer-blocks with original scope text preserved under "Original §… scope (deferred)" subsections). One `BUILD_LOG.md` entry appended (2026-07-30 02:25 EDT).
-- No code churn. No port surface changes. No pip-dep changes. No test churn. No PORTING_LEDGER changes.
+- Stage 3.6 LANDED — OpenSpec parser pattern-vendored end-to-end.
+  - Code: `plugins/tektos/openspec/{__init__,policy,models,parser,plan}.py` (stdlib-only, fence-mask-aware, ~430 LOC parser + ~90 LOC Plan producer).
+  - Fixture: `plugins/tektos/tests/fixtures/openspec/add-dark-mode/{proposal.md, design.md, tasks.md, specs/ui/spec.md}` patterned after upstream OPSX walkthrough (real ADDED/MODIFIED/REMOVED deltas, metadata skipping, fenced-example filtering).
+  - Tests: `plugins/tektos/tests/test_openspec.py` — 30 new tests all green, including DoD literal `test_produce_plan_on_add_dark_mode_fixture_writes_queryable_events_build_sequence_3_6_dod`, ADR-007 AST guard, and ADR-008 zero-trust passthrough. Full repo: **705 passed + 4 env-gated skips**. `make stage1-gate` PASS.
+- **ADR-040** authored at `docs/adrs/ADR-040-tektos-openspec-parser-vendoring.md` (Ratified v25).
+- **ADR-005** amended in place with `> **STATUS AMENDMENT (2026-07-30):**` block (original decision text preserved); status line now `Ratified · amended by ADR-040`.
+- Fan-out complete: ADR index (`docs/adrs/README.md`), Spec §17 new ADR-040 row (`docs/Kosmos-Build-Spec-v25.md`), PORTING_LEDGER OpenSpec entry `PLANNED` → `PATTERN-VENDORED` with upstream `Fission-AI/OpenSpec@2b3d368539132be6311e55db58899abbf5306b81` (MIT), Build-Sequence §3.6 rewritten as LANDED block with DoD anchor and cross-refs to ADR-005/ADR-040/ledger.
+- BUILD_LOG appended with 2026-07-30 02:44 EDT Stage-3.6-LANDED entry.
+- Repo tagged `stage-3-6-complete`; commit pushed to `origin/main`.
 
 ## Remaining before current Definition of Done
-
-- Nothing for the ADR-039 landing action other than commit + push (docs-only; no tag).
-- Nothing yet for Stage 3.6 — awaiting your input on the Stage 3.6 Q-answer round.
+Stage 3.7 spec-kit plan renderer — DoD literal from `docs/Kosmos-Build-Sequence-v25.md:247`: "Plans render as user-approvable UI cards." Upcoming decisions to lock at 3.7 kickoff:
+- **spec-kit port surface.** `PORTING_LEDGER.md` currently lists `spec-kit — PLANNED · Source: TBD · Port(s): FrontendContractPort · Logged: —` — need concrete upstream commit + license + surface locking (author new ADR or ratify existing `ADR-014` UI Parity Rule direction with a concrete Q-round).
+- **UI surface.** First Tektos-facing UI parity component per ADR-014; must register a `PluginDescriptor` with `panels=(...)` and satisfy `ui_parity_status` — spec §17.1 grandfathering fired only for Stage 3.1 (`ADR-036 Q4=B`), so 3.7 must ship a real panel.
+- **Consumer of the OpenSpec `Plan`.** `produce_plan()` currently emits `Plan` objects into MemoryPort only; 3.7 needs to render those `Plan.rendered_summary` values (or a richer projection) as approval cards routed through `ApprovalGatewayPort` (ADR-033/037) at the appropriate tier.
 
 ## Open questions / awaiting user answer
-
-- **10k Colossus timings for the Stage 3.3 DoD** (`KOSMOS_STAGE_33_LARGE_CORPUS=1` env-gated test) — not yet reported. When run, append a timing entry to `BUILD_LOG.md` with wall-clock + peak RSS.
-- **Stage 3.6 Q-answer round** — you did not preauthorize "make the optimal choice" for §3.6. Six locks to make before writing Stage 3.6 code (source-of-truth commit for OpenSpec, port surface layout, plan output shape, MemoryPort predicates, test tiering, single-vs-amend ADR shape).
+- none.
 
 ## Exact next action
-
-Commit + push ADR-039 (docs-only, no tag):
-
-```bash
-cd /home/user/workspace/kosmos-repo && \
-  make stage1-gate 2>&1 | tail -5 && \
-  git add -A && \
-  git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
-    commit -m 'ADR-039: defer Stage 3.4 to Phase 4 and Stage 3.5 to Phase 5' && \
-  git push origin main
-```
-
-Then refresh the two shared assets (`Kosmos v25 Bundle` zip + `Kosmos ADRs Bundle` md with ADR-039 appended) and await input on Stage 3.6.
+- Read `docs/Kosmos-Build-Sequence-v25.md` §3.7 (`sed -n '246,260p' docs/Kosmos-Build-Sequence-v25.md`) + `PORTING_LEDGER.md` `spec-kit` block, then open the Stage 3.7 Q-decision round (upstream selection + port-surface commit + UI panel scope + `Plan`-to-card projection + APEX tier gating for approval cards + ADR authoring vs amendment).

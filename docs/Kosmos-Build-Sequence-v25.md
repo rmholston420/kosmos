@@ -236,8 +236,12 @@ Reference: Spec §18. This is the largest single-plugin build.
 - **Action:** Wrap for Tektos self-improvement loop; memory writes must carry provenance
 - **DoD (when executed at Phase 5):** Reflexion cycle logged in Langfuse.
 
-### 3.6 OpenSpec (ADR-openspec-primary) — spec engine
-- **DoD:** Tektos accepts an OpenSpec doc and produces a plan.
+### 3.6 OpenSpec (ADR-005 · ADR-040) — spec engine — **LANDED 2026-07-30**
+- **DoD (literal):** Tektos accepts an OpenSpec doc and produces a plan — anchored by `pytest plugins/tektos/tests/test_openspec.py::test_produce_plan_on_add_dark_mode_fixture_writes_queryable_events_build_sequence_3_6_dod`.
+- **Landed:** Pattern-vendored `Fission-AI/OpenSpec@2b3d368` (MIT) as stdlib-only Python parser at `plugins/tektos/openspec/{policy,models,parser,plan}.py` + real fixture at `plugins/tektos/tests/fixtures/openspec/add-dark-mode/`; every parse emits a `tektos.openspec.artifact.parsed` MemoryPort event and `produce_plan()` emits a `tektos.openspec.plan.produced` MemoryPort event with `confidence` = mean per-artifact completeness (clamped to `OPENSPEC_MIN_CONFIDENCE=0.05`).
+- **Port surface:** Tektos-internal only per ADR-040 Q2 (ADR-023 envelope-first defer). No new `ports/*.py`. `DataPort` (ADR-028 JSON-LD export) untouched.
+- **Tests:** 30 new `plugins/tektos/tests/test_openspec.py` (locked constants, completeness formula, fence-mask semantics, section iteration, artifact parsing, delta spec ADDED/MODIFIED/REMOVED, task parsing + fenced-block filtering, directory walk + required-artifact enforcement, DoD literal, minimal-artifact case, ADR-007 AST guard, ADR-008 zero-trust passthrough). 705 total green + 4 env-gated skips. `make stage1-gate` PASS.
+- **See:** ADR-040, ADR-005 (STATUS AMENDMENT 2026-07-30), PORTING_LEDGER “OpenSpec — PATTERN-VENDORED”.
 
 ### 3.7 spec-kit — plan renderer
 - **DoD:** Plans render as user-approvable UI cards.

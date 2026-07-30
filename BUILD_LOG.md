@@ -743,3 +743,30 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** ADR-038 DoD evidence now includes concrete Colossus wall-clock; no ADR body change needed.
 - **Stop-condition status:** met — Stage 3.3 DoD is fully corroborated by Colossus execution across all three test tiers (fast 500-file smoke in stage1-gate ~3s; 10k literal 239.82s on Colossus; real CPython 1.81s on Colossus). Cache_version=4 diskcache under `<repo-root>/.kosmos.repomap.cache.v4` warmed on Colossus. No regressions.
+
+## 2026-07-30 02:44 EDT — Stage 3.6 LANDED: OpenSpec parser pattern-vendored (ADR-040); amend ADR-005
+
+- **Stage / plugin / port:** Stage 3.6 · Tektos OpenSpec subsystem · Tektos-internal (no new port surface, ADR-023 envelope-first defer)
+- **What changed:**
+  - Pattern-vendored `Fission-AI/OpenSpec@2b3d368539132be6311e55db58899abbf5306b81` (MIT) as stdlib-only Python parser + Plan producer at `plugins/tektos/openspec/{__init__.py,policy.py,models.py,parser.py,plan.py}`. No upstream source copied verbatim (upstream is TypeScript/Node CLI); algorithm ported from upstream `docs/concepts.md` + `docs/opsx.md` + `openspec/changes/fix-spec-parser-fidelity/` unified-reader design.
+  - Locked constants in `policy.py`: `OPENSPEC_PROVENANCE="openspec-parser"`, `OPENSPEC_ARTIFACT_PREDICATE="tektos.openspec.artifact.parsed"`, `OPENSPEC_PLAN_PREDICATE="tektos.openspec.plan.produced"`, `OPENSPEC_UPSTREAM_COMMIT="2b3d368539132be6311e55db58899abbf5306b81"`, `OPENSPEC_UPSTREAM_LICENSE="MIT"`, `OPENSPEC_MIN_CONFIDENCE=0.05`, `OPENSPEC_FULL_ARTIFACT_SET=frozenset({"proposal.md","design.md","tasks.md"})`, `OPENSPEC_REQUIRED_ARTIFACTS=frozenset({"proposal.md"})`.
+  - Real fixture committed at `plugins/tektos/tests/fixtures/openspec/add-dark-mode/{proposal.md, design.md, tasks.md, specs/ui/spec.md}` patterned after upstream OPSX walkthrough — exercises ADDED/MODIFIED/REMOVED delta blocks, metadata-line skipping in requirement body capture, fenced example scenarios that must NOT count, and a fenced-block checkbox in `tasks.md` that must NOT count as a task.
+  - `produce_plan(change_dir, memory)` writes one `tektos.openspec.artifact.parsed` MemoryPort event per parsed markdown file (subject=`<change_id>::<relative_path>`, confidence = per-artifact completeness) and one `tektos.openspec.plan.produced` MemoryPort event per change directory (subject=change_id, confidence = mean per-artifact completeness clamped to `OPENSPEC_MIN_CONFIDENCE`).
+  - Authored **ADR-040** (Ratified v25) at `docs/adrs/ADR-040-tektos-openspec-parser-vendoring.md`.
+  - Amended **ADR-005** with STATUS AMENDMENT (2026-07-30) block at top; status line changed to `Ratified · amended by ADR-040` (original decision text preserved).
+  - Fanned out to ADR index (`docs/adrs/README.md` new row + updated ADR-005 status), Spec §17 (new ADR-040 row), `PORTING_LEDGER.md` OpenSpec entry (`PLANNED` → `PATTERN-VENDORED`), and `docs/Kosmos-Build-Sequence-v25.md` §3.6 rewritten as LANDED block with DoD anchor.
+- **Files touched:**
+  - `plugins/tektos/openspec/__init__.py`, `plugins/tektos/openspec/policy.py`, `plugins/tektos/openspec/models.py`, `plugins/tektos/openspec/parser.py`, `plugins/tektos/openspec/plan.py`
+  - `plugins/tektos/tests/fixtures/openspec/add-dark-mode/proposal.md`, `.../design.md`, `.../tasks.md`, `.../specs/ui/spec.md`
+  - `plugins/tektos/tests/test_openspec.py`
+  - `docs/adrs/ADR-040-tektos-openspec-parser-vendoring.md`
+  - `docs/adrs/ADR-005-openspec-primary.md` (STATUS AMENDMENT + status line)
+  - `docs/adrs/README.md`
+  - `docs/Kosmos-Build-Spec-v25.md` (§17 new row)
+  - `docs/PORTING_LEDGER.md` (OpenSpec block replaced)
+  - `docs/Kosmos-Build-Sequence-v25.md` (§3.6 LANDED)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten to point at Stage 3.7)
+- **Ports / adapters affected:** none. Tektos-internal only per ADR-040 Q2. No new `ports/*.py`. `DataPort` (ADR-028 JSON-LD export) intentionally not reused (semantically wrong for spec-doc reading).
+- **PORTING_LEDGER / ADR updated:** ADR-040 authored; ADR-005 amended; PORTING_LEDGER `OpenSpec` entry moved from `PLANNED` to `PATTERN-VENDORED` with upstream commit + SPDX + modifications.
+- **Stop-condition status:** met — Stage 3.6 DoD literal `pytest plugins/tektos/tests/test_openspec.py::test_produce_plan_on_add_dark_mode_fixture_writes_queryable_events_build_sequence_3_6_dod` green; 30 new tests all green; full-repo `pytest`: 705 passed + 4 env-gated skips; `make stage1-gate`: PASS. ADR-007 (AST guard test) + ADR-008 (zero-trust passthrough test) + ADR-023 (envelope-first, no new port) + ADR-028 (`DataPort` untouched) all verified in-tree. Phase 3 advances Stage 3.6 → Stage 3.7 (spec-kit plan renderer).

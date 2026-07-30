@@ -783,12 +783,15 @@
 - **Port(s):** MemoryPort
 - **Logged:** —
 
-#### OpenSpec — `PLANNED`
-- **Source:** TBD
-- **License:** verify
-- **Port(s):** DataPort
-- **ADR:** adr-openspec-primary
-- **Logged:** —
+#### OpenSpec — `PATTERN-VENDORED`
+- **Source:** https://github.com/Fission-AI/OpenSpec
+- **Commit / Version:** `2b3d368539132be6311e55db58899abbf5306b81`
+- **License:** MIT
+- **Kosmos location:** `plugins/tektos/openspec/{policy.py,models.py,parser.py,plan.py,__init__.py}`
+- **Port(s):** Tektos-internal (deferred per ADR-023 envelope-first; port surface deferred until a second consumer emerges)
+- **Modifications:** Reimplemented in Python (upstream is TypeScript/Node CLI); no upstream source files copied verbatim; algorithm ported from upstream `docs/concepts.md`, `docs/opsx.md`, and `openspec/changes/fix-spec-parser-fidelity/` unified-reader design. Kosmos parser is stdlib-only (no Node subprocess), fence-mask-aware, and writes through `MemoryPort` with `provenance="openspec-parser"`.
+- **ADR:** ADR-005 · ADR-040
+- **Logged:** 2026-07-30 EDT
 
 #### spec-kit — `PLANNED`
 - **Source:** TBD
