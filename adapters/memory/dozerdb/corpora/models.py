@@ -76,12 +76,35 @@ class TemporalQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class CorpusEdge:
+    """One typed link between two facts in the same corpus.
+
+    Stage 4.4 adds this to support Superpowers-style cross-references
+    (`skills/foo/SKILL.md` linking to `skills/bar/SKILL.md`). Edges are
+    optional; corpora that don't declare any still validate cleanly.
+
+    - ``kind`` — free-form typed relation (e.g. ``"references"``,
+      ``"depends-on"``); the corpus vocabulary is corpus-defined.
+    - ``src_event_id`` / ``dst_event_id`` — MUST resolve to a fact
+      inside the same corpus at construction time.
+    - ``attributes`` — optional freeform kv payload (e.g. the anchor
+      text that produced the edge).
+    """
+
+    src_event_id: str
+    kind: str
+    dst_event_id: str
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class Corpus:
-    """A named bundle of facts + temporal queries."""
+    """A named bundle of facts + temporal queries + optional typed edges."""
 
     name: str
     facts: tuple[CorpusFact, ...]
     queries: tuple[TemporalQuery, ...]
+    edges: tuple[CorpusEdge, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         # Enforce zero-trust invariants at construction time so a bad
@@ -111,6 +134,22 @@ class Corpus:
                 raise ValueError(
                     f"corpus {self.name!r}: query {q.query!r} references unknown "
                     f"event_ids: {sorted(unknown)}"
+                )
+        for e in self.edges:
+            if e.src_event_id not in known:
+                raise ValueError(
+                    f"corpus {self.name!r}: edge kind={e.kind!r} src {e.src_event_id!r} "
+                    "is not a fact in this corpus"
+                )
+            if e.dst_event_id not in known:
+                raise ValueError(
+                    f"corpus {self.name!r}: edge kind={e.kind!r} dst {e.dst_event_id!r} "
+                    "is not a fact in this corpus"
+                )
+            if not e.kind:
+                raise ValueError(
+                    f"corpus {self.name!r}: edge {e.src_event_id}->{e.dst_event_id} "
+                    "missing kind"
                 )
 
 

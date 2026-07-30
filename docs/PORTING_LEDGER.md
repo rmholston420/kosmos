@@ -895,12 +895,18 @@
 
 ## Gnosis (Knowledge)
 
-#### Superpowers KB — `PLANNED`
-- **Source:** TBD
-- **License:** verify
-- **Port(s):** MemoryPort
-- **ADR:** adr-superpowers-kb
-- **Logged:** —
+#### Superpowers KB (content corpus) — `INGESTED` (Stage 4.4, ADR-049)
+- **Source:** https://github.com/obra/superpowers
+- **Commit / Version:** `44c9b2d6e889982ac18c27d05a19fefe335194e1` (2026-07 HEAD)
+- **License:** MIT
+- **Classification:** **Content ingest** — not a code vendor. No upstream Python/Markdown is imported at runtime; the Markdown body of every `skills/*/*.md` file at the pinned SHA lands as data inside a MemoryPort fixture. Distinct from ADR-008's Tektos-UX "do not vendor code" rule (see ADR-049 §Context for the reconciliation with ADR-002 + ADR-016).
+- **Kosmos location (Stage 4.4):** `adapters/memory/dozerdb/corpora/superpowers/` — corpus module, `__init__.py` re-exports, and `fixtures/superpowers.jsonl` (38 records, 9 typed cross-reference edges, ~310 KB).
+- **Kosmos location (Phase 3):** relocates to `plugins/gnosis/humanities/personal_kb/` when Gnosis lands. Public loader shape stable across the move (`load_corpus`, `CORPUS` singleton, env override `KOSMOS_SUPERPOWERS_PATH`).
+- **Port(s):** MemoryPort (`record_event`, `query_temporal`, typed-link retrieval via `CorpusEdge`). VectorPort surface deliberately NOT opened at 4.4 (ADR-049 Q4).
+- **Modifications:** none to upstream content. Ingest pipeline (`scripts/ingest_superpowers.py`) parses inline Markdown `[text](path)` links into `attributes.references` and materializes them as typed `CorpusEdge` records at load time.
+- **Refresh cadence:** pinned SHA + workspace-local CLI (`scripts/ingest_superpowers.py --sha <SHA> [--via gh|checkout]`). No cron, no runtime network fetch.
+- **ADR:** ADR-049 (Stage 4.4 substrate landing); references ADR-002 + ADR-016 (Gnosis endpoint), ADR-007 (adapter-corpus, no plugin-to-plugin imports), ADR-008 (Tektos-UX code-vendor rule preserved), ADR-047 (Stage 4.2 corpora contract inherited).
+- **Logged:** 2026-07-30 (Stage 4.4 landing)
 
 #### Humanities corpus — `PLANNED`
 - **Source:** TBD
@@ -962,10 +968,10 @@
 
 These informed design but are **not** in the tree. Recorded here so future maintainers know they were considered.
 
-#### Superpowers (repo) — `DESIGN REFERENCE`
-- **Source:** upstream Superpowers repo
-- **Use:** shape of personal-KB UX
-- **Note:** we vendor the KB substrate above; the reference-repo patterns inform the UI
+#### Superpowers (repo, methodology reference for Tektos UX) — `DESIGN REFERENCE`
+- **Source:** https://github.com/obra/superpowers
+- **Use:** shape of the Tektos skill-library UX per ADR-008 (agentskills.io format, when-to-use blocks, technique/protocol taxonomy). Superpowers's *code and Markdown files are not vendored into Tektos plugin code* — ADR-008 rule preserved.
+- **Note:** distinct from the Personal-KB substrate ingest above under Gnosis (Stage 4.4 · ADR-049), which lands the same upstream repo's Markdown as MemoryPort **content** rather than plugin code.
 
 #### Beads (task-state library) — `DESIGN REFERENCE`
 - **Source:** TBD
