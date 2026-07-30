@@ -331,3 +331,17 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** (1) Positional strip: for each `bad` in `unverified_first`, replace `f"{bad} [unverified]"`, then `f"{bad}[unverified]"`, then `bad` itself. (2) New-URL enforcement pass: after retry re-verify, strip any `unverified_after` URL not already handled, with the same positional marker cleanup. Records `pass="retry_enforce_strip_new"` event.
 - **Files changed:** `ops/benchmarks/adr_010/harness/odr.py`, `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`.
 - **Related BUILD_LOG entry:** 2026-07-30 18:10 EDT.
+
+## 2026-07-30 18:36 EDT — 6.3.6a post-fix URL leaks from downstream shims (5/9/10, CoVe, rubric)
+
+- **Symptom:** After deploying Stage 6.3.6a (subset grounded-subject rule + shim-3 enforcement strip), 2 of 3 Colossus trials still leaked `final_unverified_urls`. Neither `retry_enforce_strip` nor `retry_enforce_strip_new` fired in the trajectories — the retry-with-enforcement path in shim 3 stayed idle.
+  - `trial_01_8f8e33`: `https://github.com/DozerDB/dozerdb-plugin/releases/tag/v1.3.0-beta` (real repo path but unstable / not a durable citation target for the fact set)
+  - `trial_03_cdf384`: `https://raw.githubusercontent.com/neo4j/neo4j/main/LICENSE.txt`
+- **Affected stage / plugin / port:** ADR-010 ODR harness · fact-check + grounding · finalize
+- **Root cause:** Shim 3 verifies and strips **before** the downstream grounding shims (5 license, 9 feature, 10 enterprise license) and the CoVe / rubric-critique rewrite (6/7/8). Those downstream shims can inject NEW URLs into the report body that shim 3 never saw. The finalize `annotate_unverified` pass caught them but only annotated with `[unverified]`, which the DoD gate treats as a failure and which the model can be tricked into hedging around. Net effect: the enforcement strip existed but was in the wrong pipeline position.
+- **Fix applied:** Move the strip to the finalize block, replacing `annotate_unverified`. Now every URL that fails verification at finalize is removed from `final_report` (and any orphan `[unverified]` marker after it is also stripped), and the URL list is recorded in `metrics.trajectory` as `final_unverified_urls`. Shim 3's own strip is kept as belt-and-suspenders for the retry-once path; both must succeed for the DoD to pass.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/odr.py` (finalize block; import cleanup)
+  - `ops/benchmarks/adr_010/runner.py` (banner)
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py` (new hermetic test)
+- **Related BUILD_LOG entry:** 2026-07-30 18:36 EDT

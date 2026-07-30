@@ -382,6 +382,82 @@ def test_new_bad_url_in_retry_body_is_stripped(monkeypatch):
     )
 
 
+def test_finalize_strip_removes_bad_url_from_body(monkeypatch):
+    """Stage 6.3.6b: a bad URL present in the final report body at
+    finalize time MUST be stripped and MUST appear in the
+    ``final_unverified_urls`` trajectory entry, regardless of whether
+    shim 3's earlier passes saw it or not.
+
+    Uses a call-count-aware ``verify_urls`` fake: the SHIM-3 call
+    reports every URL as good, the FINALIZE call reports the injected
+    ``https://late-bad.example/`` as bad. This emulates the observed
+    6.3.6a leak pattern where downstream grounding shims (5, 9, 10) or
+    the rubric-critique rewrite (8) emit URLs that shim 3 never saw.
+    """
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                # Both URLs are in the body from the start; we simulate
+                # "downstream shim added late-bad after shim 3" by
+                # varying the fake verifier's verdict per call.
+                "final_report": (
+                    "cites https://early-good.example/ and "
+                    "https://late-bad.example/ inline"
+                ),
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            },
+        ],
+    )
+    call_state = {"n": 0}
+
+    async def _fake_verify(urls, **kw):
+        from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+        call_state["n"] += 1
+        is_finalize = call_state["n"] >= 2
+        out = {}
+        for u in urls:
+            if is_finalize and "late-bad" in u:
+                ok = False
+            else:
+                ok = True
+            out[u] = VerifyResult(
+                url=u,
+                ok=ok,
+                kind="ok" if ok else "http_4xx",
+                status_code=200 if ok else 404,
+                elapsed_seconds=0.001,
+            )
+        return out
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    monkeypatch.setattr(odr_mod, "verify_urls", _fake_verify)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    # The bad URL was stripped from the body.
+    assert "https://late-bad.example/" not in metrics.final_answer
+    # The good URL survived.
+    assert "https://early-good.example/" in metrics.final_answer
+    # No `[unverified]` marker survives — strip, not annotate.
+    assert "[unverified]" not in metrics.final_answer
+    # Trajectory records what was stripped.
+    entry = next(
+        (
+            e for e in metrics.trajectory
+            if isinstance(e, dict) and "final_unverified_urls" in e
+        ),
+        None,
+    )
+    assert entry is not None, metrics.trajectory
+    assert "https://late-bad.example/" in entry["final_unverified_urls"]
+
+
 def test_no_fact_check_disables_shim(monkeypatch):
     invocations: list[dict] = []
     _install_stub_deep_researcher(

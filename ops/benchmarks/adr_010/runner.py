@@ -576,7 +576,7 @@ def main() -> int:
     ) or []
     rubric_lines = build_rubric_lines_from_facts(canonical_facts)
     logger.info(
-        "Stage 6.3.5 shims (model=%s): license_grounding=%s feature_grounding=%s "
+        "Stage 6.3.6b shims (model=%s): license_grounding=%s feature_grounding=%s "
         "enterprise_license_grounding=%s rubric_critique=%s cove=%s "
         "claim_support_gate=%s n_consistency=%d rubric_points=%d",
         args.ollama_model,

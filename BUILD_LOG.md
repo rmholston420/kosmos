@@ -1566,3 +1566,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (harness-internal).
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress. Hermetic tests green (ADR-010 187 passed, whole-repo 1173 passed + 19 skipped). Colossus 3-trial re-run pending.
+
+## 2026-07-30 18:36 EDT — Stage 6.3.6b: finalize-time strip (fixes downstream-shim leak)
+
+- **Stage / plugin / port:** ADR-010 ODR harness · finalize enforcement
+- **Root cause identified in 6.3.6a Colossus run (3 trials at 18:20 / 18:24 / 18:28):**
+  - `retry_enforce_strip` / `retry_enforce_strip_new` events never fired because shim 3 saw 0 unverified URLs on the initial pass (grounding shims had already produced clean fact-check inputs), so the retry path with its enforcement strip was idle.
+  - 2 of 3 trials still leaked `final_unverified_urls` (`trial_01_8f8e33`: dozerdb-plugin release tag from a downstream shim; `trial_03_cdf384`: raw.githubusercontent LICENSE.txt from a downstream shim). Those URLs entered the report AFTER shim 3 (grounding shims 5/9/10 or CoVe/rubric) and were only caught by the finalize `annotate_unverified` pass, which annotated instead of stripped.
+  - The 6.3.6/6.3.6a strip logic was architecturally in the wrong place: shim-3-local, when it needed to be finalize-global.
+- **What changed:**
+  - `harness/odr.py` finalize block: replaced `annotate_unverified` with a direct strip. After per-URL verification of the final report body, every failed URL (and its trailing `[unverified]` marker if any) is removed via positional replace. Failed URLs are recorded to `metrics.trajectory` as `final_unverified_urls` (semantic unchanged for DoD tooling: they are the URLs that failed verification at finalize).
+  - Removed the now-unused `annotate_unverified` import from `odr.py` (still exported by `url_verify.py` for other tools/tests).
+  - `runner.py` config-summary log line updated from `Stage 6.3.5 shims` to `Stage 6.3.6b shims` (was cosmetically stale after 6.3.6 / 6.3.6a).
+  - Added `test_finalize_strip_removes_bad_url_from_body`: a call-count-aware `verify_urls` fake that reports every URL as good on the shim-3 pass and reports the injected URL as bad on the finalize pass. Assertions: bad URL absent from `final_answer`, good URL present, no `[unverified]` marker, `final_unverified_urls` trajectory entry lists the stripped URL.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/odr.py`
+  - `ops/benchmarks/adr_010/runner.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`
+- **Ports / adapters affected:** none (harness-internal).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress. Hermetic tests green (ADR-010 188 passed, whole-repo 1174 passed + 19 skipped). Colossus 3-trial re-run pending; expect `final_unverified_urls == []` on every trial and no `[unverified]` markers anywhere.

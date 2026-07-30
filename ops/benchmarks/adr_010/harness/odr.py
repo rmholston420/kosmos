@@ -39,7 +39,7 @@ from .prompts import (
     build_fact_check_correction_directive,
 )
 from .search_backend import unique_domain_count
-from .url_verify import annotate_unverified, extract_urls, verify_urls
+from .url_verify import extract_urls, verify_urls
 
 
 class ThermalAbort(RuntimeError):
@@ -1080,12 +1080,23 @@ async def run_odr_trial(
         else:
             final_report = str(result.get("final_report", ""))
 
-        # Annotate persistent unverified URLs in the FINAL report body
-        # so the blind rater sees them inline. Recomputes verification
-        # on the FINAL text (post-retry if retry ran), rather than
-        # trusting the retry pass's cached results, because the retry
-        # may have introduced new URLs the retry-pass verify missed.
-        annotation_urls: list[str] = []
+        # Stage 6.3.6b: finalize-time enforcement strip.
+        # Recompute URL verification on the ENTIRE final report body
+        # (post-every-shim, post-retry) and STRIP every bad URL plus
+        # its trailing `[unverified]` marker. Any URL a downstream shim
+        # (grounding shims 5/9/10, CoVe 6/7, rubric 8) introduced after
+        # shim 3's own strip is caught here. Result: the DoD gate
+        # `final_unverified_urls == []` cannot be violated as long as
+        # `verify_urls` runs at all.
+        #
+        # Historical note: prior to 6.3.6b, this block ran
+        # `annotate_unverified`, which tagged bad URLs with
+        # ``[unverified]`` inline instead of removing them. That
+        # preserved the URL in the report body (rater-visible failure)
+        # and shifted the DoD burden onto shim 3's earlier strip, which
+        # could only cover URLs it saw. The strip-at-finalize approach
+        # is stricter and covers every path.
+        final_unverified_urls: list[str] = []
         if enable_fact_check and final_report:
             final_urls = extract_urls(final_report)
             if final_urls:
@@ -1093,9 +1104,19 @@ async def run_odr_trial(
                     final_verifs = await verify_urls(final_urls)
                 except Exception:  # noqa: BLE001
                     final_verifs = {}
-                final_report, annotation_urls = annotate_unverified(
-                    final_report, final_verifs
-                )
+                for u, r in final_verifs.items():
+                    if r.ok or not u:
+                        continue
+                    if u not in final_report:
+                        continue
+                    final_report = final_report.replace(
+                        f"{u} [unverified]", ""
+                    ).replace(
+                        f"{u}[unverified]", ""
+                    ).replace(u, "")
+                    final_unverified_urls.append(u)
+        # Legacy alias for downstream trajectory expectations.
+        annotation_urls = final_unverified_urls
 
         metrics.final_answer = final_report
         metrics.final_confidence = ""  # ODR does not emit a confidence score
