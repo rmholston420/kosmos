@@ -683,12 +683,78 @@
 - **ADR:** ADR-037
 - **Logged:** 2026-07-30 01:15 EDT
 
-#### aider repomap — `PLANNED`
-- **Source:** https://github.com/Aider-AI/aider (extract `repomap.py` module)
+#### aider repomap — `PATTERN-VENDORED`
+- **Source:** https://github.com/Aider-AI/aider
+- **Commit / Version:** `5dc9490bb35f` (upstream `aider/repomap.py` at 867 lines used as reference; only `.scm` query files copied verbatim)
 - **License:** Apache-2.0
-- **Port(s):** DataPort, MemoryPort
-- **Modifications:** memory writes get provenance="aider-repomap" and confidence=index freshness
-- **Logged:** —
+- **Kosmos location:** `plugins/tektos/repomap/{__init__,policy,tags,rank,render,indexer}.py` (in-tree reimplementation) + `plugins/tektos/repomap/queries/{python,javascript,typescript,rust,go,bash}-tags.scm` (verbatim vendored, attribution in `queries/ATTRIBUTION.md`)
+- **Port(s):** consumed via `MemoryPort` only (no new port surface — Tektos-internal per ADR-023 envelope-first defer; `RepoMapPort` deferred until second consumer)
+- **Modifications:** PATTERN-VENDOR — upstream `RepoMap` class rewritten as pure functions across five modules (`policy`, `tags`, `rank`, `render`, `indexer`) so no aider IO/CLI/Model coupling leaks in. `MemoryPort.write_event` calls emit locked provenance `"aider-repomap"` and confidence via `compute_freshness_confidence()` (linear-decay over 30-day window, floor 0.01 to satisfy ADR-008 zero-trust guard). Per-file `tektos.repomap.indexed` + per-run `tektos.repomap.snapshot` writes. NetworkX `pagerank_scipy` backend used for ranking (matches upstream). Tree-sitter cache directory `.kosmos.repomap.cache.v4` matches upstream `USING_TSL_PACK=True` `CACHE_VERSION=4`.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
+
+#### tree-sitter — `PLANNED`
+- **Source:** https://pypi.org/project/tree-sitter/ (>=0.24)
+- **License:** MIT
+- **Kosmos location:** used only inside `plugins/tektos/repomap/tags.py`
+- **Port(s):** none directly (consumed by repomap module only)
+- **Modifications:** none. Consumes the tree-sitter 0.23/0.24 API split (`Query.captures()` vs. `QueryCursor.captures()`) via a version-adaptive `_run_query` helper.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
+
+#### tree-sitter-language-pack — `PLANNED`
+- **Source:** https://pypi.org/project/tree-sitter-language-pack/ (>=1.13)
+- **License:** MIT
+- **Kosmos location:** loaded lazily inside `plugins/tektos/repomap/tags.py`
+- **Port(s):** none directly (consumed by repomap module only)
+- **Modifications:** none. Used purely to obtain compiled tree-sitter language grammars for `python`, `javascript`, `typescript`, `rust`, `go`, `bash`.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
+
+#### networkx — `PLANNED`
+- **Source:** https://pypi.org/project/networkx/ (>=3.4)
+- **License:** BSD-3-Clause
+- **Kosmos location:** used only inside `plugins/tektos/repomap/rank.py`
+- **Port(s):** none directly (consumed by repomap module only)
+- **Modifications:** none. `MultiDiGraph` + `pagerank_scipy(personalization=...)` reimplementation of aider's PageRank + ident-heuristic identifier weighting.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
+
+#### scipy — `PLANNED`
+- **Source:** https://pypi.org/project/scipy/ (>=1.14)
+- **License:** BSD-3-Clause
+- **Kosmos location:** transitive consumer for `networkx.pagerank_scipy` sparse backend
+- **Port(s):** none directly (indirect via networkx)
+- **Modifications:** none.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
+
+#### grep-ast — `PLANNED`
+- **Source:** https://pypi.org/project/grep-ast/ (>=0.9)
+- **License:** Apache-2.0
+- **Kosmos location:** used only inside `plugins/tektos/repomap/render.py`
+- **Port(s):** none directly (consumed by repomap module only)
+- **Modifications:** none. `TreeContext` used to produce the aider-style tree-context render.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
+
+#### pygments — `PLANNED`
+- **Source:** https://pypi.org/project/Pygments/ (>=2.18)
+- **License:** BSD-2-Clause
+- **Kosmos location:** used only inside `plugins/tektos/repomap/tags.py` as fallback for defs-only lexing when tree-sitter query returns no captures
+- **Port(s):** none directly (consumed by repomap module only)
+- **Modifications:** none.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
+
+#### diskcache — `PLANNED`
+- **Source:** https://pypi.org/project/diskcache/ (>=5.6)
+- **License:** Apache-2.0
+- **Kosmos location:** used only inside `plugins/tektos/repomap/tags.py` for the per-file tag cache under `<repo-root>/.kosmos.repomap.cache.v4`
+- **Port(s):** none directly (consumed by repomap module only)
+- **Modifications:** none. Cache keyed by `(path, mtime)`; entry invalidated on mtime change; matches upstream aider caching.
+- **ADR:** ADR-038
+- **Logged:** 2026-07-29 23:04 EDT
 
 #### Bernstein Janitor — `EVALUATING` (spike per ADR-004)
 - **Source:** log full URL at spike setup

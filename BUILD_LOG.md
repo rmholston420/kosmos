@@ -684,3 +684,37 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none new. Real `TektosAgent.call_tool` path now drives `TraceFeedPort` publications for the gate test, replacing the deleted `TektosSimulator`'s `TraceFeedPort.publish` path.
 - **PORTING_LEDGER / ADR updated:** ADR-036 amended (Q5=B trigger fulfilled).
 - **Stop-condition status:** met — `pytest -k stage_2_4_exit_gate` 5 gate tests green (previously 6 in the mixed stub+simulator layout; the DoD literal `test_unauthorized_tool_call_detected_and_escalated_and_user_notified_build_sequence_2_4_dod` still passes end-to-end with the real Tektos agent as the trace source, and `TestTektosAgentTraceEmission` supersedes the deleted `TestTektosSimulator`). Full pytest 644/644 green. ADR-035 preserved (gate DoD unchanged). ADR-007 unchanged.
+
+## 2026-07-29 22:35 EDT — Stage 3.3 · aider repomap PATTERN-VENDORED · code shipped
+
+- **Stage / plugin / port:** Stage 3.3 · Tektos · repomap (no new port surface)
+- **What changed:** Pattern-vendored aider's repomap algorithm (Apache-2.0, upstream `Aider-AI/aider@5dc9490bb35f`) as five in-tree modules under `plugins/tektos/repomap/` — only the 6 tree-sitter `.scm` query files were copied verbatim. Locked 7 constants in `policy.py` (`REPOMAP_PROVENANCE="aider-repomap"`, `REPOMAP_INDEXED_PREDICATE="tektos.repomap.indexed"`, `REPOMAP_SNAPSHOT_PREDICATE="tektos.repomap.snapshot"`, `REPOMAP_FRESHNESS_WINDOW_DAYS=30.0`, `REPOMAP_DEFAULT_MAP_TOKENS=1024`, `REPOMAP_CACHE_VERSION=4`, `REPOMAP_MIN_CONFIDENCE=0.01`) plus `compute_freshness_confidence()` implementing the ADR-038 Q4=B linear-decay formula. `tags.py` extracts def/ref rows via `tree_sitter_language_pack` with a diskcache-backed cache keyed by `(path, mtime)` under `<repo-root>/.kosmos.repomap.cache.v4`, a Pygments fallback for defs-only languages, and a version-adaptive helper spanning the tree-sitter 0.23/0.24 `Query.captures` → `QueryCursor.captures` API split. `rank.py` reimplements aider's PageRank with a NetworkX `MultiDiGraph` + `pagerank_scipy` backend and the ident-heuristic weighting (snake/kebab/CamelCase x10 bonus when `len>=8`, dunder x0.1 penalty, `files-def>5` x0.1, chat_fnames x50, `sqrt(num_refs)` damping, personalization vector). `render.py` renders the tree-context view via `grep_ast.TreeContext` and binary-searches the ranked-tag prefix with a 15% tolerance around `max_tokens` (matches upstream). `indexer.py` is the async `index()` facade: walks source files, extracts + ranks + renders, then emits one `tektos.repomap.indexed` per-file `MemoryPort.write_event` and exactly one `tektos.repomap.snapshot` per run. Added 7 pip deps under a Stage 3.3 marker in `pyproject.toml` (`tree-sitter>=0.24`, `tree-sitter-language-pack>=1.13`, `networkx>=3.4`, `scipy>=1.14`, `grep-ast>=0.9`, `pygments>=2.18`, `diskcache>=5.6`).
+- **Files touched:**
+  - `plugins/tektos/repomap/__init__.py`
+  - `plugins/tektos/repomap/policy.py`
+  - `plugins/tektos/repomap/tags.py`
+  - `plugins/tektos/repomap/rank.py`
+  - `plugins/tektos/repomap/render.py`
+  - `plugins/tektos/repomap/indexer.py`
+  - `plugins/tektos/repomap/queries/{python,javascript,typescript,rust,go,bash}-tags.scm`
+  - `plugins/tektos/repomap/queries/ATTRIBUTION.md`
+  - `pyproject.toml`
+- **Ports / adapters affected:** none new. `MemoryPort` consumed with two locked predicates.
+- **PORTING_LEDGER / ADR updated:** aider repomap PLANNED → PATTERN-VENDORED with commit `5dc9490bb35f`; 7 new pip-dep entries logged; ADR-038 authored at Ratified v25.
+- **Stop-condition status:** in-progress — code green in smoke; contract tests + fan-out + landing follow in the next entry.
+
+## 2026-07-29 23:04 EDT — Stage 3.3 · aider repomap · tests + docs fan-out + LANDED
+
+- **Stage / plugin / port:** Stage 3.3 · Tektos · repomap
+- **What changed:** Shipped `plugins/tektos/tests/test_repomap.py` — 31 contract tests + 2 env-gated tests covering: locked-constants assertions (7 tests), freshness formula edge cases (6 tests: brand-new, 1-day, 30-day boundary, past-window floor, `window_days <= 0` `ValueError`, future-mtime clamp), tag extraction over Python source with tree-sitter + cache-hit consistency + hidden-dir skip (4 tests), rank ordering + determinism + per-file aggregation (3 tests), render empty + token-budget respect + default token counter (3 tests), indexer end-to-end (per-file writes carry locked provenance, exactly-one snapshot per run, freshness confidence falls off with mtime, `RepoMapResult.top_files` matches rank order, queryability via `MemoryPort.query_temporal`, `RepoMapResult` shape — 6 tests), fast 500-file synthetic corpus smoke that asserts full DoD contract in <5s, plus env-gated 10k literal (`KOSMOS_STAGE_33_LARGE_CORPUS=1`) and env-gated real CPython corpus (`KOSMOS_STAGE_33_REAL_CORPUS=1`) which are skipped in `make stage1-gate` to keep the sandbox fast (they run on Colossus). The fast-smoke variant asserts the exact DoD contract from spec §18 3.3 — per-file writes with `provenance="aider-repomap"` + confidence in `(0,1]`, one snapshot, MemoryPort queryable via `query_temporal`. Fanned out to docs: `docs/adrs/ADR-038-aider-repomap-pattern-vendor.md` authored; `docs/adrs/README.md` ADR-038 row appended; `docs/Kosmos-Build-Spec-v25.md` §17 ADR-038 row inserted after ADR-037; `docs/Kosmos-Build-Sequence-v25.md` §3.3 rewritten as LANDED with locked answers + tiered DoD; `docs/PORTING_LEDGER.md` aider PLANNED → PATTERN-VENDORED with 7 new pip-dep entries appended.
+- **Files touched:**
+  - `plugins/tektos/tests/test_repomap.py`
+  - `docs/adrs/ADR-038-aider-repomap-pattern-vendor.md`
+  - `docs/adrs/README.md`
+  - `docs/Kosmos-Build-Spec-v25.md` (§17)
+  - `docs/Kosmos-Build-Sequence-v25.md` (§3.3)
+  - `docs/PORTING_LEDGER.md`
+  - `SESSION_HANDOFF.md`
+- **Ports / adapters affected:** none new.
+- **PORTING_LEDGER / ADR updated:** ADR-038 Ratified v25 (single composite covering Q1=A · Q2=A(revised) · Q3=C · Q4=B · Q5=C · Q6=A).
+- **Stop-condition status:** met — DoD literal anchor `pytest plugins/tektos/tests/test_repomap.py::test_repomap_smoke_500_file_corpus_writes_queryable_via_memoryport` passes in `make stage1-gate` (asserts 500 per-file writes with locked provenance + confidence in `(0,1]`, exactly 1 snapshot, `query_temporal("tektos.repomap.indexed", limit=100)` returns 100 rows). Full pytest **675/675** green (+31 vs. Stage 3.2's 644) + 4 env-gated skips (2 Playwright + 10k corpus + real CPython); `make stage1-gate` PASS. ADR-007 respected — repomap is Tektos-internal, no cross-plugin imports. ADR-008 respected — every `MemoryPort.write_event` carries `provenance="aider-repomap"` + confidence in `(0,1]`, port-level `validate_zero_trust_write` guard exercised via `_FakeMemoryPort`. ADR-023 respected — no new port surface. ADR-036/037 preserved. Next: Stage 3.4 (Bernstein Janitor spike test).
