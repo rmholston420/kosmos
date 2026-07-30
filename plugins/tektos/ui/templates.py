@@ -109,12 +109,27 @@ def _change_id_from_intention(intention_id: str) -> str:
     return intention_id
 
 
+def _escape_record_fields(
+    record: ApprovalRecord,
+) -> tuple[str, str, str, str]:
+    """Project ``record`` into HTML-escaped ``(approval_id, change_id, tier, status)``.
+
+    Stage 3.12 · ADR-046 extract-method refactor. ``render_pending_row``
+    and ``render_plan_detail`` both need the same 4-field projection
+    from :class:`ApprovalRecord`; centralising it removes duplication
+    and turns the projection into a named, testable surface.
+    """
+    return (
+        escape(str(record.approval_id)),
+        escape(_change_id_from_intention(record.intention_id)),
+        escape(record.tier.value),
+        escape(record.status.value),
+    )
+
+
 def render_pending_row(record: ApprovalRecord) -> str:
     """Render one ``<tr>`` for the dashboard index table."""
-    approval_id = escape(str(record.approval_id))
-    change_id = escape(_change_id_from_intention(record.intention_id))
-    tier = escape(record.tier.value)
-    status = escape(record.status.value)
+    approval_id, change_id, tier, status = _escape_record_fields(record)
     detail_url = escape(_detail_url(approval_id))
     approve_url = escape(_approve_url(approval_id))
     return (
@@ -150,10 +165,7 @@ def render_plan_detail(record: ApprovalRecord) -> str:
     the response into an existing dashboard slot. The interactive tier
     also loads it standalone; browsers render orphan fragments fine.
     """
-    approval_id = escape(str(record.approval_id))
-    change_id = escape(_change_id_from_intention(record.intention_id))
-    tier = escape(record.tier.value)
-    status = escape(record.status.value)
+    approval_id, change_id, tier, status = _escape_record_fields(record)
     approve_url = escape(_approve_url(approval_id))
     execute_url = escape(_execute_url(approval_id))
     diff_url = escape(_diff_url(approval_id))
