@@ -24,7 +24,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-013 | `ADR-013-memory-bridge-selection.md` | Choose memory/bridge.py vs. Gnosis schema | **LOCKED** · Gnosis schema (6/6) · 2026-07-29 | Stage 1.9 |
 | ADR-014 | `ADR-014-ui-parity-rule.md` | UI Parity standing rule | Ratified (v24) | Every phase after Tektos Phase 2 |
 | ADR-015 | `ADR-015-oikos-before-zetesis.md` | Oikos ahead of Zetesis sequencing | Ratified (v24) | Stage 5 |
-| ADR-016 | `ADR-016-knowsys-gnosis-merge.md` | Knowsys merged into Gnosis | Ratified (v24) | Phase 3.3 |
+| ADR-016 | `ADR-016-knowsys-gnosis-merge.md` | Knowsys merged into Gnosis | **LOCKED** (2026-07-30) | Phase 3.3 (Stage 4.1) |
 | ADR-017 | `ADR-017-llm-council-reference.md` | karpathy/llm-council as design reference only | Ratified | Phase 6.4 |
 | ADR-018 | `ADR-018-oikos-benefit-references.md` | sure/Maybe rejected; CMSgov/18F as references | Ratified | Phase 5.3 |
 | ADR-019 | `ADR-019-approval-ux.md` | Approval UX specification | Ratified | Phase 3 |

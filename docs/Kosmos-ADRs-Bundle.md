@@ -34,7 +34,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-013 | `ADR-013-memory-bridge-selection.md` | Choose memory/bridge.py vs. Gnosis schema | **Ratified v25** | Stage 1 pre-Phase-2 |
 | ADR-014 | `ADR-014-ui-parity-rule.md` | UI Parity standing rule | Ratified (v24) | Every phase after Tektos Phase 2 |
 | ADR-015 | `ADR-015-oikos-before-zetesis.md` | Oikos ahead of Zetesis sequencing | Ratified (v24) | Stage 5 |
-| ADR-016 | `ADR-016-knowsys-gnosis-merge.md` | Knowsys merged into Gnosis | Ratified (v24) | Phase 3.3 |
+| ADR-016 | `ADR-016-knowsys-gnosis-merge.md` | Knowsys merged into Gnosis | **LOCKED** (2026-07-30) | Phase 3.3 (Stage 4.1) |
 | ADR-017 | `ADR-017-llm-council-reference.md` | karpathy/llm-council as design reference only | Ratified | Phase 6.4 |
 | ADR-018 | `ADR-018-oikos-benefit-references.md` | sure/Maybe rejected; CMSgov/18F as references | Ratified | Phase 5.3 |
 | ADR-019 | `ADR-019-approval-ux.md` | Approval UX specification | Ratified | Phase 3 |
@@ -906,7 +906,16 @@ Stage 5 — enforced at Stage 5.1 (Oikos skeleton).
 
 # ADR-016 — Knowsys–Gnosis Merge
 
-**Status:** Ratified (v24) · **Lock-in phase:** Phase 3.3
+**Status:** **LOCKED** (2026-07-30 · verified zero Kosmos imports of `knowsys`; test-string refs cleaned; no `plugins/knowsys/` ever ported into Kosmos) · **Lock-in phase:** Phase 3.3 (Stage 4.1)
+
+> **STATUS AMENDMENT (2026-07-30):** Stage 4.1 executed. DoD literal "No import of `knowsys` anywhere; ADR-016 status = LOCKED" met:
+> 1. `grep -rniE "^(from|import).*knowsys" --include="*.py"` returns zero results.
+> 2. Three residual **string** references (never imports) cleaned in this same commit:
+>    - `adapters/observability/otel_stack/test_contract.py` — test span name `plugin.knowsys.index` → `plugin.gnosis.index` (2 spots) + `plugin="knowsys"` context-binding attributes → `plugin="gnosis"` (2 spots).
+>    - `plugins/tektos/tests/test_tektos_agent.py` — `forbidden_prefixes` tuple: dropped `"plugins.knowsys"` (would forbid a non-existent module; Gnosis will become a valid import in Stage 4.4 so we deliberately do NOT swap in `"plugins.gnosis"`).
+> 3. `plugins/knowsys/` was never ported from Rigpa-LMS into Kosmos — mirrors the ADR-013 lock-in pattern (winner already the only implementation, loser rejected at the source of choice, not by deleting non-existent Kosmos code).
+> 4. Rigpa Knowsys export subsystem remains VENDORED-pattern-only in `PORTING_LEDGER.md` §DataPort per ADR-028 — unaffected by this lock-in.
+> 5. Fast pytest tier: 825 passed + 9 skipped (unchanged from baseline).
 
 ## Context
 

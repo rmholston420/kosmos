@@ -290,9 +290,17 @@ Reference: Spec §18. This is the largest single-plugin build.
 
 ## Stage 4 — Gnosis (Knowledge) — Absorbs Knowsys (ADR-016) (Weeks 5-6)
 
-### 4.1 Knowsys → Gnosis merge
-- Delete `plugins/knowsys/`; migrate any Knowsys-only functionality into Gnosis modules
-- **DoD:** No import of `knowsys` anywhere; ADR-016 status = `LOCKED`.
+### 4.1 Knowsys → Gnosis merge — **LANDED 2026-07-30 (commit follows)**
+- **Outcome:** ADR-016 flipped to **LOCKED**. `plugins/knowsys/` was never ported from Rigpa-LMS into Kosmos (verified via repo scan) — mirrors the ADR-013 lock-in pattern (loser rejected at the source of choice, not by deleting non-existent code).
+- **DoD literal met:**
+  - `grep -rniE "^(from|import).*knowsys" --include="*.py"` → zero results.
+  - ADR-016 status line + spec §17 row + `docs/adrs/README.md` index row + `docs/Kosmos-ADRs-Bundle.md` mirror all read **LOCKED**.
+- **Cleanup shipped alongside lock-in:**
+  - `adapters/observability/otel_stack/test_contract.py` — test span name `plugin.knowsys.index` → `plugin.gnosis.index` (2 spots) + `plugin="knowsys"` context-binding attributes → `plugin="gnosis"` (2 spots).
+  - `plugins/tektos/tests/test_tektos_agent.py` — dropped `"plugins.knowsys"` from the `forbidden_prefixes` tuple (would forbid a non-existent module; Gnosis will become a valid import in Stage 4.4 so we deliberately do NOT swap in `"plugins.gnosis"`).
+- **Deliberately unchanged:** Rigpa Knowsys export subsystem remains VENDORED-pattern-only in `PORTING_LEDGER.md` §DataPort per ADR-028 — pattern reference, not a Kosmos plugin.
+- **Test status:** fast tier 825 passed + 9 skipped (unchanged from baseline).
+- **Next:** Stage 4.2 (Graphiti tuning — largely landed at Stage 1.8 per ADR-027 Q1=A).
 
 ### 4.2 Graphiti temporal-index tuning + benchmarks
 - **Ports:** MemoryPort, VectorPort

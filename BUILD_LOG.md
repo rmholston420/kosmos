@@ -946,3 +946,28 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** LLMPort (Ollama adapter symbol rename only), eval harness pier-CLI surface.
 - **PORTING_LEDGER / ADR updated:** — (bug fixes, no decision change; ADR-046 remains authoritative for Stage 3.12 exit gate)
 - **Stop-condition status:** met — fast tier `825 passed + 9 skipped`, `make stage3-gate` PASS, interactive Ollama + Playwright + docling + fake pier all green, real pier tier documented in KNOWN_ISSUES.
+
+## 2026-07-30 06:52 EDT — Stage 4.1 · Knowsys → Gnosis merge · LOCKED
+
+- **Stage / plugin / port:** Stage 4.1 · Gnosis (absorbs Knowsys) · no ports added
+- **What changed:**
+  - ADR-016 status flipped **Ratified (v24) → LOCKED** with STATUS AMENDMENT block documenting DoD evidence.
+  - Verified `plugins/knowsys/` was never ported into Kosmos (repo scan: no such directory in `plugins/`). Mirrors ADR-013 lock-in pattern (loser rejected at the source of choice, not by deleting non-existent Kosmos code).
+  - Three residual **string** references cleaned (never imports):
+    - `adapters/observability/otel_stack/test_contract.py` — `plugin.knowsys.index` → `plugin.gnosis.index` (2 spots) + `plugin="knowsys"` context-binding attributes → `plugin="gnosis"` (2 spots).
+    - `plugins/tektos/tests/test_tektos_agent.py` — dropped `"plugins.knowsys"` from `forbidden_prefixes` tuple. Deliberately did NOT swap in `"plugins.gnosis"` because Gnosis will become a valid import in Stage 4.4.
+  - Fan-out to all four status-tracking surfaces: ADR-016 file · spec §17 row · `docs/adrs/README.md` index · `docs/Kosmos-ADRs-Bundle.md` mirror (both bundle index row and embedded ADR-016 status line).
+  - Build-Sequence §4.1 rewritten as LANDED block with DoD evidence + cleanup log + next-stage pointer.
+- **Files touched:**
+  - `adapters/observability/otel_stack/test_contract.py`
+  - `plugins/tektos/tests/test_tektos_agent.py`
+  - `docs/adrs/ADR-016-knowsys-gnosis-merge.md`
+  - `docs/adrs/README.md`
+  - `docs/Kosmos-Build-Spec-v25.md` (§17 ADR-016 row)
+  - `docs/Kosmos-ADRs-Bundle.md` (index row + embedded ADR-016)
+  - `docs/Kosmos-Build-Sequence-v25.md` (§4.1 LANDED block)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwrites — points at Stage 4.2)
+- **Ports / adapters affected:** none. Cross-plugin coupling model unchanged (ADR-007 events-only still enforced). MemoryPort provenance model unchanged. Two test strings on the ObservabilityPort surface were renamed for accuracy post-merge — no protocol change.
+- **PORTING_LEDGER / ADR updated:** ADR-016 LOCKED (2026-07-30). PORTING_LEDGER unchanged — Rigpa Knowsys export subsystem entry remains VENDORED-pattern-only per ADR-028 (pattern reference, not a Kosmos plugin).
+- **Stop-condition status:** met — DoD literal "No import of `knowsys` anywhere; ADR-016 status = LOCKED" satisfied. Fast tier `825 passed + 9 skipped` (unchanged from baseline pre-edit).

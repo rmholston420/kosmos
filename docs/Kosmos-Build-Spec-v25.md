@@ -311,7 +311,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-013 | Rigpa-LMS `memory/bridge.py` vs. Gnosis Provenance Schema Redundancy Resolution | **LOCKED** (2026-07-29 · Gnosis schema won 6/6; comparison in `docs/memory-bridge-comparison.md`) | Stage 1.9 |
 | ADR-014 | UI Parity Standing Rule | Ratified (v24) | Every phase after Tektos Phase 2 |
 | ADR-015 | Oikos-Ahead-of-Zetesis Build Sequencing | Ratified (v24) | Stage 5 |
-| ADR-016 | Knowsys–Gnosis Merge | Ratified (v24) | Phase 3.3 |
+| ADR-016 | Knowsys–Gnosis Merge | **LOCKED** (2026-07-30 · verified zero imports; test-string refs cleaned; `plugins/knowsys/` never ported into Kosmos) | Phase 3.3 (Stage 4.1) |
 | ADR-017 | Karpathy `llm-council` as Synedrion Design-Pattern Reference (Not Vendored) | Ratified | Phase 6.4 |
 | ADR-018 | Sure/Maybe Finance Rejection + CMSgov/18F Design References for Oikos Rules Engine | Ratified | Phase 5.3 (Oikos) |
 | ADR-019 | Approval UX Specification | Ratified | Phase 3 (with UI shell) |

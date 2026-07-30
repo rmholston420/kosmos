@@ -62,11 +62,11 @@ def test_trace_span_records_exception_and_reraises() -> None:
     adapter = OtelStackObservabilityAdapter(backend=backend)
 
     with pytest.raises(RuntimeError, match="boom"):
-        with adapter.trace("plugin.knowsys.index"):
+        with adapter.trace("plugin.gnosis.index"):
             raise RuntimeError("boom")
 
     span_name, _ = backend.spans_opened[0]
-    assert span_name == "plugin.knowsys.index"
+    assert span_name == "plugin.gnosis.index"
     # The exception must be recorded on the span (via __exit__).
     current = backend.get_current_span(None)
     assert current is not None
@@ -189,7 +189,7 @@ def test_bind_context_forwards_all_keys_to_backend() -> None:
     adapter = OtelStackObservabilityAdapter(backend=backend)
 
     adapter.bind_context(
-        plugin="knowsys",
+        plugin="gnosis",
         request_id="req-123",
         user_id="rmholston",
         trace_id="trace-abc",
@@ -198,7 +198,7 @@ def test_bind_context_forwards_all_keys_to_backend() -> None:
 
     assert backend.context_bindings == [
         {
-            "plugin": "knowsys",
+            "plugin": "gnosis",
             "request_id": "req-123",
             "user_id": "rmholston",
             "trace_id": "trace-abc",

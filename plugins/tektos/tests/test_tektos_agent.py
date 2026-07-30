@@ -417,7 +417,7 @@ def test_tektos_agent_imports_no_other_plugins_adr_007() -> None:
     agent_path = Path(__file__).resolve().parent.parent / "agent.py"
     tree = ast.parse(agent_path.read_text(encoding="utf-8"))
 
-    forbidden_prefixes = ("plugins.phrouros", "plugins.praxis", "plugins.knowsys")
+    forbidden_prefixes = ("plugins.phrouros", "plugins.praxis")
     offending: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
