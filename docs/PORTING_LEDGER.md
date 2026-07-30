@@ -569,6 +569,50 @@
 
 ---
 
+### APEX Change Approval Tier engine
+
+#### Rigpa-LMS `apex/protocols.py` (ChangeApprovalProtocol + Storage + Scheduler seams) — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (file: `backend/src/rigpa/domains/apex/protocols.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-apex/protocols.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `plugins/praxis/apex/protocol.py`
+- **Port(s):** APEX change-approval subsystem (ADR-033)
+- **Modifications:** kept the three-Protocol shape (`ChangeApprovalProtocol` + `Storage` + `Scheduler`) but replaced donor SQLAlchemy-flavored fields with stdlib-only frozen dataclasses; adapted verbs to explicit `async` (donor used sync + `run_in_executor`); added `SchedulerHandle` value object so `cancel(handle)` can round-trip through `FakeScheduler` without a global registry.
+- **ADR:** ADR-033
+- **Logged:** 2026-07-29 23:44 EDT
+
+#### Rigpa-LMS `apex/models.py` (Intention + ApprovalRecord donor shape) — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (file: `backend/src/rigpa/domains/apex/models.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-apex/models.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `plugins/praxis/apex/models.py`
+- **Port(s):** APEX change-approval subsystem (ADR-033)
+- **Modifications:** stripped SQLAlchemy Base + Column declarations; retained field names (`id`/`subject`/`target_trajectory`/`current_state`/`owning_domain`/`change_approval_tier`) so a future SqliteStorage adapter can round-trip donor-schema rows; added `ApprovalStatus` + `Trigger` enums as `str, Enum` for JSON-serializable event payloads; introduced `new_id()` + `utc_now()` helpers to keep call sites free of `uuid`/`datetime` imports.
+- **ADR:** ADR-033
+- **Logged:** 2026-07-29 23:44 EDT
+
+#### Rigpa-LMS `apex/service.py` (state machine + tier semantics) — `PATTERN-VENDORED (rewritten async-first)`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (file: `backend/src/rigpa/domains/apex/service.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-apex/service.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `plugins/praxis/apex/engine.py`
+- **Port(s):** APEX change-approval subsystem (ADR-033)
+- **Modifications:** retained the three-tier state machine (AUTONOMOUS auto-approve; HUMAN_REVIEW single-shot timer; HUMAN_REQUIRED escalating cadence) and the resolve-cancels-timers invariant; replaced donor sync-notification calls with `NotificationPort.notify()` + `deliver_algedonic()` (ADR-030 surface); routed events through kernel `EventBusPort` with `producer_plugin="praxis"` per ADR-023; pre-schedules HUMAN_REQUIRED cadence up to a 30-day horizon that self-refreshes on fire (donor scheduled ticks one at a time on each callback). Rewrote every verb as `async` end-to-end; introduced `_handles` dict per approval so `resolve()` cancels the full pending set atomically.
+- **ADR:** ADR-033
+- **Logged:** 2026-07-29 23:44 EDT
+
+#### `rfc8785`, `cryptography`, `aiosqlite`, `PyYAML` — `VENDORED (reused existing Kosmos deps)`
+- **Source:** https://github.com/di/rfc8785.py, https://github.com/pyca/cryptography, https://github.com/omnilib/aiosqlite, https://github.com/yaml/pyyaml
+- **Commit / Version:** `rfc8785>=0.1.4` (Apache-2.0), `cryptography>=49` (Apache-2.0 OR BSD-3), `aiosqlite>=0.20` (MIT), `PyYAML>=6.0` (MIT) — all four already declared in `pyproject.toml` from earlier Stage 1 ports (DataPort §1.10, SecretsPort §1.5, ResourcePort §1.11, Constitution Loader §2.1).
+- **License:** Apache-2.0 / Apache-2.0 OR BSD-3 / MIT / MIT
+- **Kosmos location:** `plugins/praxis/apex/{tokens.py,storage.py}`
+- **Port(s):** APEX change-approval subsystem (ADR-033)
+- **Modifications:** used unmodified. `rfc8785.dumps()` canonicalizes mobile-token payloads; `cryptography.hazmat.primitives.asymmetric.ed25519` provides Ed25519 sign/verify + PEM (de)serialization for the SecretsPort-backed signing key; `aiosqlite` will back the `SqliteStorage` durable adapter at Stage 5 (Stage 2.2 ships only the schema-documented stub). Zero new runtime dependencies added at Stage 2.2.
+- **ADR:** ADR-033
+- **Logged:** 2026-07-29 23:44 EDT
+
+---
+
 ## Tektos (Coding Plugin)
 
 #### OpenHands SDK — `PLANNED`

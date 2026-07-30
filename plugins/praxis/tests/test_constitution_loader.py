@@ -576,12 +576,14 @@ class TestPraxisDescriptor:
         assert d.kernel_compat == PRAXIS_KERNEL_COMPAT
         assert d.routes == ()
         assert d.design_tokens == {}
-        assert len(d.panels) == 1
+        # Stage 2.2 (ADR-033 Q1=C) added the APEX Approvals Queue panel.
+        assert len(d.panels) == 2
 
     def test_descriptor_panel_slot_governance(self) -> None:
         d = build_praxis_descriptor()
-        (panel,) = d.panels
-        assert panel.slot == PanelSlot.GOVERNANCE
+        governance = [p for p in d.panels if p.slot == PanelSlot.GOVERNANCE]
+        assert len(governance) == 1
+        panel = governance[0]
         assert panel.id == PRAXIS_GOVERNANCE_PANEL_ID == "praxis.governance"
         assert panel.plugin_name == "praxis"
         assert panel.priority > 0
@@ -694,6 +696,13 @@ class TestPraxisPluginStart:
         assert len(governance_panels) == 1
         assert governance_panels[0].plugin_name == "praxis"
         assert governance_panels[0].id == "praxis.governance"
+        # Stage 2.2 (ADR-033) added a second panel in APPROVALS_QUEUE.
+        approvals_panels = await stub.get_panel_manifest(
+            slot=PanelSlot.APPROVALS_QUEUE
+        )
+        assert len(approvals_panels) == 1
+        assert approvals_panels[0].plugin_name == "praxis"
+        assert approvals_panels[0].id == "praxis.approvals"
 
     async def test_render_kernel_schema_includes_praxis(
         self, constitution_tree: Path

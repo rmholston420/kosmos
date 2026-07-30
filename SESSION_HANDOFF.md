@@ -1,33 +1,31 @@
-# Kosmos Session Handoff — 2026-07-29 23:15 EDT
+# Kosmos Session Handoff — 2026-07-29 23:52 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 2.1 **complete**. Ready for Stage 2.2 (APEX Change Approval Tier engine).
-- **Plugin / kernel component:** — (no active build; Praxis kernel skeleton is stable)
-- **Port(s) in progress:** —
+- **Stage / phase:** Stage 2.2 complete → next is Stage 2.3
+- **Plugin / kernel component:** Praxis · APEX Change Approval Tier engine (landed)
+- **Port(s) in progress:** none
 
 ## Completed this session
-- Stage 1.14 FrontendContractPort · ADR-031 Ratified v25 · 56 tests · commit `2b879b0`
-- Stage 1.15 Stage-1 exit gate · `scripts/stage1_gate.py` + `Makefile` · PASS on all four criteria · commit `6968e26` · tag **`stage-1-complete`**
-- Stage 2.1 Praxis constitution loader · ADR-032 Ratified v25 (Q1=B + Q2=A) · 40 contract tests · **DoD PASS** (`test_tampered_constitution_refuses_boot_build_sequence_2_1_dod` green) · full suite 432/432
-  - `plugins/praxis/` first Kosmos plugin
-  - `plugins/praxis/constitution/{signing,verifier,loader,errors}.py`
-  - `plugins/praxis/plugin.py` — PraxisPlugin with lazy start/stop, registers `PluginDescriptor(name="praxis", panels=(governance,))` with FrontendContractPort at `UiParityStatus.IN_PROGRESS`
-  - `governance/constitution/{pubkey.pem, versions/v0001.{yaml,json,sig}}` committed genesis
-  - `scripts/gen_constitution_genesis.py` reproducible genesis generator
-  - `.secrets/` added to `.gitignore`; genesis privkey lives at `.secrets/genesis/privkey.pem` (local only)
-  - Rigpa donors ported: `signing.py` PATTERN-VENDORED (`jcs`→`rfc8785` dep-swap), `verifier.py` PATTERN-VENDORED (pubkey-path + error-hierarchy adaptation); amend/cli/service/models/schemas PATTERN-VENDORED-reference-only-deferred-to-Synedrion
-  - Zero new runtime deps (reused `PyYAML>=6.0`, `rfc8785>=0.1.4`, `cryptography>=49` from Stages 1.5/1.10)
+- Ratified ADR-033 (APEX Change Approval Tier engine): Q1=C full §17.13 UX incl. SecretsPort-backed Ed25519 mobile token; Q2=A Scheduler Protocol seam (InProcessScheduler + FakeScheduler + NullScheduler).
+- Landed 10 new modules under `plugins/praxis/apex/`: tier · errors · models · protocol · scheduler · storage · tokens · policy · engine · `__init__` (public surface).
+- Extended `PraxisPlugin.build_praxis_descriptor()` with second Panel `praxis.approvals` in `PanelSlot.APPROVALS_QUEUE` (priority 100, `praxis/panels/ApprovalsQueuePanel`); governance panel unchanged.
+- Landed 82 new contract tests across 4 files: `test_apex_tiers.py` (28, DoD anchor) · `test_mobile_token.py` (18) · `test_scheduler.py` (18) · `test_policy.py` (18).
+- Updated `plugins/praxis/tests/test_constitution_loader.py` for the two-panel descriptor (governance filter + APPROVALS_QUEUE manifest assertion).
+- Registered `plugins.praxis.apex` + `plugins.praxis.apex.tests` in `pyproject.toml`.
+- Full suite **514/514 green** (was 432; +82). `make stage1-gate` regression PASS.
+- Fan-out: spec §17 ADR-033 row · `docs/adrs/README.md` ADR-033 row · Build-Sequence §2.2 rewrite w/ landing timestamp · PORTING_LEDGER APEX Change Approval block (Governance section) · BUILD_LOG (ADR-033 authoring + Stage 2.2 landing entries) · this SESSION_HANDOFF overwrite.
 
 ## Remaining before current Definition of Done
-- Build-Sequence §2.1 DoD: tampered constitution → boot refused. ✔
-- Commit + push Stage 2.1 to `origin/main` — **pending**
+- Stage 2.2 DoD is met. Only remaining action this session: commit + push landing (multi-line commit message referencing ADR-033, Q1=C + Q2=A bullets, file list, test count 514).
 
 ## Open questions / awaiting user answer
-- None. Stage 2.1 complete per ADR-032. Next natural step: Stage 2.2 APEX Change Approval Tier engine (`AUTONOMOUS` / `HUMAN_REVIEW` 4h default / `HUMAN_REQUIRED` unlimited-wait with 24h+6h/6h notification cadence).
+- none
 
 ## Exact next action
-- Commit + push Stage 2.1:
+- Commit + push the Stage 2.2 landing:
   ```bash
-  cd /home/user/workspace/kosmos-repo && git add -A && git commit -m "Stage 2.1: Praxis Constitution Loader — ADR-032 Ratified v25 (432/432 tests)" && git push origin main
+  cd /home/user/workspace/kosmos-repo && git add -A && git status --short
   ```
-- Then: proceed to Stage 2.2 (APEX Change Approval Tier engine — EventBusPort + NotificationPort) when directed.
+  Then commit with a multi-line message and `git push origin main` via `bash` with `api_credentials=["github"]`.
+
+- After push: begin Stage 2.3 (Phrouros anomaly detector) — ports: ObservabilityPort · NotificationPort · ResourcePort; DoD: synthetic anomaly (looping tool call) triggers alert + reservation within 30s.

@@ -57,6 +57,17 @@ headroom above (higher-priority overrides) and below (lower-priority
 additions) for future kernel-scope governance widgets."""
 
 
+PRAXIS_APPROVALS_PANEL_ID = "praxis.approvals"
+PRAXIS_APPROVALS_LAZY_MODULE = "praxis/panels/ApprovalsQueuePanel"
+"""Frontend module identifier for the Approvals Queue panel (Stage 2.2 ·
+ADR-033 Q1=C · spec §17.13). Stage 3.5 Next.js shell will resolve."""
+
+PRAXIS_APPROVALS_PANEL_PRIORITY = 100
+"""Priority within :attr:`PanelSlot.APPROVALS_QUEUE`. Praxis owns this
+slot exclusively at Stage 2.2 — the APEX Change Approval Tier engine
+is the sole approvals producer."""
+
+
 def build_praxis_descriptor() -> PluginDescriptor:
     """Construct the Praxis :class:`PluginDescriptor`.
 
@@ -65,16 +76,25 @@ def build_praxis_descriptor() -> PluginDescriptor:
     plugin).
 
     Returns:
-        The canonical Praxis descriptor. Registers exactly one panel
-        (governance) in :attr:`PanelSlot.GOVERNANCE`; no routes at
-        Stage 2.1; no plugin-scoped design tokens (Praxis uses
+        The canonical Praxis descriptor. Registers two panels at
+        Stage 2.2: the constitution governance panel (§2.1 · ADR-032)
+        in :attr:`PanelSlot.GOVERNANCE` and the APEX Approvals Queue
+        panel (§2.2 · ADR-033) in :attr:`PanelSlot.APPROVALS_QUEUE`.
+        No routes; no plugin-scoped design tokens (Praxis uses
         kernel-inherited tokens).
     """
-    panel = Panel(
+    governance_panel = Panel(
         id=PRAXIS_GOVERNANCE_PANEL_ID,
         slot=PanelSlot.GOVERNANCE,
         priority=PRAXIS_GOVERNANCE_PANEL_PRIORITY,
         lazy_module=PRAXIS_GOVERNANCE_LAZY_MODULE,
+        plugin_name=PRAXIS_PLUGIN_NAME,
+    )
+    approvals_panel = Panel(
+        id=PRAXIS_APPROVALS_PANEL_ID,
+        slot=PanelSlot.APPROVALS_QUEUE,
+        priority=PRAXIS_APPROVALS_PANEL_PRIORITY,
+        lazy_module=PRAXIS_APPROVALS_LAZY_MODULE,
         plugin_name=PRAXIS_PLUGIN_NAME,
     )
     return PluginDescriptor(
@@ -84,7 +104,7 @@ def build_praxis_descriptor() -> PluginDescriptor:
         kernel_compat=PRAXIS_KERNEL_COMPAT,
         design_tokens={},
         routes=(),
-        panels=(panel,),
+        panels=(governance_panel, approvals_panel),
     )
 
 
