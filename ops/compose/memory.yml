@@ -1,0 +1,50 @@
+# Kosmos MemoryPort backing services (Stage 4.2 · ADR-027 · ADR-047)
+#
+# Bring up: docker compose -f ops/compose/memory.yml up -d
+# Health:   docker compose -f ops/compose/memory.yml ps
+# Down:     docker compose -f ops/compose/memory.yml down
+#
+# Set KOSMOS_STAGE_42_LIVE=1 in your environment to have the env-gated
+# contract tests + the corpus runner target this service.
+#
+# DozerDB 5.26.27 = community Neo4j 5.26 + enterprise features backported
+# under a permissive license via the DozerDB bootstrapping plugin. See
+# docs/PORTING_LEDGER.md for the SPDX + upstream commit reference.
+
+services:
+  dozerdb:
+    image: graphstack/dozerdb:5.26.27
+    container_name: kosmos-dozerdb
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # HTTP (browser)
+      - "7687:7687"   # Bolt
+    environment:
+      # Dev-only auth — CHANGE if this ever leaves single-user Colossus.
+      NEO4J_AUTH: "neo4j/kosmos-dev-password"
+      NEO4J_PLUGINS: '["apoc"]'
+      # Colossus is 128GB RAM; keep DozerDB well under 8GB so Ollama +
+      # Kosmos processes have room. Adjust if the graph outgrows this.
+      NEO4J_server_memory_heap_initial__size: "2G"
+      NEO4J_server_memory_heap_max__size: "4G"
+      NEO4J_server_memory_pagecache_size: "2G"
+    volumes:
+      - dozerdb_data:/data
+      - dozerdb_logs:/logs
+    healthcheck:
+      test:
+        - "CMD"
+        - "cypher-shell"
+        - "-u"
+        - "neo4j"
+        - "-p"
+        - "kosmos-dev-password"
+        - "RETURN 1"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  dozerdb_data:
+  dozerdb_logs:
