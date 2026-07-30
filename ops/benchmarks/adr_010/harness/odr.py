@@ -26,7 +26,7 @@ from typing import Any
 from ..metrics import TrialMetrics
 from .search_backend import unique_domain_count
 
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[4]
 _ODR_SRC = _ROOT / "vendor" / "adr_010" / "open_deep_research" / "src"
 if str(_ODR_SRC) not in sys.path:
     sys.path.insert(0, str(_ODR_SRC))

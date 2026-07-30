@@ -43,7 +43,7 @@ from .search_backend import (
 )
 
 # Ensure vendored AREX inference bundle is importable.
-_ROOT = Path(__file__).resolve().parents[3]
+_ROOT = Path(__file__).resolve().parents[4]
 _VENDORED = _ROOT / "vendor" / "adr_010" / "arex_inference"
 if str(_VENDORED) not in sys.path:
     sys.path.insert(0, str(_VENDORED))

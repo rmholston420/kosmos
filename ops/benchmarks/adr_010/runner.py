@@ -25,7 +25,7 @@ from .policy import GPUMonitor
 
 logger = logging.getLogger(__name__)
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _FIXTURE_PATH = _REPO_ROOT / "ops" / "benchmarks" / "adr_010" / "fixtures" / "adr_010_question.json"
 _ARTIFACT_ROOT = _REPO_ROOT / "ops" / "benchmarks" / "artifacts" / "adr-010-2026-07-30"
 
