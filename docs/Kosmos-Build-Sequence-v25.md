@@ -136,11 +136,11 @@ Write pure Python `Protocol` interfaces (no implementations) at `ports/`:
 - **Action:** Ship full FrontendContractPort surface (spec §4.1 line 91 verbs — `register_plugin`/`unregister_plugin`/`list_plugins`/`get_route_manifest`/`get_design_tokens`/`get_state_namespaces`/`get_panel_manifest`/`check_ui_parity`/`render_kernel_schema` plus `is_healthy`/`close` lifecycle) per **ADR-031**. Primary `KernelFrontendContractAdapter` (pure stdlib, zero new deps) with pluggable `ManifestStore` Protocol seam: `InMemoryManifestStore` (dict-backed) primary + `FileManifestStore` (stdlib `pathlib`+`json`, atomic tmp-rename write) stub deferred to Stage 5 auditor wiring. Mirrors Rigpa-LMS `RigpaFrontendPlugin` donor shape (name/state_namespace/design_tokens/routes) extended with typed `Panel` value objects across nine `PanelSlot`s (spec §280 + §17.9 + §17.13) + `version`/`kernel_compat`. `UiParityStatus` enum {NOT_STARTED, IN_PROGRESS, COMPLIANT, GRANDFATHERED}. Non-bypassable port-level zero-trust guard rejects missing/invalid required fields, invalid plugin-name regex, empty route/panel `lazy_module`, and duplicate registrations. Design-token merge is last-registered-wins; panel ordering is `priority DESC` with insertion-order tiebreaker.
 - **DoD:** Empty kernel dashboard renders "Kosmos" title from a schema, no plugin loaded — `render_kernel_schema()` returns `KernelSchema(title="Kosmos", plugins=(), panels=())` (test `test_empty_dashboard_renders_kosmos_title_build_sequence_1_14_dod` literally satisfies this). 56 contract tests green (392 suite total).
 
-### 1.15 Stage-1 exit gate
-- All ten ports have working adapters
-- All ADR statuses: `LOCKED` except ADR-010 (`OPEN`, deferred to pre-Phase-6.2)
-- BUILD_LOG shows every step above with timestamps
-- **DoD:** `make stage1-gate` script runs full port contract suite; all green.
+### 1.15 Stage-1 exit gate (landed 2026-07-29 23:12 EDT)
+- All **eleven** ports have working adapters (SearchPort §1.1 / LLMPort §1.2 / EventBusPort §1.4 / SecretsPort §1.5 / ObservabilityPort §1.6 / VectorPort §1.7 / MemoryPort §1.8 / DataPort §1.10 / ResourcePort §1.11 / NotificationPort §1.12 / FrontendContractPort §1.14 — §1.13 slot absorbed by §1.11 per ADR-029)
+- All ADR statuses: **Ratified v25** / **Ratified** / **LOCKED** except ADR-010 (**OPEN**, deferred to pre-Phase-6.2), audited against `docs/adrs/README.md` summary table
+- BUILD_LOG shows every Stage-1 sub-stage (1.1 through 1.14, minus the aspirational §1.9 and the §1.13-satisfied-at-§1.11 slots) with America/Detroit timestamps
+- **DoD:** `make stage1-gate` runs `scripts/stage1_gate.py` — audits eleven ports+adapters+contract-tests, audits ADR statuses via `docs/adrs/README.md`, audits BUILD_LOG per-sub-stage entries, runs full pytest suite — all four criteria green. **PASS** (392/392 tests).
 
 ---
 
