@@ -411,6 +411,40 @@
 - **ADR:** ADR-028
 - **Logged:** 2026-07-29 22:35 EDT
 
+### ResourcePort
+
+#### aiosqlite (`omnilib/aiosqlite`) — `VENDORED`
+- **Source:** https://github.com/omnilib/aiosqlite
+- **Commit / Version:** `>=0.20` (declared in `pyproject.toml` at Stage 1.11)
+- **License:** MIT (verified via `gh api repos/omnilib/aiosqlite` on 2026-07-29; last push 2026-03-01, active)
+- **Kosmos location:** runtime dep; lazy-imported inside `adapters/resource/sqlite/adapter.py::AioSqliteStorage.open`
+- **Port(s):** `ResourcePort` (Storage seam)
+- **Modifications:** none — upstream driver used unmodified.
+- **Notes:** primary durable Storage backend at Stage 1.11. Opens one shared connection at adapter startup, enables `PRAGMA journal_mode=WAL`, reuses it for the whole adapter lifecycle (per spec §16 SQLite lifecycle rule). Contract tests use the pure-stdlib `InMemoryStorage` double so `aiosqlite` is not required to run the port's Protocol-conformance suite.
+- **ADR:** ADR-029
+- **Logged:** 2026-07-29 22:40 EDT
+
+#### APEX `ResourceProtocol` pattern (`rmholston420/Rigpa-LMS`) — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (files: `backend/src/rigpa/domains/apex/protocols.py`, `.../models.py`, `.../service.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-resource/`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `ports/resource.py` (Protocol surface, six canonical kinds enum, Decimal balance semantics)
+- **Port(s):** `ResourcePort`
+- **Modifications:** dropped SQLAlchemy substrate (Rigpa's `Resource` ORM depends on `rigpa.db.base` + multi-tenant Users FK — domain-locked, incompatible with Kosmos single-user local-first per project custom instructions); reused pattern (six canonical kinds enum: time/money/attention/compute/knowledge/energy; `can_allocate/allocate/replenish` signatures; `NUMERIC(20,4)` Decimal precision preserved on the Port surface); made verbs async; added Q1=B priority-queue verbs (`enqueue`/`peek`/`dequeue`/`cancel`) per spec §172 fixed-order arbitration; added zero-trust port-level guard on all writes.
+- **Notes:** matches ADR-028's rejection of Rigpa's Knowsys-domain-locked schema for the same domain-locking reason. Kosmos ports the pattern, not the ORM.
+- **ADR:** ADR-029
+- **Logged:** 2026-07-29 22:40 EDT
+
+#### Rigpa-v2 priority-queue router pattern — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-v2 (file: `backend/src/rigpa/routers/priority_queue.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-resource/priority_queue.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `adapters/resource/sqlite/adapter.py` (priority-queue arbitration inside `SqliteResourceAdapter`)
+- **Port(s):** `ResourcePort` (priority-queue verbs)
+- **Modifications:** dropped FastAPI/Pydantic REST substrate (donor is HTTP-router-shaped, Kosmos ResourcePort is called in-process by plugins); reused pattern (UUID-keyed queue rows, `enqueue`/`peek`/`dequeue`/`cancel` verb naming, `(priority DESC, enqueued_at ASC)` ordering); replaced threaded in-memory dict with async SQLite (via `Storage` seam) so restarts don't wipe reservations (Build-Sequence §1.13 DoD + DR-drill §187 restart-durability); constrained donor's `priority: int 1-100` open scale to the fixed three-class `PriorityClass` IntEnum per spec §172 (`PHROUROS_ANOMALY=100 > TEKTOS_ACTIVE=50 > BACKGROUND=10`).
+- **ADR:** ADR-029
+- **Logged:** 2026-07-29 22:40 EDT
+
 ---
 
 ## Governance (Praxis / Phrouros)

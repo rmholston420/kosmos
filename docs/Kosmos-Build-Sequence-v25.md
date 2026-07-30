@@ -118,17 +118,18 @@ Write pure Python `Protocol` interfaces (no implementations) at `ports/`:
 - **DoD:** `DataPort` full three-verb surface implemented; `FilesystemDataAdapter` composes `Canonicalizer`/`Signer`/`Storage` Protocol seams; canonical envelopes round-trip losslessly (recompute `canonical_hash` ≡ stored `canonical_hash`); `check_format_health` flags hash-tampering; `migrate_schema` never-overwrite guard live (idempotent same-hash re-runs allowed, collision raises `MigrationTargetExists`); ADR-028 status = `Ratified v25`; contract tests green (47 tests, cumulative 223/223).
 - **Locked:** 2026-07-29 EDT (ADR-028); primary Stage 1.10 signer is `NoOpSigner` — envelopes are hash-anchored, signatures activate at Stage 5.
 
-### 1.11 VectorPort adapter — Qdrant (already landed at Stage 1.7 per ADR-026)
-- **Status:** Historically listed here in the aspirational sequence; the actual landing shipped at Stage 1.7 with ADR-026. Retained as a numbering-slot placeholder; DoD satisfied.
-- **DoD:** Qdrant up in Compose; `VectorPort.upsert/query` round-trip test green. ✔ (Stage 1.7)
+### 1.11 ResourcePort adapter — APEX substrate + priority queue (ADR-029)
+- **Action:** Ship full ResourcePort surface (spec §4.1 line 92 verbs + priority-queue verbs `enqueue`/`peek`/`dequeue`/`cancel` per spec §172). SQLite primary (WAL, `aiosqlite>=0.20` MIT) with pluggable `Storage` Protocol seam (`InMemoryStorage` test double). Six canonical `ResourceKind` enum (time/money/attention/compute/knowledge/energy). Fixed priority order: `PHROUROS_ANOMALY` > `TEKTOS_ACTIVE` > `BACKGROUND`. Non-bypassable port-level zero-trust guard rejects missing/invalid `kind`/`amount`/`intent`/`priority_class`/`requester`. Decimal balance precision preserved end-to-end (no float drift). Landed at Stage 1.11 instead of the aspirational §1.13 slot; §1.13 marked satisfied by this landing.
+- **DoD:** Attempt to reserve 40 GB VRAM on a 32 GB card → clean rejection (Build-Sequence §1.13 DoD). 54 contract tests green.
+- **Locked:** 2026-07-29 EDT (ADR-029).
 
 ### 1.12 NotificationPort adapter — algedonic channel
 - **Action:** Direct plugin → kernel dashboard, bypasses coordination latency
 - **DoD:** Priority alert delivered within 500ms end-to-end.
 
-### 1.13 ResourcePort adapter — GPU/RAM reservation
-- **Action:** Slot-based reservation table (SQLite-backed); rejects over-subscription
-- **DoD:** Attempt to reserve 40GB VRAM on a 32GB card → clean rejection.
+### 1.13 ResourcePort adapter — GPU/RAM reservation (satisfied at Stage 1.11 per ADR-029)
+- **Status:** Historically listed here in the aspirational sequence; the actual landing shipped at Stage 1.11 with ADR-029. Retained as a numbering-slot placeholder; DoD satisfied.
+- **DoD:** Attempt to reserve 40GB VRAM on a 32GB card → clean rejection. ✔ (Stage 1.11)
 
 ### 1.14 FrontendContractPort adapter — declarative UI schema
 - **Action:** Plugins publish UI descriptors; kernel dashboard renders them (React + shadcn/ui)

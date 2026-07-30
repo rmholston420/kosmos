@@ -22,6 +22,7 @@ dependencies = [
     "agent-memory-guard==0.2.2",
     "rfc8785>=0.1.4",
     "cryptography>=49",
+    "aiosqlite>=0.20",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +38,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["ports", "adapters", "adapters.llm", "adapters.llm.ollama", "adapters.llm.llama_swap", "adapters.search", "adapters.search.searxng", "adapters.event_bus", "adapters.event_bus.valkey", "adapters.secrets", "adapters.secrets.age_file", "adapters.observability", "adapters.observability.otel_stack", "adapters.vector", "adapters.vector.qdrant", "adapters.memory", "adapters.memory.dozerdb", "adapters.data", "adapters.data.filesystem"]
+packages = ["ports", "adapters", "adapters.llm", "adapters.llm.ollama", "adapters.llm.llama_swap", "adapters.search", "adapters.search.searxng", "adapters.event_bus", "adapters.event_bus.valkey", "adapters.secrets", "adapters.secrets.age_file", "adapters.observability", "adapters.observability.otel_stack", "adapters.vector", "adapters.vector.qdrant", "adapters.memory", "adapters.memory.dozerdb", "adapters.data", "adapters.data.filesystem", "adapters.resource", "adapters.resource.sqlite"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
