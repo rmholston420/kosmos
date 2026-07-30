@@ -1242,3 +1242,21 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. `TrialMetrics` schema unchanged — the LOCKED Stage 6.2 6-metric contract is preserved (thermal peak is operational, not scored). No new ports, no ADR-029 ResourcePort adapter changes yet — cooldown remains inside the eval harness. Vendor tree unchanged. No monkey-patching.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** IN PROGRESS. Trial 3 was mid-supervisor loop when SIGINT fired at 12:22 EDT — no artifact was written for trial 3 in this run; trials 1 and 2 completed and are on disk (`trial_01_e283dd.json`, `trial_02_25c372.json`). Once the cooldown fix lands on Colossus, a fresh 3-trial run with defaults should complete inside the thermal envelope. Preliminary look at trials 1+2: `trajectory` shows only `{"notes": []}` and no MCP tool calls were emitted, meaning ODR answered from parametric knowledge despite the anchored MCP-usage prompt from commit `4db2104`. If the fresh 3-trial run produces the same MCP-empty trajectory, the F1–F6 rubric grade will be near the Stage 6.2 baseline and Stage 6.3.1 alone will not clear the mean >=4/6 threshold — escalation path is Stage 6.3.2 (MCP retrieval gate) rather than model swap.
+
+## 2026-07-30 12:32 EDT — Stage 6.3.1 · anchored-prompt benchmark run rated: 0/6 (n=2), threshold missed, escalate to 6.3.2
+
+- **Stage / plugin / port:** Stage 6.3.1 · Zetesis inner-loop ODR substrate tuning (prompt anchoring outcome).
+- **What changed:** Ran 3-trial ODR benchmark with cooldown-enabled runner against the LOCKED Stage 6.2 substrate plus anchored-prompt authoring from commit `4db2104`. Trials 1 and 2 completed cleanly (75.6s / 48.4s, peak temps 83 C / 85 C, cooldown pulled to 40-42 C between them, envelope held). Trial 3 aborted mid-run with `KeyError: 'reflection'` — vendor bug in `vendor/adr_010/open_deep_research/src/open_deep_research/deep_researcher.py` line 275 (`tool_call["args"]["reflection"]` with no fallback). The 32B Ollama model freelanced the argument key when calling ODR's `think_tool`; ODR upstream assumes strict schema conformance from hosted models. Not our code.
+
+- **Blind F1-F6 rating written to** `ops/benchmarks/artifacts/adr-010-2026-07-30/odr/RATING_STAGE_6_3_1.md`. Score summary:
+  - Trial 1: 0/6. F1 (packaging) inverted — claims DozerDB is a full source-tree fork. F3/F4 assign AGPLv3 to Community and DozerDB (both are GPLv3). Cites nonexistent repo `github.com/dozermapping/dozerdb`. F2/F6 absent.
+  - Trial 2: 0/6. F1 correct in prose (says "runtime-loaded extension/plugin") but supporting URL is nonexistent `github.com/dozerdb/dozerdb`; per rubric "citing an unrelated URL scores 0." F4 inverted (calls DozerDB "commercial/proprietary" — it is GPLv3). F6 anti-covered (positively claims high-limit store class as a DozerDB deliverable, which F6 explicitly negates).
+  - Mean: 0/12 = 0.0% on n=2 valid trials. Stage 6.3.1 threshold was mean >=4/6.
+  - MCP tool call count: 0 across both completed trials. `trajectory` is `[{"notes": []}]`. Model received the anchored prompt but bypassed tool use entirely, answering from parametric memory (and hallucinating URLs).
+
+- **Files touched:**
+  - `ops/benchmarks/artifacts/adr-010-2026-07-30/odr/RATING_STAGE_6_3_1.md` (new — 70 lines: blind rating table + interpretation + escalation path)
+  - Trial artifacts remain on disk unmodified.
+- **Ports / adapters affected:** none. Vendor tree unchanged. Substrate config unchanged.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** Stage 6.3.1 fails threshold on n=2 valid trials by a wide margin. Escalate to Stage 6.3.2 (MCP retrieval gate: runtime enforcement that no final answer may be emitted until at least N successful MCP tool calls have executed and their results have been returned into model context). Do NOT escalate to Stage 6.3.3 (model-swap ADR) yet — two variables remain to exhaust before concluding qwen2.5:32b-instruct-q4_K_M is the wrong model (retrieval gate + higher-precision quantization q5_K_M at ~22 GB VRAM). Also: land runner retry-on-error before the 6.3.2 benchmark run so Trial-3-style vendor bugs don't invalidate that sample too.
