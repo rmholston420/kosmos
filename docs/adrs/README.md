@@ -29,6 +29,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-018 | `ADR-018-oikos-benefit-references.md` | sure/Maybe rejected; CMSgov/18F as references | Ratified | Phase 5.3 |
 | ADR-019 | `ADR-019-approval-ux.md` | Approval UX specification | Ratified | Phase 3 |
 | ADR-020 | `ADR-020-tektohs-migration.md` | TektOHs v18 → Tektos v1 migration | Ratified (N/A greenfield) | Tektos Phase 3 |
+| ADR-021 | `ADR-021-searchport-introduction.md` | Introduce SearchPort as 11th formal port | **Ratified v25** | Stage 1.1 |
 
 ## The one remaining open decision
 

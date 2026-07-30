@@ -21,6 +21,24 @@
 
 ### LLM stack
 
+#### Ollama (consolidated adapter) — `VENDORED (Stage 1.1)`
+- **Source (upstream runtime):** https://github.com/ollama/ollama (service; not vendored — runs as system service)
+- **Adapter donor sources consolidated:**
+  - [Rigpa-LMS/backend/src/rigpa/core/llm/ollama.py](https://github.com/rmholston420/Rigpa-LMS/blob/main/backend/src/rigpa/core/llm/ollama.py) — most complete: chat + generate + embed + model mgmt + lifecycle + singleton
+  - [Rigpa-LMS/backend/src/rigpa/domains/integrations/ollama.py](https://github.com/rmholston420/Rigpa-LMS/blob/main/backend/src/rigpa/domains/integrations/ollama.py) — model list/pull/delete (folded into core)
+  - [axiom/packages/axiom_providers/ollama.py](https://github.com/rmholston420/axiom/blob/main/packages/axiom_providers/ollama.py) — adds streaming (`generate_stream` via `httpx.stream`)
+- **License:** MIT (Ollama upstream); donor code is user-authored under `rmholston420/*` (relicensable)
+- **Kosmos location:** `adapters/llm/ollama/`
+- **Port(s):** `LLMPort`
+- **Modifications from consolidation:**
+  - Base = Rigpa `core/llm/ollama.py` (async client + singleton + full API coverage)
+  - Add streaming from axiom (`generate_stream`, `chat_stream`)
+  - Drop Rigpa `domains/integrations/ollama.py` typed model schemas (fold into core; single `list_models` returning list[dict])
+  - Keyword-only kwargs throughout (align with Kosmos convention seen in axiom)
+  - Wrap all methods behind `LLMPort` Protocol
+- **ADR:** ADR-012 (donor adapter consolidation)
+- **Logged:** 2026-07-29 21:05 EDT
+
 #### llama-swap — `PLANNED`
 - **Source:** https://github.com/mostlygeek/llama-swap
 - **Commit / Version:** TBD (pin latest at Stage 1.3)
@@ -75,6 +93,28 @@
 - **Kosmos location:** deployed via Docker Compose; adapter at `adapters/vector/qdrant/`
 - **Port(s):** VectorPort
 - **Logged:** —
+
+### Search
+
+#### SearXNG (consolidated adapter) — `VENDORED (Stage 1.1)`
+- **Source (upstream runtime):** https://github.com/searxng/searxng (service; not vendored — runs via Docker Compose)
+- **Adapter donor sources consolidated:**
+  - [Rigpa-LMS/backend/src/rigpa/domains/integrations/searxng.py](https://github.com/rmholston420/Rigpa-LMS/blob/main/backend/src/rigpa/domains/integrations/searxng.py) — JSON-only, typed `SearchResponse`, engine list, language param
+  - [axiom/packages/axiom_providers/searxng.py](https://github.com/rmholston420/axiom/blob/main/packages/axiom_providers/searxng.py) — JSON-first + HTML-fallback parser for 403 responses, User-Agent header
+- **License:** AGPL-3.0 (SearXNG upstream — service only, not linked into Kosmos code); donor adapters user-authored (relicensable)
+- **Kosmos location:** `adapters/search/searxng/`
+- **Port(s):** `SearchPort` (new, per ADR-021)
+- **Modifications from consolidation:**
+  - Base = Rigpa adapter (typed response, engine list, language)
+  - Add axiom's HTML fallback for `format=json` 403 responses (adapter-internal)
+  - Add axiom's User-Agent header (`KosmosSearchAdapter/0.1 (+local; rmholston420/kosmos)`)
+  - Add `provenance` field to `SearchResponse` (mandatory per ADR-021 for zero-trust memory writes)
+  - Add `latency_ms` timing
+  - Return typed dataclasses from `ports/search.py` (not adapter-local classes)
+  - Wrap behind `SearchPort` Protocol
+- **Runtime note:** SearXNG service runs in its own container; AGPL applies only to the service binary, not to Kosmos's HTTP-client adapter. Verify at deploy.
+- **ADR:** ADR-012 (consolidation) + ADR-021 (SearchPort introduction)
+- **Logged:** 2026-07-29 21:05 EDT
 
 ### Event bus
 

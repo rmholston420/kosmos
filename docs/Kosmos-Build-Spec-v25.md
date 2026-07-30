@@ -78,7 +78,7 @@ The kernel is System 5 + a System 2/3 coordination layer; every plugin is a Syst
 
 Four governing principles: Ports & Adapters everywhere; black-box modules with stable APIs; minimal, permanently minimal core; software design is format design.
 
-### 4.1 Formal Port Interfaces (Ten)
+### 4.1 Formal Port Interfaces (Eleven)
 
 | Port | Adapter (primary → fallback) | Contract |
 |---|---|---|
@@ -92,6 +92,7 @@ Four governing principles: Ports & Adapters everywhere; black-box modules with s
 | `ResourcePort` | APEX `ResourceProtocol` | `can_allocate()`, `allocate()`, `replenish()`, `priority_queue_position()` |
 | `DataPort` | JSON-LD canonical export | `export_canonical()`, `check_format_health()`, `migrate_schema()` |
 | `NotificationPort` | Kernel notification router (in-app + optional SMS/ntfy) | `notify()`, `subscribe_channel()`, `ack_receipt()` |
+| `SearchPort` | Consolidated SearXNG adapter (JSON-first, HTML fallback for 403); future backends swappable (Brave/Kagi/Tavily/local Whoosh) | `search()`, `is_healthy()` — see ADR-021 |
 
 Every port is versioned independently (semver, major-bump = Tier-2 gate); a superseded major version remains supported for two build stages or six months, whichever is longer. Contract tests are versioned alongside the port so old and new versions run concurrently during deprecation. `PORT_CONTRACTS.md` carries a version-history column plus `ui_parity_status`.
 
@@ -315,6 +316,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-018 | Sure/Maybe Finance Rejection + CMSgov/18F Design References for Oikos Rules Engine | Ratified | Phase 5.3 (Oikos) |
 | ADR-019 | Approval UX Specification | Ratified | Phase 3 (with UI shell) |
 | ADR-020 | TektOHs v18 → Tektos v1 Data Migration Plan | Ratified (N/A if greenfield) | Tektos Phase 3 |
+| ADR-021 | Introduce SearchPort as 11th Formal Port | **Ratified v25** | Stage 1.1 |
 
 ### 17.1 UI Parity Rule (ADR-014, in-line summary)
 

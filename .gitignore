@@ -19,6 +19,12 @@ venv/
 # OS
 Thumbs.db
 
+# Test / build artifacts
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
 # Kosmos benchmarks / ephemeral
 ops/benchmarks/*.tmp
 ops/scratch/
