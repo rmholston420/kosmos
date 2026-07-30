@@ -57,3 +57,32 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** SearchPort declared and satisfied by SearxngAdapter
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Search — SearXNG entry added as VENDORED (Stage 1.1); references ADR-012 + ADR-021
 - **Stop-condition status:** met — 8 contract tests pass including `isinstance(adapter, SearchPort)` runtime-protocol check, empty-response-on-failure guarantee, provenance-populated invariant, keyword-only kwargs signature
+
+---
+
+## 2026-07-29 21:20 EDT — ADR-022 authored: LLMPort surface expansion
+
+- **Stage / plugin / port:** Stage 1.2 · LLMPort
+- **What changed:** Authored ADR-022 to amend Kosmos-Build-Spec-v25.md §4.1's LLMPort row from the aspirational 3-method surface (`complete/stream/embed`) to the donor-derived 10-method surface (`generate/generate_text/chat/generate_stream/embed/list_models/pull_model/delete_model/is_healthy/close`). Option B chosen over A (verbatim spec) and C (split into LLMPort + ModelRegistryPort) — rationale: single-user local-first Colossus target means model management is a first-class user op, not admin-only; C's second port adds fault-injection/contract-test surface for what is functionally one Ollama process.
+- **Files touched:**
+  - `docs/adrs/ADR-022-llmport-surface-expansion.md` (new)
+  - `docs/adrs/README.md` (ADR-022 row)
+  - `docs/Kosmos-Build-Spec-v25.md` §4.1 LLMPort Contract column expanded; §17 ADR-022 row
+  - `docs/PORTING_LEDGER.md` §Ollama entry references ADR-022
+- **Ports / adapters affected:** LLMPort surface defined
+- **PORTING_LEDGER / ADR updated:** ADR-022 Ratified v25
+- **Stop-condition status:** met
+
+---
+
+## 2026-07-29 21:22 EDT — Stage 1.2 LLMPort Protocol formalized; OllamaAdapter binding confirmed
+
+- **Stage / plugin / port:** Stage 1.2 · LLMPort
+- **What changed:** Implemented `ports/llm.py` (LLMPort Protocol matching ADR-022 surface). Updated OllamaAdapter docstring to reference the port. Extended contract test to assert `isinstance(OllamaAdapter(), LLMPort)` at runtime; added coverage for method presence, `generate_stream` returning `AsyncIterator`, keyword-only-kwargs discipline on `generate/chat/embed/pull_model/delete_model`, non-throwing `is_healthy`, and singleton behavior.
+- **Files touched:**
+  - `ports/llm.py` (new)
+  - `adapters/llm/ollama/adapter.py` (docstring only)
+  - `adapters/llm/ollama/test_contract.py` (rewritten; 12 tests now vs. 4 smoke tests before)
+- **Ports / adapters affected:** LLMPort declared and satisfied by OllamaAdapter
+- **PORTING_LEDGER / ADR updated:** — (ADR-022 already logged above)
+- **Stop-condition status:** met — 20/20 tests pass across `adapters/` (Ollama 12 + SearXNG 8)

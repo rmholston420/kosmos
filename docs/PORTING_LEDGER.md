@@ -36,7 +36,7 @@
   - Drop Rigpa `domains/integrations/ollama.py` typed model schemas (fold into core; single `list_models` returning list[dict])
   - Keyword-only kwargs throughout (align with Kosmos convention seen in axiom)
   - Wrap all methods behind `LLMPort` Protocol
-- **ADR:** ADR-012 (donor adapter consolidation)
+- **ADR:** ADR-012 (donor adapter consolidation) + ADR-022 (LLMPort surface expansion — defines the 10-method Protocol this adapter satisfies)
 - **Logged:** 2026-07-29 21:05 EDT
 
 #### llama-swap — `PLANNED`

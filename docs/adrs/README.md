@@ -30,6 +30,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-019 | `ADR-019-approval-ux.md` | Approval UX specification | Ratified | Phase 3 |
 | ADR-020 | `ADR-020-tektohs-migration.md` | TektOHs v18 → Tektos v1 migration | Ratified (N/A greenfield) | Tektos Phase 3 |
 | ADR-021 | `ADR-021-searchport-introduction.md` | Introduce SearchPort as 11th formal port | **Ratified v25** | Stage 1.1 |
+| ADR-022 | `ADR-022-llmport-surface-expansion.md` | LLMPort surface expansion (spec §4.1 tightening) | **Ratified v25** | Stage 1.2 |
 
 ## The one remaining open decision
 

@@ -42,9 +42,10 @@ def _default_model() -> str:
 class OllamaAdapter:
     """Async client for the local Ollama HTTP API.
 
-    Implements the LLMPort protocol (see ports/llm.py once defined; the
-    current Stage-1.1 consolidation predates LLMPort's formal ports/llm.py
-    file — subsequent stage adds it and this adapter's ABC binding).
+    Implements the LLMPort Protocol (see `ports/llm.py`; formalized in
+    Stage 1.2 per ADR-022 — LLMPort surface expansion). Contract test in
+    `test_contract.py` asserts `isinstance(OllamaAdapter(), LLMPort)` at
+    runtime.
     """
 
     def __init__(

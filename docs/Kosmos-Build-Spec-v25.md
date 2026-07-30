@@ -82,7 +82,7 @@ Four governing principles: Ports & Adapters everywhere; black-box modules with s
 
 | Port | Adapter (primary → fallback) | Contract |
 |---|---|---|
-| `LLMPort` | vLLM (nightly-wheel/CUDA 13 on Blackwell) → llama.cpp, fronted by **llama-swap** (fallback: llama.cpp router mode) | `complete()`, `stream()`, `embed()` |
+| `LLMPort` | vLLM (nightly-wheel/CUDA 13 on Blackwell) → llama.cpp, fronted by **llama-swap** (fallback: llama.cpp router mode) | `generate()`, `generate_text()`, `chat()`, `generate_stream()`, `embed()`, `list_models()`, `pull_model()`, `delete_model()`, `is_healthy()`, `close()` — see **ADR-022** |
 | `MemoryPort` | Graphiti + Neo4j/CIDOC CRM on **DozerDB fork**, wrapped in Agent Memory Guard middleware | `write_event()`, `query_temporal()`, `link_entities()`, `quarantine_write()` |
 | `VectorPort` | Qdrant | `upsert()`, `search()`, `delete()`, `snapshot()` |
 | `EventBusPort` | Valkey/Redis Streams | `publish()`, `subscribe()`, `ack()` |
@@ -317,6 +317,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-019 | Approval UX Specification | Ratified | Phase 3 (with UI shell) |
 | ADR-020 | TektOHs v18 → Tektos v1 Data Migration Plan | Ratified (N/A if greenfield) | Tektos Phase 3 |
 | ADR-021 | Introduce SearchPort as 11th Formal Port | **Ratified v25** | Stage 1.1 |
+| ADR-022 | LLMPort Surface Expansion (spec §4.1 tightening) | **Ratified v25** | Stage 1.2 |
 
 ### 17.1 UI Parity Rule (ADR-014, in-line summary)
 
