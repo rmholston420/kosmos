@@ -1,4 +1,4 @@
-.PHONY: help test stage1-gate eval-gate deepswe-fetch deepswe-gate
+.PHONY: help test stage1-gate eval-gate deepswe-fetch deepswe-gate ingest-doc
 
 PY := .venv/bin/python
 
@@ -9,6 +9,7 @@ help:
 	@echo "  eval-gate      Run the Pier eval-harness smoke fixture (Stage 3.8, ADR-042)"
 	@echo "  deepswe-fetch  Hydrate the pinned DeepSWE subset into .eval-cache/ (Stage 3.9)"
 	@echo "  deepswe-gate   Run the DeepSWE subset through Pier (Stage 3.9, ADR-007-DeepSWE)"
+	@echo "  ingest-doc     Ingest one document via docling + DataPort (Stage 3.10, ADR-043)"
 
 test:
 	$(PY) -m pytest
@@ -28,3 +29,8 @@ deepswe-gate: deepswe-fetch
 	$(PY) scripts/deepswe_run.py \
 		--cache-dir .eval-cache/deepswe \
 		--agent nop --env docker
+
+ingest-doc:
+	$(PY) scripts/docling_ingest.py \
+		--path plugins/tektos/tests/fixtures/docling/sample.html \
+		--out-root .ingest-cache/docling

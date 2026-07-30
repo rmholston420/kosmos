@@ -831,11 +831,15 @@
 | `arktype-json-schema-refs-dependencies` | typescript | `arktypeio/arktype` | `04355e8b26d1ad5264ef62314a2bc46c4de58ed8` | MIT |
 | `awilix-async-container-initialization` | typescript | `jeffijoe/awilix` | `82ac179c1de4c216c4e333093044fac643303f0c` | MIT |
 
-#### docling — `PLANNED`
-- **Source:** https://github.com/DS4SD/docling
+#### docling — `VENDORED (dev dep, Stage 3.10)`
+- **Source:** https://github.com/docling-project/docling
+- **Commit / Version:** `ba8251e9cda84bab44cebe3b884119d3f50cb12a` (PyPI `docling==2.116.0`)
 - **License:** MIT
-- **Port(s):** DataPort
-- **Logged:** —
+- **Kosmos location:** `pyproject.toml` `[project.optional-dependencies] ingest = ["docling==2.116.0"]` (dev-only; lazy import inside `plugins/tektos/ingest/harness.py::resolve_default_converter_factory`)
+- **Port(s):** DataPort (envelope-first per ADR-023 — no new port surface added; canonical JSON-LD emitted via `DataPort.export_canonical`)
+- **Modifications:** none — PATTERN-VENDOR (no upstream source copied; docling invoked through its own `docling.document_converter.DocumentConverter().convert(source).document.export_to_dict()` + `.export_to_markdown()` public API)
+- **ADR:** ADR-044
+- **Logged:** 2026-07-30 04:20 EDT
 
 #### ruff — `VENDORED (dev dep)`
 - **Source:** https://github.com/astral-sh/ruff
