@@ -611,6 +611,19 @@
 - **ADR:** ADR-033
 - **Logged:** 2026-07-29 23:44 EDT
 
+### Phrouros anomaly detector
+
+#### Phrouros — `GREENFIELD` (no vendored OSS)
+- **Source:** none. Phrouros is entirely greenfield Kosmos code. No permissively-licensed upstream anomaly-detection framework was adopted at Stage 2.3 — the surface is small (one real detector + three skeletons + an in-memory pub/sub feed), stdlib-only implementations satisfied every DoD, and every existing candidate (arize-phoenix, evidently, langfuse-python's client-side alerts) either drags a runtime (Postgres / cloud SaaS / OpenTelemetry heavyweight collector) or violates the local-first / single-user posture of ADR-005 / ADR-025.
+- **Commit / Version:** —
+- **License:** —
+- **Kosmos location:** `plugins/phrouros/` (detector.py, detectors/{loop,model_swap_slo,stub_degradation,bus_factor_1}.py, engine.py, errors.py, models.py, plugin.py, tests/) + `ports/trace_feed.py` (new port module — sibling to writer-only ObservabilityPort per Q2=A).
+- **Port(s):** TraceFeedPort (new, reader-only), NotificationPort (algedonic path), ResourcePort (compute reservation + fallback enqueue), EventBusPort (`phrouros.anomaly.detected` with `producer_plugin="praxis"`), FrontendContractPort (`AGENT_TRACE` panel).
+- **Modifications:** stdlib-only. `asyncio` for pub/sub + engine loop, `collections.deque` for sliding-window history in `LoopDetector`, `dataclasses` for value objects, `decimal.Decimal` for compute reservation size (32 GB VRAM per §172), `datetime` for wall-clock windowing. Zero new runtime dependencies added at Stage 2.3.
+- **Skeleton detectors:** `ModelSwapSloDetector` (§172 — Stage 3+), `StubDegradationDetector` (§273 — Stage 3+), `BusFactor1Detector` (§613 — Stage 6.5). All three raise `DetectorNotImplementedError` from `detect(...)` and `build_payload(...)`. When each stage lands, the real implementation ships in the same module and this ledger entry gets a follow-up sub-block.
+- **ADR:** ADR-034
+- **Logged:** 2026-07-30 00:15 EDT
+
 ---
 
 ## Tektos (Coding Plugin)
