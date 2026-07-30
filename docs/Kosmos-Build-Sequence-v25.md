@@ -309,9 +309,11 @@ Reference: Spec §18. This is the largest single-plugin build.
 - **DoD (met):** Three corpora ingest via `record_event`; every DoD-asserted `TemporalQuery` finds its `expected_event_ids` and rejects its `forbidden_event_ids` on the always-green fast tier; live-tier first run 37 passed / 137.29 s on Colossus with metrics recorded in `docs/PORT_CONTRACTS.md`.
 - **Tag:** `stage-4-2-complete`.
 
-### 4.3 Agent Memory Guard latest release check
-- **Action:** Immediately before Phase 3, check https://github.com/... releases for newer than v0.2.2. If newer → adopt, log to PORTING_LEDGER.
-- **DoD:** Version recorded in BUILD_LOG.
+### 4.3 Agent Memory Guard latest release check — **LANDED** (2026-07-30, ADR-048)
+- **Ports:** MemoryPort (`AmgPolicy` write-time filter)
+- **Action:** Checked upstream https://github.com/OWASP/www-project-agent-memory-guard/releases — v0.3.0 released 2026-06-10 (MCP server, CLI scanner, ML injection detector, GitHub Action, LlamaIndex + CrewAI integrations, Prometheus exporter, `Policy.tiered()` preset with default memory-class taxonomy, `SecurityEvent.source_class`/`receipt_uri`/`retire_if`). v0.3.0 public API is a strict superset of v0.2.2 (all new `MemoryGuard.write` kwargs optional; `Policy.strict()` still present). Adopted via ADR-048: `pyproject.toml` pin bumped `agent-memory-guard==0.2.2` → `==0.3.0`; concrete wrapper renamed `AmgV02Policy` → `AmgGuardPolicy` in new module `adapters/memory/dozerdb/amg_policy.py` (backcompat alias retained through Stage 5); default preset switched to `Policy.tiered()`; write kwargs `source_class`/`receipt_uri`/`cls`/`task_id`/`source` threaded through opt-in via payload keys and stripped from JSON body. MCP / CLI / GitHub Action / integrations / ML detector deliberately NOT adopted at 4.3 (each is its own future ADR).
+- **DoD (met):** Version recorded in `BUILD_LOG.md` + `PORTING_LEDGER.md` (v0.2.2 → v0.3.0 amendment with ADR-048 reference). Contract test renamed `test_amg_v02_policy_contract.py` → `test_amg_policy_contract.py` with new coverage: default-preset assertion, strict opt-in, unknown-preset fail-safe, backcompat alias resolution, all five v0.3.0 write kwargs forwarding, routing-key body stripping. 20 fast + 2 env-gated live tests; DozerDB adapter fast-tier 130 passed / 7 skipped.
+- **Tag:** `stage-4-3-complete`.
 
 ### 4.4 Superpowers KB port (adr-superpowers-kb)
 - **Action:** Superpowers as the personal-knowledge substrate under Gnosis

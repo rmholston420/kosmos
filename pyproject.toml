@@ -19,7 +19,7 @@ dependencies = [
     "qdrant-client>=1.11",
     "neo4j>=5.26",
     "graphiti-core>=0.5",
-    "agent-memory-guard==0.2.2",
+    "agent-memory-guard==0.3.0",
     "rfc8785>=0.1.4",
     "cryptography>=49",
     "aiosqlite>=0.20",

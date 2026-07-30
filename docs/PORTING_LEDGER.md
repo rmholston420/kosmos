@@ -178,20 +178,20 @@
 - **ADR:** ADR-027 + ADR-047
 - **Logged:** 2026-07-29 22:02 EDT (initial); 2026-07-30 07:45 EDT (real backend at Stage 4.2)
 
-#### agent-memory-guard v0.2.2 — `VENDORED` (Stage 1.8 stub → real backend Stage 4.2)
+#### agent-memory-guard v0.3.0 — `VENDORED` (Stage 1.8 stub → real backend Stage 4.2 → v0.3.0 bump Stage 4.3)
 - **Source:** https://github.com/OWASP/www-project-agent-memory-guard
-- **Commit / Version:** PyPI `agent-memory-guard==0.2.2` (pinned exactly; verified upstream May 3, 2026; v0.3.0 not yet shipped)
+- **Commit / Version:** PyPI `agent-memory-guard==0.3.0` (pinned exactly; upstream release https://github.com/OWASP/www-project-agent-memory-guard/releases/tag/v0.3.0 published 2026-06-10; bumped from v0.2.2 at Stage 4.3 per ADR-048)
 - **License:** OWASP Foundation (PyPI-shipped Python package; Python code under permissive OWASP terms; free redistribution)
-- **Kosmos location:** `adapters/memory/dozerdb/amg_v02_policy.py` (real `AmgV02Policy` at Stage 4.2 wrapping `MemoryGuard(policy=Policy.strict())` with `write`/`snapshot`/`rollback` bindings); `adapters/memory/dozerdb/adapter.py` composes it behind the `AmgPolicy` Protocol
+- **Kosmos location:** `adapters/memory/dozerdb/amg_policy.py` hosts `AmgGuardPolicy` (real v0.3.0 wrapper — `MemoryGuard(policy=Policy.tiered()).write/snapshot/rollback` with optional `source_class`/`receipt_uri`/`cls`/`task_id`/`source` write kwargs threaded through `evaluate(payload)`); `adapters/memory/dozerdb/amg_v02_policy.py` reduced to a one-line re-export shim; `AmgV02Policy` retained as backwards-compat alias through Stage 5; `adapters/memory/dozerdb/adapter.py` composes it behind the `AmgPolicy` Protocol
 - **Port(s):** `MemoryPort` (write-time policy filter, second layer after non-bypassable port-level guard)
 - **Modifications:**
   - Imported lazily behind `AmgPolicy` Protocol; contract tests use `NoOpAmgPolicy` / `AlwaysBlockAmgPolicy` / `AlwaysQuarantineAmgPolicy`
-  - Policy loaded from `ops/agent-memory-guard/policy.yaml` at adapter construction (YAML file lands with Compose)
-  - AMG v0.2.2 provides SHA-256 cryptographic baseline + declarative YAML policy engine (`allow` / `redact` / `quarantine` / `block`) per spec §112
-  - **Standing action per spec §643 + custom-instructions:** re-check https://github.com/OWASP/www-project-agent-memory-guard/releases immediately before Gnosis Phase 3 for v0.3.0 (LlamaIndex/CrewAI adapters, Redis/PostgreSQL backends, Prometheus metrics)
-  - **Stage 4.2 (ADR-047):** stub `NoOpAmgPolicy` replaced by real `AmgV02Policy` at `adapters/memory/dozerdb/amg_v02_policy.py`. Contract fakes (`AlwaysAllow`/`AlwaysBlock`/`AlwaysQuarantine`) preserved for always-green Protocol-conformance tests.
-- **ADR:** ADR-027 + ADR-047
-- **Logged:** 2026-07-29 22:02 EDT (initial); 2026-07-30 07:45 EDT (real backend at Stage 4.2)
+  - Policy loaded from `ops/agent-memory-guard/policy.yaml` at adapter construction (YAML file lands with Compose); overrides the built-in preset when set
+  - AMG provides SHA-256 cryptographic baseline + declarative YAML policy engine (`allow` / `redact` / `quarantine` / `block`) per spec §112
+  - **Stage 4.2 (ADR-047):** stub `NoOpAmgPolicy` replaced by real `AmgV02Policy` at `adapters/memory/dozerdb/amg_v02_policy.py` wrapping `Policy.strict()`. Contract fakes (`AlwaysAllow`/`AlwaysBlock`/`AlwaysQuarantine`) preserved for always-green Protocol-conformance tests.
+  - **Stage 4.3 (ADR-048):** bumped `agent-memory-guard==0.2.2` → `agent-memory-guard==0.3.0`. Concrete wrapper class renamed `AmgV02Policy` → `AmgGuardPolicy` in new module `adapters/memory/dozerdb/amg_policy.py`; default policy preset switched from `Policy.strict()` to v0.3.0's `Policy.tiered()` (new default memory-class taxonomy); `MemoryGuard.write` optional kwargs `source_class`/`receipt_uri`/`cls`/`task_id`/`source` are threaded through from `AmgGuardPolicy.evaluate(payload)` (opt-in per payload; omitted keys default to AMG's v0.2.2 shape). MCP server / CLI scanner / GitHub Action / LlamaIndex + CrewAI integrations / ML injection detector / Prometheus exporter deliberately **not adopted** at 4.3 — each is its own trade-off surface and belongs behind a future ADR when the need arrives (out of scope for one-person-module bump).
+- **ADR:** ADR-027 + ADR-047 + ADR-048
+- **Logged:** 2026-07-29 22:02 EDT (initial); 2026-07-30 07:45 EDT (real backend at Stage 4.2); 2026-07-30 07:56 EDT (v0.3.0 bump at Stage 4.3)
 
 #### Rigpa-LMS MemoryBridge + GraphClient donor pattern — `VENDORED` (Stage 1.8)
 - **Source:** https://github.com/rmholston420/Rigpa-LMS (user's own repo; permissively-licensed donor)

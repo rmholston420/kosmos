@@ -4,7 +4,7 @@ Architecture (three injectable Protocol seams; matches ADR-025/026 pattern):
 
     DozerDbMemoryAdapter                          (implements MemoryPort)
       ├── GraphBackend         (Cypher I/O — DozerDB in prod, in-mem in tests)
-      ├── AmgPolicy            (Agent Memory Guard v0.2.2 in prod, no-op in tests)
+      ├── AmgPolicy            (Agent Memory Guard v0.3.0 in prod, no-op in tests)
       └── TemporalIndex        (Graphiti in prod, in-mem in tests)
 
 Plugins MUST depend on `ports.memory.MemoryPort` only — never on
@@ -300,10 +300,11 @@ class DozerDbMemoryAdapter:
 
     Wiring is via injected `GraphBackend`, `AmgPolicy`, `TemporalIndex`
     Protocol implementations. Contract tests use in-memory backends declared
-    above; production wiring will use `DozerDbGraphBackend` (lazy `neo4j`
-    import), `AmgV02Policy` (lazy `agent_memory_guard` import), and
-    `GraphitiTemporalIndex` (lazy `graphiti_core` import) — all landed when
-    the Docker Compose ops-deploy stage arrives (spec §21).
+    above; production wiring uses `DozerDbGraphBackend` (lazy `neo4j`
+    import), `AmgGuardPolicy` (lazy `agent_memory_guard` v0.3.0 import; see
+    ADR-048 for the v0.2.2→v0.3.0 bump), and `GraphitiTemporalIndex` (lazy
+    `graphiti_core` import). The prior alias `AmgV02Policy` is retained for
+    one release cycle.
 
     Zero-trust guarantee: every write path calls
     `ports.memory.validate_zero_trust_write` before any backend I/O. See

@@ -1020,3 +1020,40 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** `MemoryPort` (three Protocol seams `GraphBackend`, `TemporalIndex`, `AmgPolicy` — signatures unchanged; only backend implementations swapped). `VectorPort` inherits Stage 1.7 measurements; benchmark deferred to Stage 4.4 Superpowers KB.
 - **PORTING_LEDGER / ADR updated:** ADR-047 authored (Ratified v25 at Stage 4.2). PORTING_LEDGER DozerDB flipped `PLANNED` → `VENDORED` with `graphstack/dozerdb:5.26.27` pin; graphiti-core + AMG entries append Stage 4.2 real-backend + ADR-047 references.
 - **Stop-condition status:** met — three corpora ingest through `record_event`; DoD-asserted `TemporalQuery`s pass on the always-green fast tier (34/34); live tier ingest+query end-to-end returns without raising (37/37 including fast, 137.29 s on Colossus 2026-07-30). Tag `stage-4-2-complete` applied on this commit.
+
+## 2026-07-30 07:56 EDT — Stage 4.3 LANDED · ADR-048 · agent-memory-guard v0.2.2 → v0.3.0 + `Policy.tiered()` default
+
+- **Stage / plugin / port:** Stage 4.3 · MemoryPort · DozerDB memory adapter · `AmgPolicy` write-time filter
+- **What changed:**
+  - **Upstream release check.** OWASP `agent-memory-guard` v0.3.0 shipped 2026-06-10 (upstream release https://github.com/OWASP/www-project-agent-memory-guard/releases/tag/v0.3.0, published on PyPI as `agent-memory-guard==0.3.0`). Highlights: MCP server, CLI scanner, ML injection detector, GitHub Action, LlamaIndex + CrewAI integrations, Prometheus exporter, `Policy.tiered()` preset with default memory-class taxonomy, `SecurityEvent.source_class`/`receipt_uri`/`retire_if`. Public API is a strict superset of v0.2.2 (all v0.3.0 `MemoryGuard.write` kwargs optional; `Policy.strict()` still present).
+  - **Adopted.** `pyproject.toml` pin bumped `agent-memory-guard==0.2.2` → `==0.3.0`. No other dep-graph change (v0.3.0 ships with the same minimal vendor dep set).
+  - **Class + module rename.** Concrete wrapper class `AmgV02Policy` → `AmgGuardPolicy` in new module `adapters/memory/dozerdb/amg_policy.py`. Old `adapters/memory/dozerdb/amg_v02_policy.py` reduced to a one-line re-export shim exposing `AmgGuardPolicy` and the backwards-compat alias `AmgV02Policy = AmgGuardPolicy`. Alias retained through Stage 5 per ADR-048 §Consequences.
+  - **Default preset switched.** Default AMG policy preset changed from `Policy.strict()` to `Policy.tiered()` — v0.3.0's new default memory-class taxonomy (session / durable / promoted) aligns with the Kosmos memory-lifecycle model exercised by the Stage 4.2 corpora. Callers wanting the v0.2.2 shape can pass `policy_preset="strict"`.
+  - **v0.3.0 write kwargs threaded.** `AmgGuardPolicy.evaluate(payload)` now extracts optional payload keys `source_class` / `receipt_uri` / `memory_class` (or `cls`) / `task_id` / `source` and forwards them as `MemoryGuard.write(...)` kwargs. Extracted keys are stripped from the JSON-serialised `value` body so routing fields never pollute the semantic write. Payloads that omit these keys keep the v0.2.2 shape.
+  - **Explicit non-adoption scope.** MCP server / CLI scanner / GitHub Action / LlamaIndex + CrewAI integrations / Prometheus exporter / ML injection detector deliberately NOT adopted at 4.3 (each is its own trade-off surface — recorded in ADR-048 §Alternatives rejected). Adopting them becomes a Stage 5+ decision when a specific need arrives.
+  - **Zero-trust fail-safe preserved.** Guard-init failure / `MemoryGuard.write` unknown error / snapshot failure still emit `AmgVerdict(decision="block")`. Unknown `policy_preset` value also blocks with a specific reason.
+  - **Contract test rewrite.** `test_amg_v02_policy_contract.py` → `test_amg_policy_contract.py` (renamed via `git mv`). New tests: default preset uses `Policy.tiered()`, explicit `policy_preset="strict"` uses `Policy.strict()`, unknown preset blocks with `unknown policy_preset` reason, backcompat alias resolves to `AmgGuardPolicy`, all five v0.3.0 write kwargs forwarded when payload provides them, kwargs omitted when payload omits them, `cls` payload key maps to `write(cls=...)`, `memory_class` takes precedence over `cls`, routing keys stripped from JSON body. Live-tier gets a second env-gated test for `policy_preset="strict"` fallback.
+  - **Test results.** `pytest adapters/memory/dozerdb/test_amg_policy_contract.py` → 20 passed / 2 env-gated live skips. Full DozerDB adapter fast tier `pytest adapters/memory/dozerdb/` → 130 passed / 7 env-gated skips. Ruff clean on all Stage 4.3 files (`amg_policy.py`, `amg_v02_policy.py` shim, `test_amg_policy_contract.py`, `__init__.py`).
+  - **Fan-out.**
+    - `docs/adrs/ADR-048-stage-4-3-amg-v03-adoption.md` authored (Ratified v25 at Stage 4.3; six-question decision block Q1..Q6; four rejected alternatives; consequences enumerated).
+    - `docs/Kosmos-Build-Spec-v25.md` §17 — ADR-048 row appended after ADR-047.
+    - `docs/adrs/README.md` — ADR-048 row appended before "The one remaining open decision" anchor.
+    - `docs/Kosmos-Build-Sequence-v25.md` §4.3 — rewritten as LANDED block referencing ADR-048.
+    - `docs/PORTING_LEDGER.md` — `agent-memory-guard` entry amended v0.2.2 → v0.3.0 with Stage 4.3 (ADR-048) sub-bullet describing rename, `Policy.tiered()` default, opt-in write kwargs, and explicit non-adoption scope.
+- **Files touched:**
+  - `pyproject.toml` (pin bump)
+  - `adapters/memory/dozerdb/amg_policy.py` (new)
+  - `adapters/memory/dozerdb/amg_v02_policy.py` (reduced to shim)
+  - `adapters/memory/dozerdb/__init__.py` (export `AmgGuardPolicy` + keep `AmgV02Policy` alias)
+  - `adapters/memory/dozerdb/adapter.py` (docstring — v0.3.0 + ADR-048 reference; `AmgGuardPolicy` named as production impl)
+  - `adapters/memory/dozerdb/test_amg_policy_contract.py` (new + rewritten via `git mv` + full-body rewrite)
+  - `docs/adrs/ADR-048-stage-4-3-amg-v03-adoption.md` (new)
+  - `docs/adrs/README.md` (ADR-048 row)
+  - `docs/Kosmos-Build-Spec-v25.md` (§17 ADR-048 row)
+  - `docs/Kosmos-Build-Sequence-v25.md` (§4.3 LANDED block)
+  - `docs/PORTING_LEDGER.md` (AMG entry v0.2.2 → v0.3.0)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwrite — points at Stage 4.4)
+- **Ports / adapters affected:** `MemoryPort` (`AmgPolicy` Protocol shape unchanged; `AmgGuardPolicy` swap-in real backend). `DozerDbMemoryAdapter` DI seams unchanged.
+- **PORTING_LEDGER / ADR updated:** ADR-048 authored (Ratified v25 at Stage 4.3). PORTING_LEDGER `agent-memory-guard` entry amended v0.2.2 → v0.3.0 with ADR-048 reference.
+- **Stop-condition status:** met — `pyproject.toml` pin bumped, `AmgGuardPolicy` wraps `MemoryGuard(policy=Policy.tiered())`, contract test coverage green, PORTING_LEDGER + BUILD_LOG record the version. Tag `stage-4-3-complete` applied on this commit. Next up: Stage 4.4 (Superpowers KB port).

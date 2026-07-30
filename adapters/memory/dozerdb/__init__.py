@@ -1,4 +1,4 @@
-"""adapters.memory.dozerdb — DozerDB-backed MemoryPort adapter (ADR-027, ADR-047)."""
+"""adapters.memory.dozerdb — DozerDB-backed MemoryPort adapter (ADR-027, ADR-047, ADR-048)."""
 
 from adapters.memory.dozerdb.adapter import (
     AlwaysBlockAmgPolicy,
@@ -12,13 +12,14 @@ from adapters.memory.dozerdb.adapter import (
     NoOpAmgPolicy,
     TemporalIndex,
 )
-from adapters.memory.dozerdb.amg_v02_policy import AmgV02Policy
+from adapters.memory.dozerdb.amg_policy import AmgGuardPolicy, AmgV02Policy
 from adapters.memory.dozerdb.dozerdb_graph_backend import DozerDbGraphBackend
 from adapters.memory.dozerdb.graphiti_temporal_index import GraphitiTemporalIndex
 
 __all__ = [
     "AlwaysBlockAmgPolicy",
     "AlwaysQuarantineAmgPolicy",
+    "AmgGuardPolicy",
     "AmgPolicy",
     "AmgV02Policy",
     "AmgVerdict",
