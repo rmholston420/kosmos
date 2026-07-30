@@ -5,8 +5,9 @@ Enforces the four §1.15 criteria in order:
 
     1. All eleven ports have a module in ``ports/`` and a working
        adapter package under ``adapters/`` with a ``test_contract.py``.
-    2. All ADR statuses are ``Ratified``/``Locked``/``Ratified v25``/``Superseded``
-       except ADR-010 which must be ``OPEN``.
+    2. All ADR statuses are ``Ratified``/``Locked``/``Ratified v25``/``Superseded``.
+       (ADR-010 landed LOCKED on 2026-07-30 after the Stage 6.2 head-to-head;
+       no ADR-010 OPEN exception is honored anymore.)
     3. ``BUILD_LOG.md`` has an entry per Stage-1 sub-stage (1.1–1.14).
     4. The full port contract suite runs green.
 
@@ -43,8 +44,9 @@ PORTS: dict[str, str] = {
     "frontend_contract": "1.14",
 }
 
-# ADR-010 is the only OPEN ADR permitted at Stage-1 exit (spec §17).
-OPEN_ADR = "ADR-010"
+# ADR-010 landed LOCKED on 2026-07-30 (Stage 6.2 head-to-head resolved).
+# No ADR is permitted OPEN at Stage-1 exit anymore (spec §17).
+OPEN_ADR = None
 
 RATIFIED_MARKERS = (
     "Ratified v25",
@@ -144,7 +146,7 @@ ADR_README_ROW_RE = re.compile(
 
 def check_adrs(report: GateReport) -> None:
     """Audit adrs/README.md summary table — the load-bearing status source."""
-    report.section("2. ADR statuses — all Ratified/Locked/Superseded except ADR-010 OPEN")
+    report.section("2. ADR statuses — all Ratified/Locked/Superseded (no ADRs OPEN post-2026-07-30)")
     adr_dir = ROOT / "docs" / "adrs"
     if not adr_dir.is_dir():
         report.fail("docs/adrs/ directory missing")
@@ -176,7 +178,7 @@ def check_adrs(report: GateReport) -> None:
         status = status_raw.strip().replace("**", "")
         checked += 1
 
-        if adr_id == OPEN_ADR:
+        if OPEN_ADR is not None and adr_id == OPEN_ADR:
             if "OPEN" not in status.upper():
                 report.fail(f"{adr_id}: expected OPEN, got {status!r}")
             else:

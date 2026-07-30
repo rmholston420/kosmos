@@ -18,7 +18,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-008 | `ADR-008-superpowers-kb-reference.md` | Superpowers as KB methodology reference | Ratified | Tektos Phase 4 |
 | ADR-008-DozerDB | `ADR-008-DozerDB-memory-port.md` | DozerDB fork as MemoryPort store | **Ratified v25** | Stage 1 |
 | ADR-009 | `ADR-009-llama-swap-primary.md` | llama-swap primary + router-mode fallback | **Ratified v25 (contingent)** | Stage 1 (benchmark-gated) |
-| ADR-010 | `ADR-010-zetesis-inner-loop-eval.md` | AREX vs. Open Deep Research inner loop | **OPEN — head-to-head pre-Phase-6.2** | Phase 6.2 |
+| ADR-010 | `ADR-010-zetesis-inner-loop-eval.md` | AREX vs. Open Deep Research inner loop — **Winner: Open Deep Research** (MIT, qwen2.5:32b + Ollama + langchain-mcp over SearXNG). AREX-Turbo rejected for Stage 6.2 (0/3 completion, thermal-blank on 65k retry); on-shelf pending Colossus thermal remediation. Six trials at `ops/benchmarks/artifacts/adr-010-2026-07-30/`. | **LOCKED 2026-07-30** | Stage 6.2 |
 | ADR-011 | `ADR-011-a2a-sdk-koinonia-transport.md` | a2a-sdk standalone transport for Koinonia | **Ratified v25** | Phase 6.3 |
 | ADR-012 | `ADR-012-donor-adapter-consolidation.md` | Consolidate ollama.py/searxng.py duplicates | **Ratified v25** | Stage 1.1 |
 | ADR-013 | `ADR-013-memory-bridge-selection.md` | Choose memory/bridge.py vs. Gnosis schema | **LOCKED** · Gnosis schema (6/6) · 2026-07-29 | Stage 1.9 |
@@ -67,7 +67,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 
 ## The one remaining open decision
 
-**ADR-010** is the only ADR left OPEN in v25. All other decisions are resolved and load-bearing on Stage-1-executable build.
+**As of 2026-07-30, no ADRs are OPEN in v25.** ADR-010 landed `LOCKED` after the Stage 6.2 head-to-head (Winner: Open Deep Research; AREX-Turbo rejected for Stage 6.2). All decisions are resolved and load-bearing on Stage-1-executable build.
 
 ## Amending an ADR
 

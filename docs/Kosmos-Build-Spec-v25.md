@@ -290,7 +290,7 @@ No plugin ships its own kernel, UI, secrets vault, notification router, or knowl
 
 ## 17. Architecture Decision Records (Consolidated Summary; Full ADRs in `adrs/`)
 
-All ADRs live in `adrs/`. The table below is the running index; full-text lives in the ADR files. Ratified ADRs are load-bearing on the build sequence. `Superseded by ADR-###` is a legitimate terminal status — the authoritative decision moves to the successor ADR; the amended file preserves the audit trail via a `> **STATUS AMENDMENT (YYYY-MM-DD):** ...` block per the amend-not-overwrite rule in `adrs/README.md`. The Stage-1 exit gate (`scripts/stage1_gate.py`) accepts Ratified, Locked, and Superseded statuses; ADR-010 remains the only permitted OPEN entry.
+All ADRs live in `adrs/`. The table below is the running index; full-text lives in the ADR files. Ratified ADRs are load-bearing on the build sequence. `Superseded by ADR-###` is a legitimate terminal status — the authoritative decision moves to the successor ADR; the amended file preserves the audit trail via a `> **STATUS AMENDMENT (YYYY-MM-DD):** ...` block per the amend-not-overwrite rule in `adrs/README.md`. The Stage-1 exit gate (`scripts/stage1_gate.py`) accepts Ratified, Locked, and Superseded statuses. **As of 2026-07-30, all v25 ADRs are resolved** — ADR-010 landed `LOCKED` after the Stage 6.2 head-to-head eval (winner: Open Deep Research; AREX-Turbo rejected for Stage 6.2, on-shelf pending Colossus thermal remediation).
 
 | ID | Title | Status | Lock-in phase |
 |---|---|---|---|
@@ -305,7 +305,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-008 | Superpowers as Tektos Knowledge-Base Methodology Reference | Ratified | Tektos Phase 4 |
 | ADR-008-DozerDB | DozerDB Fork as MemoryPort Graph Store | **Ratified v25** | Stage 1 |
 | ADR-009 | llama-swap as LLMPort Primary Sidecar | **Ratified v25** | Stage 1 (contingent on benchmark) |
-| ADR-010 | AREX / Open Deep Research as Zetesis / Context Budget Manager Vendor Candidates | **OPEN — head-to-head eval pre-Phase-6.2** | Phase 6.2 |
+| ADR-010 | AREX vs. Open Deep Research — Zetesis Stage 6.2 inner-loop head-to-head. **Winner: Open Deep Research** (`langchain-ai/open_deep_research@d337ae3` MIT + `qwen2.5:32b-instruct-q4_K_M` on Ollama + langchain-mcp streamable-http over shared SearXNG). **Rejected: AREX-Turbo** (`BAAI/AREX-Turbo` Apache-2.0 on Colossus vLLM) — 0/3 completion at 32k context (exhausted before `<finish>`) and 0/3 at 65k (visit-tool 404s + RTX 5090 thermal-blank at >85°C). Six trials committed at `ops/benchmarks/artifacts/adr-010-2026-07-30/`; ODR aggregate 3.0/18 vs. AREX 0.0/18 on the 6-canonical-fact rubric. Winner locked on **completion reliability under the Colossus envelope**, not absolute answer quality — Stage 6.3 owns substrate tuning to raise the F1-F6 score above the current 16.7% floor. AREX-Turbo bundle retained on-shelf with a four-clause revisit gate (thermal remediation + sustained bfloat16 headroom + successor checkpoint + ODR plateau) in `PORTING_LEDGER.md`. | **LOCKED 2026-07-30** | Stage 6.2 |
 | ADR-011 | a2a-sdk as Koinonia Transport | **Ratified v25** | Phase 6.3 |
 | ADR-012 | Rigpa-LMS `ollama.py`/`searxng.py` Consolidation | **Ratified v25** | Stage 1.1 |
 | ADR-013 | Rigpa-LMS `memory/bridge.py` vs. Gnosis Provenance Schema Redundancy Resolution | **LOCKED** (2026-07-29 · Gnosis schema won 6/6; comparison in `docs/memory-bridge-comparison.md`) | Stage 1.9 |
@@ -669,7 +669,7 @@ Single-builder, part-time-equivalent effort; Tektos itself is assumed to acceler
 
 - Re-run OSS cannibalization scan and software-currency check at each Rollout Plan phase gate, and quarterly for already-vendored components.
 - Re-check **Agent Memory Guard** release page immediately before Gnosis Phase 3 (currently v0.2.2; watching for v0.3.0's Redis/PostgreSQL backends).
-- Resolve **ADR-010** (AREX vs. Open Deep Research head-to-head) immediately before Phase 6.2 (Zetesis).
+- ~~Resolve **ADR-010** (AREX vs. Open Deep Research head-to-head) immediately before Phase 6.2 (Zetesis).~~ **LOCKED 2026-07-30**: ODR wins; AREX-Turbo rejected for Stage 6.2.
 - Quarterly four-store DR drill (Litestream/SQLite, DozerDB, Qdrant, Tektos-Postgres) with encrypted-backup decrypt verification.
 - Append `BUILD_LOG.md` entry after every completed slice/decision.
 - Append `DEBUG_LOG.md` entry after every non-trivial bug (search first before diagnosing anything new).
@@ -681,7 +681,7 @@ Single-builder, part-time-equivalent effort; Tektos itself is assumed to acceler
 
 This specification is complete and self-contained. Every element from Build Spec v19 through v23, Build Plan v24, all three v20.x addenda, UI Parity Addendum, Tektos v1 build spec, Rollout Plan v3, all nine standalone ADRs, Oikos Plugin Spec v1, pre-build architecture-review patterns note, Praxis/LangChain4j corroborating note, four Kosmos-2026-Agentic-Scan documents, and Kosmos-LangGraph-Fit note has been restated directly in the sections above rather than referenced.
 
-**Open items surviving v25:** ADR-010 (Zetesis inner-loop AREX vs. Open Deep Research head-to-head — carried forward with named lock-in at Phase 6.2). All other v14/v23-era gaps are resolved.
+**Open items surviving v25:** none. ADR-010 (Zetesis inner-loop head-to-head) landed **LOCKED 2026-07-30** with ODR as Stage 6.2 winner; all v14/v23-era gaps resolved.
 
 **Supersession:** v25 supersedes v19, v20, v20.1, v20.2, v20.3, v21 (informational only), v22, v23, v24, Tektos Build Spec v1, Rollout Plan v3, UI Parity Addendum, pre-build patterns note, all nine standalone ADRs, Oikos Plugin Spec v1, and the Praxis/LangChain4j note, in full.
 

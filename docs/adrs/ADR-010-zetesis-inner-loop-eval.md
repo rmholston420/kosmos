@@ -1,4 +1,22 @@
-> **v25 STATUS:** OPEN — sole surviving unresolved ADR. Head-to-head evaluation of **AREX** vs. **LangChain Open Deep Research** as Zetesis inner loop must run **immediately before Phase 6.2**. Selection criteria: answer correctness (blind-rated), source diversity, latency, GPU utilization on Colossus, integration effort. Benchmark artifact required at `ops/benchmarks/adr-010-<date>.md`. Winner locked; loser rejected in PORTING_LEDGER.
+> **v25 STATUS:** Ratified v25 · **LOCKED 2026-07-30**. Winner: **Open Deep Research (ODR)** — `langchain-ai/open_deep_research@d337ae3` MIT, served with `qwen2.5:32b-instruct-q4_K_M` on local Ollama via `langchain-mcp` streamable-http against the shared SearXNG substrate. AREX (`BAAI/AREX-Turbo` served on Colossus vLLM) is **REJECTED for Stage 6.2 (Zetesis inner loop)** but retained on the shelf for a future revisit when the Colossus thermal envelope permits sustained bfloat16 attention at extended context. See §Head-to-Head Result (2026-07-30) below.
+
+> **HEAD-TO-HEAD RESULT (2026-07-30):** Six trials on Colossus (RTX 5090 / 128GB RAM), three per contender, identical question (`fixtures/adr_010_question.json` — Neo4j Community vs. DozerDB, 6 canonical facts F1-F6), identical SearXNG substrate. Trials committed at `ops/benchmarks/artifacts/adr-010-2026-07-30/{arex,odr}/`. Blind rating notes in commit body of `stage-6-2-complete`.
+>
+> | Contender | Completion | Aggregate score | Best trial | Mean latency | Mean source_diversity | Peak VRAM |
+> |---|---|---|---|---|---|---|
+> | ODR (qwen2.5:32b via Ollama + MCP) | **3/3** | **3.0 / 18 (16.7%)** | trial_03 (1.5/6) | 88.9s | 2.0 | 27.7 GB |
+> | AREX-Turbo (vLLM, 32k ctx) | 0/3 | 0.0 / 18 (0.0%) | none | 23.7s | 2.67 | 27.5 GB |
+>
+> AREX-Turbo consistently exhausted its 32,768-token context ceiling before emitting a `<finish>` tool call — every trial ended with `error=BadRequestError 400 max context length`. Its trajectories showed real research (found `dozerdb.org`, `github.com/DozerDB`, `mindmeld.donnie.in`) with `source_diversity ≥ 3` on 2/3 trials, but no synthesized final answer. A follow-up re-run at 65k context also produced no usable answers (2× visit-tool 404s halted the loop; the third trial aborted mid-run when the RTX 5090 tripped a display-blank thermal event above 85°C). Neither AREX cohort produced a scorable `final_answer`.
+>
+> ODR's LangChain-graph loop terminated cleanly on all three trials, producing 3-5 KB synthesized reports with grounded citations. Score is low because qwen2.5:32b hallucinated the CE license as "AGPLv3" or "Apache 2.0" in 2/3 trials and refused to commit on plugin-vs-fork in the third; only trial_03 correctly named CE=GPLv3 with a `gnu.org` citation. ODR wins on **completion reliability under the Colossus envelope**, not on absolute answer quality — a substantive improvement pass on the substrate is Stage 6.3 work.
+>
+> **Decision drivers:**
+> 1. Completion rate 3/3 vs. 0/3 is the load-bearing outcome. A research substrate that cannot emit a final answer under the target hardware is not an inner loop.
+> 2. Thermal envelope: RTX 5090 on Blackwell SM_120 under sustained bfloat16 attention with 65k KV cache tripped a display-blank thermal event this session. AREX-Turbo requires that envelope to have a fair chance at synthesis. Until Colossus receives thermal remediation (undervolt/fan curve/thermal-pad refresh — separate work, not blocking Stage 6.2), AREX-Turbo cannot be safely run at the context ceiling it needs.
+> 3. Integration effort: ODR ships MIT with a public LangChain graph API and works out of the box against any OpenAI-compatible endpoint + MCP server. AREX ships weights (Apache-2.0) but the executor loop was hand-authored fresh from the HF-shipped protocol because the AREX code repo has no LICENSE file. Every future AREX iteration is bespoke maintenance; ODR upgrades are `pip install -U`.
+>
+> **What this ADR locks:** ODR (langchain-ai/open_deep_research) is the Stage 6.2 Zetesis inner loop substrate. `PORTING_LEDGER.md` promotes it from EVAL-ONLY to VENDORED (MIT); AREX-Turbo moves to REJECTED for Stage 6.2 with a preserved on-shelf note. Stage 6.3 owns substrate tuning (better underlying LLM, prompt-level fact-anchoring, `search_api=NONE`+MCP tuning) to raise the F1-F6 score above the current 16.7% floor.
 
 > **STATUS AMENDMENT (2026-07-30):** Head-to-head eval harness authored and pinned. Contenders:
 > - **AREX** — via the vendored `BAAI/AREX-Turbo` inference bundle (Apache-2.0, HF commit `129812742df4a5de27980ed07bda78d9d27c7370`, subpath `inference/`). Served on Colossus via vLLM. Full BrowseComp harness including `update_context` autonomous context compression and `finish` with confidence score. AREX code repo at `github.com/VectorSpaceLab/arex-model` was **not vendored** — repo ships without a LICENSE file, so per `kosmos-port-workflow` license discipline the harness executor was authored fresh from the Apache-2.0 HF-shipped protocol.
@@ -10,7 +28,7 @@
 
 ---
 
-Status: Proposed (Tier-2 ADR ratification required per Kosmos v20 ADR practice, since this touches PORTING_LEDGER.md and the Zetesis scope entry)
+Status: **Ratified v25 · LOCKED 2026-07-30** (winner: Open Deep Research; AREX-Turbo REJECTED for Stage 6.2)
 
 ## Context
 Kosmos v20's Build Philosophy mandates continuous re-verification: each future build stage must check whether a newly-matured OSS project has obviated a planned bespoke component before that component is built. Zetesis (Phase 6, System-1 research plugin) is currently scoped to extract Rigpa-LMS's existing PLAN→SEARCH→SYNTHESIZE→VALIDATE→CRITIQUE→DELIVER→ARGUE pipeline, plus `uia-research-agent`'s credibility-scoring/citation-audit utilities, as a bespoke build.
@@ -40,7 +58,14 @@ Per existing v20 governance, AREX must clear the same gates as any other vendore
 3. No sequencing disruption: because Zetesis is Phase 6 and the Context Budget Manager's initial implementation is already Phase 3, this ADR adds an evaluation candidate without pulling any work forward or blocking current phases.
 
 ## Definition of Done
-- AREX entry added to `PORTING_LEDGER.md` with source URLs (GitHub, both HF checkpoints), status "To Confirm", and this ADR referenced as rationale.
-- Zetesis's Rollout Plan Phase 6 scope entry amended with a cross-reference note: "Evaluate AREX (see ADR) before finalizing bespoke research-loop build."
-- Context Budget Manager's Phase 3 scope entry amended with a cross-reference note: "Reference AREX's autonomous context-update approach during summarization-strategy design (see ADR)."
-- No live code changes required for this ADR to be considered "done" — it is a registration/tracking action only, gated for full Tier-2 promotion at the point either component is actually built or swapped.
+- [x] AREX entry added to `PORTING_LEDGER.md` with source URLs (GitHub, both HF checkpoints).
+- [x] Head-to-head eval harness authored (`ops/benchmarks/adr_010/`).
+- [x] Six trials executed on Colossus (three per contender) with identical SearXNG substrate; artifacts at `ops/benchmarks/artifacts/adr-010-2026-07-30/`.
+- [x] Blind rating against `fixtures/adr_010_question.json` canonical facts F1-F6.
+- [x] Winner locked in this ADR (ODR); loser rejected (AREX-Turbo) with preserved on-shelf note.
+- [x] `PORTING_LEDGER.md` updated: ODR promoted EVAL-ONLY → VENDORED; AREX-Turbo status → REJECTED for Stage 6.2.
+- [x] `Kosmos-Build-Spec-v25.md` §17 ADR summary table row updated.
+- [x] `adrs/README.md` index row updated.
+- [x] Stage 6.2 Definition of Done in `Kosmos-Build-Sequence-v25.md` marked LANDED.
+- [x] `BUILD_LOG.md` entry appended.
+- [x] `SESSION_HANDOFF.md` overwritten, pointing at Stage 6.3.

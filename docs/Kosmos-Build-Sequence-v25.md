@@ -381,11 +381,15 @@ Reference: Spec §19.
 - **DoD anchor:** `pytest plugins/zetesis/` — 29 fast tests green (locked constants 8, descriptor shape 5, construction/lifecycle/idempotency 11, ADR-007 AST guard 1, port-surface holds 2, `_UntouchablePort` proof 1, SecretsPort optional-slot 1). Whole-repo fast tier: **986 passed / 19 skipped** (up from 957 / 19 at Stage 4.6, delta +29 = new Zetesis tier exactly).
 - **Tag:** `stage-6-1-complete`.
 
-### 6.2 **ADR-010 head-to-head eval (PRE-Phase-6.2)**
-- **Options:** AREX vs LangChain Open Deep Research
-- **Fixture:** Identical multi-source research task on Colossus
-- **Metrics:** Answer correctness (blind-rated), source diversity, latency, GPU utilization, integration effort
-- **DoD:** ADR-010 status = `LOCKED` with winner named and benchmark artifact in `ops/benchmarks/adr-010-2026-XX-XX.md`.
+### 6.2 **ADR-010 head-to-head eval (PRE-Phase-6.2)** — **LANDED 2026-07-30**
+- **Options:** AREX-Turbo (BAAI, Apache-2.0) vs. LangChain Open Deep Research (`d337ae3`, MIT)
+- **Fixture:** Identical 6-canonical-fact multi-source research task on Colossus with shared SearXNG substrate (`ops/benchmarks/adr_010/fixtures/adr_010_question.json`)
+- **Metrics:** Six locked metrics per trial (see `ops/benchmarks/adr_010/metrics.py`); blind manual rating against F1-F6 canonical facts
+- **Result:** **Winner = Open Deep Research** (3/3 completion; aggregate 3.0/18 on 6-canonical-fact rubric). **AREX-Turbo rejected for Stage 6.2** (0/3 completion at 32k context; 0/3 completion at 65k retry — RTX 5090 thermal-blank at >85°C halted the run). Winner locked on completion reliability under the Colossus envelope; substrate answer-quality tuning owned by Stage 6.3.
+- **Artifacts:** `ops/benchmarks/artifacts/adr-010-2026-07-30/{arex,odr}/` (six trial JSONs committed at `e882b2a`)
+- **DoD:** [x] ADR-010 status = `LOCKED` with winner named and benchmark artifacts committed. [x] `PORTING_LEDGER.md` ODR promoted EVAL-ONLY → VENDORED; AREX-Turbo flipped to REJECTED for Stage 6.2 (on-shelf).
+- **Tag:** `stage-6-2-complete`
+- **Colossus thermal envelope constraint (documented, carries forward):** sustained vLLM bfloat16 attention with a 65k KV cache tripped a display-blank thermal event above 85°C twice this session. Until thermal remediation (undervolt / fan-curve / thermal-pad refresh) is done and re-verified, vLLM inference on Colossus runs with `--enforce-eager --gpu-memory-utilization 0.75 --max-model-len 32768` as the safe operating envelope.
 
 ### 6.3 Wire winning inner-loop
 - **DoD:** Zetesis produces a multi-source research report with citations.

@@ -924,28 +924,32 @@
 
 ---
 
-## Zetesis (Research) — ADR-010 candidates
+## Zetesis (Research) — ADR-010 resolved 2026-07-30
 
-#### AREX-Turbo inference bundle — `VENDORED (EVAL-ONLY)`
-- **Source:** https://huggingface.co/BAAI/AREX-Turbo (subpath `inference/`)
-- **Commit / Version:** HF commit `129812742df4a5de27980ed07bda78d9d27c7370`
-- **License:** Apache-2.0 (per HF card `cardData.license`; weights + inference bundle)
-- **Kosmos location:** `vendor/adr_010/arex_inference/`
-- **Port(s):** ADR-010 head-to-head eval only — not promoted to any adapter
-- **Modifications:** none (files copied verbatim: `README.md`, `__init__.py`, `inference.py`, `prompts.py`)
-- **ADR:** ADR-010 (amendment 2026-07-30)
-- **Logged:** 2026-07-30 10:03 EDT
-- **Note:** AREX code repo at `github.com/VectorSpaceLab/arex-model` was NOT vendored — repo ships without a LICENSE file, which per `kosmos-port-workflow` license discipline is non-permissive by default. Harness executor authored fresh from Apache-2.0 HF-shipped tool protocol.
-
-#### LangChain Open Deep Research — `VENDORED (EVAL-ONLY)`
+#### LangChain Open Deep Research — `VENDORED (Stage 6.2 winner · LOCKED 2026-07-30)`
 - **Source:** https://github.com/langchain-ai/open_deep_research
 - **Commit / Version:** `d337ae32ed4ff8f4c6fbe192ba3bf1b2d6610799`
 - **License:** MIT
 - **Kosmos location:** `vendor/adr_010/open_deep_research/`
-- **Port(s):** ADR-010 head-to-head eval only — not promoted to any adapter
+- **Port(s):** Stage 6.2 Zetesis inner-loop substrate (wraps `LLMPort` + `SearchPort` for the PLAN→SEARCH→SYNTHESIZE loop)
 - **Modifications:** none (shallow-clone, `.git` stripped; UPSTREAM_SHA metadata added)
-- **ADR:** ADR-010 (amendment 2026-07-30)
-- **Logged:** 2026-07-30 10:03 EDT
+- **ADR:** ADR-010 (LOCKED amendment 2026-07-30)
+- **Logged:** 2026-07-30 10:03 EDT · **Promoted EVAL-ONLY → VENDORED:** 2026-07-30 11:52 EDT
+- **Head-to-head result:** 3/3 completion, aggregate 3.0/18 (16.7%) on 6-canonical-fact rubric (see `ops/benchmarks/artifacts/adr-010-2026-07-30/odr/`). Won by completing reliably on the Colossus envelope; AREX-Turbo produced no scorable final_answer in either cohort.
+- **Stage 6.3 obligation:** substrate tuning — anchor prompts to canonical-facts pattern, raise `search_api=NONE`+MCP source-diversity floor, evaluate replacing qwen2.5:32b with a stronger open-weight model if VRAM budget permits.
+
+#### AREX-Turbo inference bundle — `REJECTED (Stage 6.2 · on-shelf pending thermal remediation)`
+- **Source:** https://huggingface.co/BAAI/AREX-Turbo (subpath `inference/`)
+- **Commit / Version:** HF commit `129812742df4a5de27980ed07bda78d9d27c7370`
+- **License:** Apache-2.0 (per HF card `cardData.license`; weights + inference bundle)
+- **Kosmos location:** `vendor/adr_010/arex_inference/` (retained on-shelf; NOT deleted — revisit gate below)
+- **Port(s):** none (rejected for Stage 6.2)
+- **Modifications:** none (files copied verbatim: `README.md`, `__init__.py`, `inference.py`, `prompts.py`)
+- **ADR:** ADR-010 (LOCKED amendment 2026-07-30 — REJECTED for Stage 6.2)
+- **Logged:** 2026-07-30 10:03 EDT · **Status flipped VENDORED (EVAL-ONLY) → REJECTED:** 2026-07-30 11:52 EDT
+- **Head-to-head result:** 0/3 completion at 32k context (all exhausted context before `<finish>`); 0/3 completion at 65k context (2× visit-tool 404s halted loop, 1× RTX 5090 display-blank thermal event above 85°C).
+- **Note:** AREX code repo at `github.com/VectorSpaceLab/arex-model` was NOT vendored — repo ships without a LICENSE file, which per `kosmos-port-workflow` license discipline is non-permissive by default. Harness executor authored fresh from Apache-2.0 HF-shipped tool protocol. Retained bundle avoids re-fetch cost if revisited.
+- **Revisit gate:** may re-open a new ADR (successor to ADR-010) if all four are true — (1) Colossus receives thermal remediation (undervolt/fan curve/thermal-pad refresh) documented in `SESSION_HANDOFF.md`; (2) sustained vLLM bfloat16 attention at ≥65k context runs 30 min under 82°C with fan-curve headroom; (3) an AREX-Base or successor checkpoint ships with a native low-memory tool loop that fits inside Colossus's proven envelope; (4) the current ODR substrate has been raised to ≥ 60% on the F1-F6 rubric and demonstrably plateaued.
 
 ---
 
