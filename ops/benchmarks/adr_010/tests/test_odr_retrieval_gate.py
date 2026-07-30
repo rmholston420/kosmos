@@ -217,7 +217,11 @@ def test_retrieval_gate_retries_when_raw_notes_empty(monkeypatch):
 
 def test_retrieval_gate_retry_failure_keeps_pregate_result(monkeypatch):
     """If gate retry itself raises, the pre-gate result stays (better than
-    losing the whole trial); attempt trail records the failure."""
+    losing the whole trial); attempt trail records the failure.
+
+    Stage 6.3.4c: the shim-scoped vendor-bug retry now double-taps every
+    non-primary invocation. Persistent vendor failure = TWO exceptions.
+    """
 
     invocations: list[dict] = []
     _install_stub_deep_researcher(
@@ -228,7 +232,8 @@ def test_retrieval_gate_retry_failure_keeps_pregate_result(monkeypatch):
                 "notes": [],
                 "raw_notes": [],
             },
-            KeyError("reflection"),  # gate retry hits vendor bug
+            KeyError("reflection"),        # gate retry attempt 1
+            RuntimeError("still broken"),  # gate retry attempt 2 (vendor-retry)
         ],
     )
 
@@ -241,7 +246,7 @@ def test_retrieval_gate_retry_failure_keeps_pregate_result(monkeypatch):
         )
     )
 
-    assert len(invocations) == 2
+    assert len(invocations) == 3, invocations
     # We keep the pre-gate answer rather than blowing away the trial.
     assert metrics.final_answer == "parametric fallback"
     assert not metrics.error
@@ -371,3 +376,91 @@ def test_maximum_ainvoke_calls_never_exceeds_three(monkeypatch):
     outcomes = [a["outcome"] for a in attempts_entry["attempts"]]
     assert outcomes == ["vendor_error", "ok", "retrieval_gate_retry_ok"], outcomes
     assert metrics.final_answer == "grounded"
+
+
+def test_license_grounding_shim_retry_survives_vendor_bug(monkeypatch):
+    """Stage 6.3.4c regression.
+
+    Trial-2 of the Stage 6.3.4b Colossus run hit ``KeyError('reflection')``
+    inside the license-grounding shim retry and the corrected GPL-3.0
+    directive never landed in the final report. The fix wraps every non-
+    primary ``_invoke_once`` call with one additional vendor-bug retry.
+
+    Simulate: primary ok, license-grounding retry raises KeyError once,
+    then succeeds. Final answer must be the retry's report.
+    """
+
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": (
+                    "pre-license report citing "
+                    "https://github.com/DozerDB/dozerdb-plugin and "
+                    "https://github.com/neo4j/neo4j"
+                ),
+                "notes": ["primary"],
+                "raw_notes": ["mcp hit 1", "mcp hit 2"],
+            },
+            KeyError("reflection"),
+            {
+                "final_report": "corrected report: both GPL-3.0",
+                "notes": ["corrected"],
+                "raw_notes": ["mcp hit 1", "mcp hit 2"],
+            },
+        ],
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod, license_grounding
+
+    async def _fake_ground(_urls, *args, **kwargs):
+        return [
+            license_grounding.LicenseFact(
+                owner="DozerDB",
+                repo="dozerdb-plugin",
+                ok=True,
+                license_family="GPL-3.0",
+                source_url="https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/LICENSE",
+                first_line="GNU GENERAL PUBLIC LICENSE",
+                elapsed_seconds=0.01,
+            ),
+            license_grounding.LicenseFact(
+                owner="neo4j",
+                repo="neo4j",
+                ok=True,
+                license_family="GPL-3.0",
+                source_url="https://raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE.txt",
+                first_line="GNU GENERAL PUBLIC LICENSE",
+                elapsed_seconds=0.01,
+            ),
+        ]
+
+    monkeypatch.setattr(license_grounding, "ground_licenses", _fake_ground)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t_license_retry",
+            enable_fact_check=False,
+            enable_license_grounding=True,
+            enable_rubric_critique=False,
+            enable_cove=False,
+            enable_claim_support_gate=False,
+        )
+    )
+
+    # 1 primary + 2 shim retries = 3 ainvoke calls total
+    assert len(invocations) == 3, invocations
+    # shim event should record retry_ok (not retry_failed on KeyError)
+    shim_events_entry = next(
+        e for e in metrics.trajectory
+        if isinstance(e, dict) and "shim_events" in e
+    )
+    lic = next(
+        s for s in shim_events_entry["shim_events"]
+        if s.get("shim") == "license_grounding"
+    )
+    assert lic["retry_outcome"] == "retry_ok", lic
+    assert "error" not in lic, lic
+    # final answer must be the corrected one
+    assert metrics.final_answer == "corrected report: both GPL-3.0"

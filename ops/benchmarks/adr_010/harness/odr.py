@@ -237,6 +237,30 @@ async def run_odr_trial(
             "GPU thermal watchdog fired during ainvoke; task cancelled."
         )
 
+    # Stage 6.3.4c · shim-scoped vendor-bug retry.
+    #
+    # The primary invocation at the top of the trial already gets a two-
+    # attempt vendor-bug retry (Stage 6.3.2 shim 1). But every subsequent
+    # ``_invoke_once`` call — retrieval-gate retry, fact-check retry,
+    # license-grounding retry, sub-question rewrite, etc. — was one-shot.
+    # ODR upstream d337ae3's ``KeyError('reflection')`` fires stochastically
+    # on small local models, so a single shot on a shim retry has a real
+    # miss rate. Stage 6.3.4b's ODR run confirmed this: license-grounding
+    # retry on trial 2 hit the KeyError and its GPL-3.0 directive never
+    # reached the final report, yielding a 3/6 rating.
+    #
+    # Wrap every non-primary ``_invoke_once`` call in this helper. It keeps
+    # ThermalAbort non-retriable (physical envelope, per shim 1's rationale)
+    # and retries any other exception exactly once with a fresh thread_id
+    # (already handled by ``_invoke_once``).
+    async def _invoke_with_vendor_retry(user_content: str) -> dict:
+        try:
+            return await _invoke_once(user_content)
+        except ThermalAbort:
+            raise
+        except Exception:  # noqa: BLE001
+            return await _invoke_once(user_content)
+
     result: dict | None = None
     last_exc: Exception | None = None
     attempts: list[dict] = []
@@ -299,7 +323,7 @@ async def run_odr_trial(
                 }
             )
             try:
-                retry_result = await _invoke_once(escalated)
+                retry_result = await _invoke_with_vendor_retry(escalated)
                 result = retry_result
                 attempts[-1]["outcome"] = "retrieval_gate_retry_ok"
             except Exception as exc:  # noqa: BLE001
@@ -380,7 +404,7 @@ async def run_odr_trial(
                     }
                 )
                 try:
-                    retry_result = await _invoke_once(correction_turn)
+                    retry_result = await _invoke_with_vendor_retry(correction_turn)
                 except ThermalAbort as exc:
                     attempts[-1]["outcome"] = "fact_check_retry_thermal_abort"
                     attempts[-1]["error"] = f"{type(exc).__name__}: {exc}"
@@ -470,7 +494,7 @@ async def run_odr_trial(
                 if directive:
                     correction_turn = anchored_question + "\n\n" + directive
                     try:
-                        retry_result = await _invoke_once(correction_turn)
+                        retry_result = await _invoke_with_vendor_retry(correction_turn)
                     except ThermalAbort as exc:
                         shim_events[-1]["retry_outcome"] = "thermal_abort"
                         shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
@@ -506,7 +530,7 @@ async def run_odr_trial(
                 current_report, rubric_lines
             )
             try:
-                critique_result = await _invoke_once(critique_turn)
+                critique_result = await _invoke_with_vendor_retry(critique_turn)
             except ThermalAbort as exc:
                 shim_events.append(
                     {
@@ -556,7 +580,7 @@ async def run_odr_trial(
                 for claim in claims:
                     subq = cove.build_sub_question(claim)
                     try:
-                        subq_result = await _invoke_once(subq)
+                        subq_result = await _invoke_with_vendor_retry(subq)
                     except ThermalAbort as exc:
                         shim_events.append(
                             {
@@ -591,7 +615,7 @@ async def run_odr_trial(
                         current_report, verified
                     )
                     try:
-                        rewrite_result = await _invoke_once(rewrite_turn)
+                        rewrite_result = await _invoke_with_vendor_retry(rewrite_turn)
                     except ThermalAbort as exc:
                         shim_events.append(
                             {

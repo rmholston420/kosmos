@@ -1397,3 +1397,19 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none formal. Vendor tree pristine.
 - **PORTING_LEDGER / ADR updated:** none. Footnote-marker suffix is a harness extractor bug, not a substrate decision.
 - **Stop-condition status:** Ready for another 3-trial ODR run on Colossus with 10s cooldown min. Stage 6.3.4 closing criterion carries forward. Note: the Neo4j-CE-vs-EE dual-licensing question is a separate rubric-modeling issue (shim 4 currently records a single license family per repo) — track separately if the rating still misses on F1/F2.
+
+
+## 2026-07-30 14:49 EDT — Stage 6.3.4c · shim-scoped vendor-bug retry + cooldown 10→5s
+
+- **Stage / plugin / port:** Stage 6.3.4c · Zetesis ODR harness hotfix (same lock-in band as 6.3.4).
+- **What changed:** Stage 6.3.4b Colossus 3-trial ODR run completed. Blind-style rating vs the 6 canonical facts: trial 1 = 6/6, trial 2 = 3/6, trial 3 = 4/6, mean = **4.33/6** — misses the ≥5/6 DoD. Root cause was NOT a model capability limit; it was a harness retry bug. Trial 2's `shim_events.license_grounding.retry_outcome = retry_failed / error = KeyError: 'reflection'` shows the ODR upstream vendor bug (`deep_researcher.py:275 tool_call["args"]["reflection"]` with no fallback) hit *inside* the shim-4 license-grounding retry, so the ground-truth GPL-3.0 directive never landed in the final report — the model kept its parametric-memory "AGPLv3 vs Apache-2.0" hallucination. Same class of failure hit trial 3 twice (attempts 1 + 3).
+  - **Fix:** New `_invoke_with_vendor_retry(user_content)` helper in `harness/odr.py`. Wraps every non-primary `_invoke_once` call in one additional vendor-bug retry (ThermalAbort stays non-retriable per shim-1 rationale — physical envelope). Applied at 5 sites: retrieval-gate retry, fact-check retry, license-grounding retry, rubric-critique invocation, CoVe sub-question and rewrite invocations. The primary invocation at trial start already has a 2-attempt vendor-bug retry (Stage 6.3.2 shim 1) — untouched.
+  - **Cooldown 10s → 5s.** Stage 6.3.4b peak 76C, 9C below the 85C watchdog and 12C below the 88C driver-crash line. Trial-start temps 37/45/46C. Progression: 30 → 60 → 45 → 30 → 15 → 10 → 5.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/odr.py` — new `_invoke_with_vendor_retry` helper; all 5 non-primary `_invoke_once` sites now route through it.
+  - `ops/benchmarks/adr_010/runner.py` — `--cooldown-min-seconds` default 10 → 5; help text records 6.3.4c evidence.
+  - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` — updated `test_retrieval_gate_retry_failure_keeps_pregate_result` (persistent vendor failure now = 2 exceptions); added `test_license_grounding_shim_retry_survives_vendor_bug` regression.
+- **Test tiers:** `ops/benchmarks/adr_010/tests/` = **132 passed** (was 131: +1). Whole-repo pytest = **1118 passed, 19 skipped** (was 1117: +1). Vendor tree pristine.
+- **Ports / adapters affected:** none formal. Deferred: Neo4j CE-vs-EE dual-licensing in shim 4 (currently one license family per repo; Neo4j product is CE=GPLv3 / EE=commercial). Track as candidate Stage 6.3.4d only if 6.3.4c still misses.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** Ready for another 3-trial ODR run on Colossus with 5s cooldown min. Stage 6.3.4 closing criterion carries forward (mean rated correctness ≥5/6 AND `final_unverified_urls` empty on every trial AND no surviving `[unsupported]` markers). Escalation ladder if 6.3.4c still misses: (a) fix Neo4j CE-vs-EE dual-licensing in shim 4; (b) opt-in `--n-consistency 3`; (c) Stage 6.3.5 model uplift (qwen2.5:32b-q8_0 with stricter retrieval budget).

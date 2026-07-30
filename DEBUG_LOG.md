@@ -177,3 +177,16 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/tests/test_url_verify.py` (+3 regression tests)
 - **Related BUILD_LOG entry:** 2026-07-30 14:22 EDT (Stage 6.3.4b).
 - **Supersedes:** 2026-07-30 13:48 EDT (Stage 6.3.3b bracket-suffix bug) — same class of hallucinated-citation-suffix problem; expanding the exclusion set now covers `<`, `>`, `[`, `]`, `%3E`.
+
+
+## 2026-07-30 14:49 EDT — shim-scoped `_invoke_once` was one-shot vs the ODR vendor `KeyError('reflection')`
+
+- **Symptom:** Stage 6.3.4b Colossus 3-trial ODR run produced correct license grounding evidence in shim-4 (`facts = [{owner: neo4j, repo: neo4j, license_family: GPL-3.0}, {owner: DozerDB, repo: dozerdb-plugin, license_family: GPL-3.0}]`) on trial 2 but `retry_outcome = "retry_failed"`, `error = "KeyError: 'reflection'"`. The corrected directive never reached the final report, so trial 2 stated Neo4j CE = AGPLv3 and DozerDB = Apache-2.0 — a parametric-memory hallucination the shim was designed to correct. Trial 3 hit the same class of error twice (attempts 1 and 3). Aggregate blind rating: 6+3+4 = 13/18 = mean 4.33/6, below the ≥5/6 DoD.
+- **Affected stage / plugin / port:** Stage 6.3.4c · Zetesis ODR harness · `ops/benchmarks/adr_010/harness/odr.py` shim orchestration.
+- **Root cause:** The Stage 6.3.2 vendor-bug retry gate (shim 1) wraps only the primary `_invoke_once(anchored_question)` invocation with a 2-attempt loop. Every subsequent `_invoke_once` call — retrieval-gate retry (line 302), fact-check retry (line 383), license-grounding retry (line 473), rubric-critique invocation (line 533), CoVe sub-question and rewrite invocations (lines 583, 618) — was one-shot. When the ODR upstream d337ae3 vendor bug (`deep_researcher.py:275 tool_call["args"]["reflection"]` with no fallback) fired on any of those shim retries, the entire shim's contribution was lost and the trial fell back to the pre-shim result.
+- **Fix applied:** New `_invoke_with_vendor_retry(user_content)` helper defined immediately after `_invoke_once`. Retries any non-ThermalAbort exception exactly once (with a fresh thread_id via `_invoke_once`'s existing per-call `str(uuid.uuid4())`). All 5 non-primary invocation sites now route through this helper. ThermalAbort remains non-retriable (physical envelope, per shim-1 rationale). The primary invocation retains its 2-attempt loop (unchanged).
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/odr.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` (+1 regression test; updated 1 existing test for the new persistent-failure invocation count)
+- **Related BUILD_LOG entry:** 2026-07-30 14:49 EDT (Stage 6.3.4c).
+- **Related tests:** `test_license_grounding_shim_retry_survives_vendor_bug` (new), `test_retrieval_gate_retry_failure_keeps_pregate_result` (updated).
