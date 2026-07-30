@@ -653,13 +653,15 @@
 
 ## Tektos (Coding Plugin)
 
-#### OpenHands SDK — `PLANNED`
-- **Source:** https://github.com/All-Hands-AI/OpenHands (SDK subpackage)
+#### OpenHands SDK — `PATTERN-VENDORED (Stage 3.1)`
+- **Source:** https://github.com/OpenHands/software-agent-sdk
+- **Upstream commit:** `4b132eddb6cf414841439a46ce42ed2cd66a628a` (main branch, checked 2026-07-30)
 - **License:** MIT
-- **Kosmos location:** `plugins/tektos/vendor/openhands/`
-- **Port(s):** LLMPort, MemoryPort, EventBusPort
-- **Modifications:** wrap all I/O through Kosmos ports only; no direct filesystem or LLM calls
-- **Logged:** —
+- **Kosmos location:** `plugins/tektos/agent.py` (no upstream source copied into the tree)
+- **Port(s):** LLMPort (consumer of `generate_text`), MemoryPort (consumer of `query_temporal` + `write_event` with zero-trust `provenance`+`confidence`)
+- **Modifications:** pattern-vendor — the `Agent`/`Conversation` public shape (`send_message()` + `run()`) is preserved and reimplemented in Kosmos-native Python over Kosmos ports; upstream Pydantic models, LiteLLM binding, sandboxed runtime, and tool framework are NOT ported at Stage 3.1 (main-repo runtime patterns arrive at Stage 3.2 with MCP transport). Every completed turn writes with fixed provenance `tektos_agent` + caller confidence in `(0.0, 1.0]` per ADR-008.
+- **ADR:** ADR-036
+- **Logged:** 2026-07-30 00:52 EDT
 
 #### MCP python-sdk — `PLANNED`
 - **Source:** https://github.com/modelcontextprotocol/python-sdk
