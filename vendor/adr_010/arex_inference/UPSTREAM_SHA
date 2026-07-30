@@ -1,0 +1,7 @@
+upstream_url: https://huggingface.co/BAAI/AREX-Turbo
+upstream_commit: 129812742df4a5de27980ed07bda78d9d27c7370
+subpath: inference/
+license: Apache-2.0 (per HF card cardData.license)
+vendored_at: 2026-07-30 10:03 EDT
+purpose: ADR-010 head-to-head eval only (EVAL-ONLY per PORTING_LEDGER). Full BrowseComp harness including update_context + finish + confidence.
+files: README.md __init__.py inference.py prompts.py

@@ -37,6 +37,17 @@ plugins/tektos/eval/tasks/**/_pier_jobs/
 *.tar.gz
 *.zip
 
+# ADR-010 eval: keep vendored code, exclude model weights (live in HF cache)
+vendor/adr_010/**/*.safetensors
+vendor/adr_010/**/*.gguf
+vendor/adr_010/**/*.bin
+vendor/adr_010/**/*.pt
+vendor/adr_010/**/*.pth
+
+# ADR-010 eval artifacts (per-run JSON; pushed manually from Colossus)
+# Uncomment the next line to also ignore artifacts:
+#ops/benchmarks/artifacts/
+
 # Perplexity Computer local skill copies (kept via .perplexity/)
 skills/user/
 

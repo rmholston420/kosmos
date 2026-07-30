@@ -926,19 +926,26 @@
 
 ## Zetesis (Research) — ADR-010 candidates
 
-#### AREX (Autonomous Research Executor) — `EVALUATING`
-- **Source:** log at eval
-- **License:** verify
-- **Port(s):** LLMPort, MemoryPort, VectorPort
-- **ADR:** ADR-010 (open — pre-Phase-6.2 head-to-head)
-- **Logged:** —
+#### AREX-Turbo inference bundle — `VENDORED (EVAL-ONLY)`
+- **Source:** https://huggingface.co/BAAI/AREX-Turbo (subpath `inference/`)
+- **Commit / Version:** HF commit `129812742df4a5de27980ed07bda78d9d27c7370`
+- **License:** Apache-2.0 (per HF card `cardData.license`; weights + inference bundle)
+- **Kosmos location:** `vendor/adr_010/arex_inference/`
+- **Port(s):** ADR-010 head-to-head eval only — not promoted to any adapter
+- **Modifications:** none (files copied verbatim: `README.md`, `__init__.py`, `inference.py`, `prompts.py`)
+- **ADR:** ADR-010 (amendment 2026-07-30)
+- **Logged:** 2026-07-30 10:03 EDT
+- **Note:** AREX code repo at `github.com/VectorSpaceLab/arex-model` was NOT vendored — repo ships without a LICENSE file, which per `kosmos-port-workflow` license discipline is non-permissive by default. Harness executor authored fresh from Apache-2.0 HF-shipped tool protocol.
 
-#### LangChain Open Deep Research — `EVALUATING`
+#### LangChain Open Deep Research — `VENDORED (EVAL-ONLY)`
 - **Source:** https://github.com/langchain-ai/open_deep_research
+- **Commit / Version:** `d337ae32ed4ff8f4c6fbe192ba3bf1b2d6610799`
 - **License:** MIT
-- **Port(s):** LLMPort, MemoryPort, VectorPort
-- **ADR:** ADR-010
-- **Logged:** —
+- **Kosmos location:** `vendor/adr_010/open_deep_research/`
+- **Port(s):** ADR-010 head-to-head eval only — not promoted to any adapter
+- **Modifications:** none (shallow-clone, `.git` stripped; UPSTREAM_SHA metadata added)
+- **ADR:** ADR-010 (amendment 2026-07-30)
+- **Logged:** 2026-07-30 10:03 EDT
 
 ---
 

@@ -1,25 +1,50 @@
-# Kosmos Session Handoff — 2026-07-30 09:45 EDT
+# Kosmos Session Handoff — 2026-07-30 10:12 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 6.1 LANDED (2026-07-30) · Stage 5 DEFERRED by user directive (ADR-015 amended by ADR-052 §Q1).
-- **Plugin / kernel component:** `plugins/zetesis/` — kernel-plugin skeleton with 10 required + 1 optional port slots (Q7=B-plus).
-- **Port(s) in progress:** none — Stage 6.1 skeleton has all 10 required port slots wired but calls zero business ports at 6.1 (Q3=A).
+- **Stage / phase:** Stage 6.2 (ADR-010 head-to-head eval)
+- **Plugin / kernel component:** Zetesis inner-loop selection (harness lives under `ops/benchmarks/adr_010/`, not inside `plugins/zetesis/`)
+- **Port(s) in progress:** none — harness is `ops/`-tier; no Protocol changes; no adapter promotion until winner is locked and Stage 6.3 begins
 
 ## Completed this session
-- ADR-052 authored (`docs/adrs/ADR-052-stage-6-1-zetesis-skeleton.md`) — seven-question shape Q1–Q7 with Q7=B-plus port-surface correction beyond the six-question template.
-- ADR-015 amended with 2026-07-30 STATUS AMENDMENT block at head; status line updated to `Ratified (v24) · Amended 2026-07-30 (Stage-5 deferred by user)`.
-- `plugins/zetesis/__init__.py` + `plugins/zetesis/plugin.py` + `plugins/zetesis/tests/__init__.py` + `plugins/zetesis/tests/test_zetesis_plugin.py` all authored.
-- 29 fast contract tests green; whole-repo fast tier 986 / 19 (up from 957 / 19 at Stage 4.6, delta +29 exactly).
-- Ruff clean on all changed files.
-- Fanout complete: `docs/adrs/README.md` (ADR-015 amended row + ADR-052 index row); `docs/Kosmos-Build-Spec-v25.md` §17 (ADR-015 amended row + ADR-052 row); `docs/Kosmos-Build-Sequence-v25.md` (Stage 5 header + deferral note; §6 header STARTED EARLY; §6.1 rewritten as LANDED block with full 10+1 port list + Q1–Q7 rationale).
-- BUILD_LOG.md appended with the Stage 6.1 entry.
-- No PORTING_LEDGER change (skeleton is purpose-written; no OSS port).
+- Stage 6.2 · ADR-010 head-to-head eval harness authored (pre-run) — see BUILD_LOG entry `2026-07-30 10:12 EDT`
 
 ## Remaining before current Definition of Done
-- None. Stage 6.1 DoD ("Plugin loads.") met at `pytest plugins/zetesis/` — 29 / 0.
+1. **Colossus trial run** — the harness itself is authored and contract-tested in-sandbox; the six-metric trials themselves must run on Colossus. See `ops/benchmarks/adr_010/README.md` for the exact command sequence.
+2. **Blind-rate `answer_correctness`** — after both contenders emit their `trial_*.json` files under `ops/benchmarks/artifacts/adr-010-2026-07-30/{arex,odr}/`, score each trial against the six canonical facts in `fixtures/adr_010_question.json`.
+3. **Aggregate + winner selection** — compute mean/median across trials for each of the six metrics; declare a winner per the ADR-010 selection criteria (weighted correctness + diversity primary; latency + VRAM as tiebreakers).
+4. **Second ADR-010 amendment (LOCKED)** — add `LOCKED (2026-07-30 · winner: <X>)` header and `## Head-to-Head Result` section; flip loser to `REJECTED` in `docs/PORTING_LEDGER.md`; promote winner's vendoring path (or its contract) into a first-class `adapters/zetesis/inner_loop/` seam ready for Stage 6.3 to consume.
+5. **Fanout** — spec §17 ADR-010 row updated from OPEN to LOCKED; Build-Sequence §6.2 flipped to LANDED with winner named; BUILD_LOG append; SESSION_HANDOFF overwrite pointing at Stage 6.3.
+6. **Commit + tag** — `stage-6-2-complete` tag on the fanout commit; push.
+7. **Refresh shared assets** — v25 zip + ADRs bundle regenerate; submit project files; `share_file` with the existing three shared-asset names to chain versions.
 
 ## Open questions / awaiting user answer
-- None.
+None — all Q1–Q15 lock-in questions resolved this session. User has standing "make the optimal choices" instruction for any residual optima within the eval design.
 
 ## Exact next action
-Stage 6.2 · **ADR-010 head-to-head eval (PRE-Phase-6.2)**: run identical multi-source research task on Colossus with AREX vs. LangChain Open Deep Research; record answer correctness (blind-rated), source diversity, latency, GPU utilization, integration effort; land benchmark artifact at `ops/benchmarks/adr-010-2026-XX-XX.md`; lock ADR-010 with the winner named. Zetesis inner-loop wiring at §6.3 depends on this decision.
+Run the Colossus trial sequence documented in `ops/benchmarks/adr_010/README.md`:
+
+```bash
+cd ~/kosmos-scan
+docker compose -f ops/benchmarks/adr_010/docker-compose.yml up -d searxng
+curl -s "http://127.0.0.1:8888/search?q=test&format=json" | head -c 200
+
+CUDA_VISIBLE_DEVICES=0 python -m vllm.entrypoints.openai.api_server \
+  --model BAAI/AREX-Turbo --served-model-name AREX-Turbo \
+  --host 127.0.0.1 --port 8001 --dtype bfloat16 &
+sleep 60
+.venv/bin/python -m ops.benchmarks.adr_010.runner --contender arex --trials 3
+kill %1
+
+ollama pull qwen2.5:32b-instruct-q4_K_M  # ~20GB, one-time
+.venv/bin/python -m ops.benchmarks.adr_010.harness.mcp_search_server --transport sse &
+sleep 5
+.venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr --trials 3
+kill %1
+
+git add ops/benchmarks/artifacts/
+git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 commit \
+  -m "ADR-010 eval artifacts (Colossus run 2026-07-30)"
+git push
+```
+
+After push, notify Perplexity Computer session — the artifact JSONs will be blind-rated, ADR-010 will be locked with the winner, and Stage 6.2 will close.

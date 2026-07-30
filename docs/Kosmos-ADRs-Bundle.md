@@ -1,6 +1,6 @@
 # Kosmos v25 — Consolidated Architecture Decision Records
 
-**Single-file bundle** of all 53 ADRs for Kosmos v25 plus the ADR index. Ordered by ID; every original filename is preserved as a section header so the file can be split back into individual ADR files if needed.
+**Single-file bundle** of all 54 ADRs for Kosmos v25 plus the ADR index. Ordered by ID; every original filename is preserved as a section header so the file can be split back into individual ADR files if needed.
 
 **No OPEN ADRs remain in v25.** All ADRs are Ratified or Ratified v25.
 
@@ -33,7 +33,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-012 | `ADR-012-donor-adapter-consolidation.md` | Consolidate ollama.py/searxng.py duplicates | **Ratified v25** | Stage 1.1 |
 | ADR-013 | `ADR-013-memory-bridge-selection.md` | Choose memory/bridge.py vs. Gnosis schema | **LOCKED** · Gnosis schema (6/6) · 2026-07-29 | Stage 1.9 |
 | ADR-014 | `ADR-014-ui-parity-rule.md` | UI Parity standing rule | Ratified (v24) | Every phase after Tektos Phase 2 |
-| ADR-015 | `ADR-015-oikos-before-zetesis.md` | Oikos ahead of Zetesis sequencing | Ratified (v24) | Stage 5 |
+| ADR-015 | `ADR-015-oikos-before-zetesis.md` | Oikos ahead of Zetesis sequencing (**Amended 2026-07-30:** Stage-5 deferred by user; Stage 6.1 lands first — see ADR-052) | Ratified (v24) · Amended 2026-07-30 | Stage 5 (deferred) |
 | ADR-016 | `ADR-016-knowsys-gnosis-merge.md` | Knowsys merged into Gnosis | **LOCKED** (2026-07-30) | Phase 3.3 (Stage 4.1) |
 | ADR-017 | `ADR-017-llm-council-reference.md` | karpathy/llm-council as design reference only | Ratified | Phase 6.4 |
 | ADR-018 | `ADR-018-oikos-benefit-references.md` | sure/Maybe rejected; CMSgov/18F as references | Ratified | Phase 5.3 |
@@ -72,6 +72,8 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-050 | `ADR-050-stage-4-5-humanities-bilara-adapter-corpus.md` | Stage 4.5 · SuttaCentral Bilara humanities corpus as MemoryPort adapter corpus (CC0). Q1=Bilara (CC0) — pivoted from 84000 CC-BY-NC-4.0 to eliminate NC downstream propagation; Bilara directory mirror between `translation/<lang>/<translator>/**` and `root/<lang>/<edition>/**` is literally CIDOC-CRM `P73_has_translation` (rejected 84000 alone + rejected both). Q2=pinned SHA `3c93d1cea80fdebcefb777c8724c35bd971f360a` + workspace-local re-ingest CLI `scripts/ingest_humanities.py --sha <SHA> [--via gh|checkout]` (rejected `published`-branch tracking + one-shot no-CLI). Q3=adapter now at `adapters/memory/dozerdb/corpora/humanities_bilara/`, relocates to `plugins/gnosis/humanities/canonical_kb/` at Phase 3 (rejected premature-plugin + never-move; loader shape stable across move). Q4=temporal + typed CIDOC-CRM link retrieval via `CorpusEdge` with `P73_is_translation_of` (70) + `P94_was_created_by` (70) = 140 edges at 4.5 landing; VectorPort surface NOT opened; **untyped `references` kind explicitly rejected** — CIDOC-CRM property URIs required for external KG interop (rejected temporal-only + temporal+vector). Q5=per-file granularity: one record per `translation/<lang>/<translator>/**/*.json` + one per mirrored root JSON + one per referenced translator `E21_Person` actor from `_author.json` (rejected per-publication roll-up + per-segment splitting + omitting actor records — latter breaks Corpus resolvability invariant). Q6=full-body segment-keyed JSON ingest with `body`+`segment_count`+`source_commit`+`license` (`CC0-1.0` translations / `public-domain` root)+`upstream_url`+translator/publication metadata+typed `references`; Stage 4.5 slice = Sujato's English translations of scpub7 Dhammapada + scpub19 Khuddakapatha + scpub86 Cariyapitaka mirrored by Mahasangiti Pali root under `root/pli/ms/sutta/kn/{dhp,kp,cp}/` = 141 records (70 translation + 70 root + 1 actor), 140 CIDOC-CRM edges, ~392 KB fixture (rejected pointer-only). Reconciles ADR-002 + ADR-016 (Humanities substrate under Gnosis) with Stage 4.2 corpora contract (ADR-047) — Bilara content enters as MemoryPort **data**, not plugin code. Stage 4.2 `humanities_cidoc_sample` corpus stays as fast-tier CIDOC-CRM invariants probe — NOT superseded. New: `adapters/memory/dozerdb/corpora/humanities_bilara/{__init__.py,humanities_bilara.py,fixtures/humanities_bilara.jsonl}` + `scripts/ingest_humanities.py`. Extended: corpora `__init__.py` exports `HUMANITIES_BILARA_CORPUS` + `load_humanities_bilara_corpus`; `ALL_CORPORA` grows to five. Loader validates three subject namespaces (`bilara/actor/`, `bilara/root/`, `bilara/translation/`) with per-namespace required-attribute lists; unknown namespaces rejected. Tests: 7 new fast (cardinality-by-namespace 1/70/70, provenance triple + CIDOC-CRM class labels `E33_Linguistic_Object`/`E21_Person`, typed-edge kind census {P73_is_translation_of:70, P94_was_created_by:70} + resolvability, root/translation bijection at `bilara_uid`, env override `KOSMOS_HUMANITIES_BILARA_PATH`, missing-attribute + unknown-namespace rejection, fixture-committed check). DozerDB adapter suite 155 passed / 9 skipped (up from 142/8 at Stage 4.4). No new pip deps, no runtime network fetch. ADR-007/008/016/047/049 respected. DoD anchor `pytest adapters/memory/dozerdb/`; tag `stage-4-5-complete` | **Ratified v25** | Stage 4.5 |
 
 | ADR-051 | `ADR-051-stage-4-6-exit-gate-gnosis-surrogate.md` | Stage 4.6 · exit gate materialized as adapter-side FastAPI surrogate at `adapters/memory/dozerdb/gate/` — reads the five landed corpora as-is; Phase-3 Gnosis will wrap or replace this surface. Q1=adapter-side surrogate at `adapters/memory/dozerdb/gate/` (rejected `plugins/gnosis/ui/` — no Gnosis code exists, stub plugin would need deletion at Phase 3). Q2=federated across all five landed corpora (`synthetic-lifeline`, `humanities-cidoc-sample`, `rigpa-export`, `superpowers`, `humanities-bilara`) — every corpus addressable at `/corpus/{name}` (rejected single-corpus scope). Q3=fast tier is DoD anchor via FastAPI `TestClient`; live tier bound to `127.0.0.1:8746` behind `KOSMOS_STAGE_46_LIVE=1` (rejected live tier as DoD anchor — CI would need port binding). Q4=FastAPI application factory `build_stage_46_gate_app(*, corpora)` mirroring Tektos UI (Stage 3.11) shape — six locked routes: `/` (dashboard), `/corpus/{name}` (detail), `/corpus/{name}/provenance/{event_id}` (chain), `/corpus/{name}/query` (temporal), `/corpus/{name}/traverse/{event_id}` (typed edges), `/healthz` — pure-Python HTML fragment templates with `html.escape` on every user string, no jinja/htmx (rejected plain route module — misses stateless factory pattern). Q5=one temporal query + one CIDOC-CRM traversal, both required: (a) 70 Bilara translation records surfaced with `provenance`+`as_of`+`confidence`; (b) outbound edges from any Bilara translation resolve to exactly {`P73_is_translation_of`, `P94_was_created_by`}. Q6=default confidence `1.0` for corpus-sourced facts at 4.6 (rejected per-corpus tunable defaults — premature until Stage 5 Graphiti derivations exist). Ports: gate on 8746 (distinct from Tektos UI 8765). New: `adapters/memory/dozerdb/gate/{__init__.py,policy.py,models.py,traversal.py,templates.py,server.py,test_stage_46_gate.py}`. No new pip dep (FastAPI already vendored from Stage 3.11 Tektos UI — no PORTING_LEDGER change). No plugin imports (ADR-007 AST guard test enforces `gate/*.py` never imports `plugins.*`). Zero-trust preserved — gate is read-only; `STAGE_46_PROVENANCE="stage_46_gate"` reserved for any future write path. Tests: 19 new fast + 1 env-gated live; DozerDB adapter tier 174 passed / 10 skipped (up from 155/9 at Stage 4.5); whole-repo fast tier 957 passed / 19 skipped. Reconciles ADR-002 + ADR-016 (Gnosis Phase 3 substrate) with the Stage 4.6 DoD verb ("answers a temporal question with full provenance chain") — the DoD reads at the retrieval surface, not at a plugin, so materializing the surface at the adapter layer is sufficient. DoD anchor `pytest adapters/memory/dozerdb/gate/`; tag `stage-4-6-complete` | **Ratified v25** | Stage 4.6 |
+
+| ADR-052 | `ADR-052-stage-6-1-zetesis-skeleton.md` | Stage 6.1 · Zetesis plugin skeleton — kernel-plugin at `plugins/zetesis/` with dataclass-plus-async-start-stop shape mirroring Praxis/Phrouros/Tektos. Q1=A amend ADR-015 with status-amendment block preserving original text; author this ADR for concrete 6.1 lock-in (rejected supersede-ADR-015 — Stage 5 deferred, not cancelled). Q2=A `build_zetesis_descriptor()` returns descriptor with **zero panels, zero routes, empty design tokens** — kernel discovers Zetesis but nothing renders yet; UI surface lands Stage 6.3/6.4 (rejected `PanelSlot.RESEARCH_FEED` addition — requires `ports/frontend_contract.py` amendment + separate ADR, scope creep against DoD literal 'Plugin loads'). Q3=A skeleton is inner-loop-agnostic; 10 required business ports held as constructor deps but **called zero times** at 6.1; no `ResearchInnerLoop` Protocol seam; ADR-010 head-to-head remains pristine pre-Phase-6.2 (rejected abstract-Protocol-seam — risks pre-empting ADR-010's decision surface). Enforced by `test_start_touches_no_business_port` binding all 10 ports to `_UntouchablePort` sentinels that raise `AssertionError` on any attribute access. Q4=confirmed locked MemoryPort constants at 6.1 even though first write lands Stage 6.3: `ZETESIS_MEMORY_PROVENANCE="zetesis_research"`, `ZETESIS_MEMORY_PREDICATE="zetesis.research.completed"`, `ZETESIS_MEMORY_DEFAULT_CONFIDENCE=0.75` (mirrors ADR-036 Tektos pre-Reflexion default; sits in `(0,1]` per ADR-008 zero-trust guard). Q5=C real `ZetesisPlugin` **is** the `zetesis-stub` from spec §191 + Build-Sequence §1.6; no separate stub package; Phase-1 stub-role debt closes at 6.1 landing (rejected A: build separate `plugins/zetesis_stub/` — creates code spec says will be deleted at Phase 6; rejected B: KNOWN_ISSUES.md deferral — leaves obligation unresolved). Q6=A single composite ADR covers Q1–Q7 (they're load-bearing on each other; splitting would fragment the lock-in trail). Q7=B-plus 10 required (non-None) + 1 optional port slot — corrects Build-Sequence §6.1's stale 4-port list vs. spec §95 (SearchPort omission from ADR-021) + spec §172/§191 implicit ResourcePort requirement from Q5=C stub-role. Required: FrontendContractPort, LLMPort, MemoryPort, VectorPort, DataPort, SearchPort (Q7 correction), EventBusPort (Q7 addition), ResourcePort (Q7 addition; required by stub-role obligation), NotificationPort (Q7 addition; algedonic path for grounding-failure escalation per spec §46), ObservabilityPort (Q7 addition; trace + metrics for every 6.3+ inner-loop call). Optional (may be `None` at 6.1): SecretsPort (external-service credentials, wired when non-local SearchPort backend or paywalled data source is added). New files: `plugins/zetesis/{__init__.py, plugin.py, tests/__init__.py, tests/test_zetesis_plugin.py}`. No new pip deps; no PORTING_LEDGER change (skeleton is purpose-written, no OSS port). ADR-007 respected (AST scan of `plugins/zetesis/**/*.py` finds zero imports of `plugins.praxis`/`plugins.phrouros`/`plugins.tektos`); ADR-008 respected (write constants pinned in `(0,1]` for Stage 6.3+ writes); ADR-010 preserved (zero `LLMPort` calls at 6.1); ADR-015 amended (Stage-5 deferred); ADR-021 preserved (SearchPort promoted to required); ADR-029 preserved (ResourcePort priority queue wired for Stage 6.3+ inference). Test surface: 29 fast contract tests (locked constants x8, descriptor shape x5, construction/lifecycle/idempotency x11, ADR-007 AST guard x1, port-surface holds x2, `_UntouchablePort` proof x1, `SecretsPort` optional-slot x1). Whole-repo fast tier: 986 / 19 (up from 957 / 19 at Stage 4.6, delta +29 = new Zetesis tier exactly). DoD anchor `pytest plugins/zetesis/`; tag `stage-6-1-complete` | **Ratified v25** | Stage 6.1 |
 
 ## The one remaining open decision
 
@@ -649,6 +651,14 @@ Stage 1.3 (adapter wire-up) → Stage 1.7 (SLO benchmark) → status `LOCKED` or
 
 > **v25 STATUS:** OPEN — sole surviving unresolved ADR. Head-to-head evaluation of **AREX** vs. **LangChain Open Deep Research** as Zetesis inner loop must run **immediately before Phase 6.2**. Selection criteria: answer correctness (blind-rated), source diversity, latency, GPU utilization on Colossus, integration effort. Benchmark artifact required at `ops/benchmarks/adr-010-<date>.md`. Winner locked; loser rejected in PORTING_LEDGER.
 
+> **STATUS AMENDMENT (2026-07-30):** Head-to-head eval harness authored and pinned. Contenders:
+> - **AREX** — via the vendored `BAAI/AREX-Turbo` inference bundle (Apache-2.0, HF commit `129812742df4a5de27980ed07bda78d9d27c7370`, subpath `inference/`). Served on Colossus via vLLM. Full BrowseComp harness including `update_context` autonomous context compression and `finish` with confidence score. AREX code repo at `github.com/VectorSpaceLab/arex-model` was **not vendored** — repo ships without a LICENSE file, so per `kosmos-port-workflow` license discipline the harness executor was authored fresh from the Apache-2.0 HF-shipped protocol.
+> - **Open Deep Research** — via the vendored `langchain-ai/open_deep_research@d337ae32ed4ff8f4c6fbe192ba3bf1b2d6610799` (MIT, EVAL-ONLY per PORTING_LEDGER). Served with `qwen2.5:32b-instruct-q4_K_M` on local Ollama. `search_api=NONE` + MCP tools substitute so ODR sees the same search backend AREX does.
+>
+> Both contenders route `search` and `visit` through an identical self-hosted **SearXNG** instance (see `ops/benchmarks/adr_010/docker-compose.yml`) so the eval measures loop quality, not search quality. Ground-truth question fixture (`fixtures/adr_010_question.json`) locks 6 canonical facts across Neo4j Community vs. DozerDB (packaging, license, feature deltas) for blind rating.
+>
+> Six locked metrics per trial: `answer_correctness`, `source_diversity`, `latency_seconds`, `gpu_utilization_peak_pct`, `vram_peak_gb`, `integration_effort_hours` (see `ops/benchmarks/adr_010/metrics.py`). Harness contract-tested in the Perplexity sandbox (17/17 pass); trial execution runs on Colossus. This amendment locks the eval design; winner will be added in a subsequent `LOCKED` amendment once the Colossus run completes.
+
 ---
 
 Status: Proposed (Tier-2 ADR ratification required per Kosmos v20 ADR practice, since this touches PORTING_LEDGER.md and the Zetesis scope entry)
@@ -904,7 +914,22 @@ Enforced starting immediately **after** Tektos Phase 2 (the grandfathered phase)
 
 # ADR-015 — Oikos-Ahead-of-Zetesis Build Sequencing
 
-**Status:** Ratified (v24) · **Lock-in phase:** Stage 5
+**Status:** Ratified (v24) · Amended 2026-07-30 (Stage-5 deferred by user) · **Lock-in phase:** Stage 5
+
+> **STATUS AMENDMENT (2026-07-30):** At Stage 4.6 landing (commit `5ce3917`,
+> tag `stage-4-6-complete`), the user elected to **defer Stage 5** (Oikos +
+> APEX-in-plugin + Nomisma-adjacent Phase-5 work) until later, jumping
+> directly from Stage 4.6 into Stage 6.1 (Zetesis skeleton — see ADR-052).
+>
+> This ADR is **amended, not superseded**. Stage 5 remains valid future
+> work; when the user returns to it, the original decision text below
+> ("Build Oikos in Stage 5, Zetesis in Stage 6") re-activates as
+> guidance for the order in which Phase-5 substages should land relative
+> to any remaining Phase-6 work.
+>
+> The immediate practical effect: Stage 6.1 lands before Stage 5.1. See
+> `docs/adrs/ADR-052-stage-6-1-zetesis-skeleton.md` §Q1 for the lock-in.
+
 
 ## Context
 
@@ -8242,6 +8267,327 @@ set, or default confidence requires an amendment ADR.
   — parity source for the FastAPI-factory shape.
 - `adapters/memory/dozerdb/corpora/` — corpora registry the gate
   reads at factory construction.
+
+---
+
+## FILE: `adrs/ADR-052-stage-6-1-zetesis-skeleton.md`
+
+# ADR-052 — Stage 6.1 · Zetesis plugin skeleton + Stage-5 deferral
+
+**Status:** Ratified v25
+**Lock-in phase:** Stage 6.1 (Phase 6 — Research + ADR-010 Resolution)
+**Supersedes:** —
+**Amends:** ADR-015 (Oikos-Ahead-of-Zetesis Build Sequencing)
+
+## Context
+
+Stage 6.1 in `Kosmos-Build-Sequence-v25.md` is the first Phase-6
+milestone. Its Definition of Done reads:
+
+> Plugin loads.
+
+Two upstream constraints converged at the moment 4.6 landed
+(2026-07-30):
+
+- **User elected to defer Stage 5** (Oikos, APEX-in-plugin, and
+  associated Phase-5 subsystems) until later, jumping directly from
+  Stage 4.6 (Gnosis-retrieval exit gate) into Stage 6.1 (Zetesis
+  skeleton). This departs from ADR-015 ("Oikos-Ahead-of-Zetesis
+  Build Sequencing," Ratified v24) and requires an amendment.
+- **Build-Sequence §6.1's stated port list (LLMPort, MemoryPort,
+  VectorPort, DataPort) omits SearchPort** — the 11th formal port
+  (ADR-021 Ratified v25, Stage 1.1 landed). SearchPort is Zetesis's
+  primary means of gathering fresh web evidence; its absence from
+  §6.1 is a stale-sequence omission, not a deliberate exclusion.
+  Similarly, `zetesis-stub` is called out at spec §191 +
+  Build-Sequence §1.6 as **the** driver of Tektos Phase-10 model-swap-
+  under-load priority-queue arbitration — meaning ResourcePort is
+  implicitly required, not optional, at Stage 6.1 landing.
+
+At Stage 4.6 landing (commit `5ce3917`, tag `stage-4-6-complete`):
+
+- No `plugins/zetesis/` exists — clean greenfield.
+- All 11 formal ports (SearchPort/LLMPort/EventBusPort/SecretsPort/
+  ObservabilityPort/VectorPort/MemoryPort/DataPort/ResourcePort/
+  NotificationPort/FrontendContractPort) have working adapters and
+  landed Protocols under `ports/*.py`.
+- Existing plugins (Praxis at Stage 2.1, Phrouros at Stage 2.3,
+  Tektos at Stage 3.1+) establish the dataclass-plugin-with-async-
+  start-stop pattern.
+- ADR-010 (AREX vs LangChain Open Deep Research head-to-head) is
+  **OPEN — head-to-head eval pre-Phase-6.2**. Any Zetesis code at
+  6.1 that pre-commits to an inner-loop vendor would pre-empt that
+  decision.
+
+Six lock-in questions surfaced during scope-restatement; the user
+locked answers as Q1=A · Q2=A · Q3=A · Q4=confirmed · Q5=C · Q6=A,
+then extended with Q7=B-plus after the SearchPort omission was
+flagged. This ADR captures all seven locks.
+
+## Decision
+
+### Q1 — Sequencing amendment shape
+
+**A** — Amend ADR-015 with a status-amendment block preserving the
+original Oikos-before-Zetesis rationale, then author this ADR-052
+locking the concrete Stage 6.1 skeleton. Do not supersede ADR-015;
+Stage 5 is deferred, not cancelled.
+
+Rejected: authoring a new ADR to reverse ADR-015 (over-heavy for a
+user-elected sequencing shift; violates the amend-not-overwrite
+discipline in `kosmos-adr-authoring`).
+
+### Q2 — Panel / route surface at Stage 6.1
+
+**A** — `build_zetesis_descriptor()` returns a `PluginDescriptor`
+with **zero panels, zero routes, empty design tokens**. The kernel
+discovers Zetesis via `FrontendContractPort.register_plugin` but
+nothing renders yet. Panels + routes land at Stage 6.3/6.4 when real
+research output exists to display.
+
+Rejected: adding a `PanelSlot.RESEARCH_FEED` slot at 6.1 (requires
+`ports/frontend_contract.py` amendment + a separate ADR — scope
+creep against DoD literal "Plugin loads"). Rejected: reusing an
+existing slot (no natural fit; would misrepresent Zetesis as
+approvals/governance/trace producer).
+
+### Q3 — ADR-010 posture at Stage 6.1
+
+**A** — The skeleton is **inner-loop-agnostic**. `LLMPort`,
+`SearchPort`, `MemoryPort`, `VectorPort`, `DataPort`, `EventBusPort`,
+`ResourcePort`, `NotificationPort`, `ObservabilityPort`, and
+`SecretsPort` are held as constructor dependencies but **called
+zero times** at 6.1. No research-pipeline scaffolding, no query
+decomposition seam, no `ResearchInnerLoop` Protocol. The
+AREX-vs-Open-Deep-Research head-to-head runs pre-Phase-6.2 per
+ADR-010 § "Lock-in phase"; 6.1 must not pre-empt it.
+
+Rejected: scaffolding an abstract `ResearchInnerLoop` Protocol seam
+(risks pre-empting ADR-010's decision surface even if the seam is
+"minimal"). Enforcement: `test_start_touches_no_business_port`
+constructs the plugin with `_UntouchablePort` sentinels that raise
+`AssertionError` on any attribute access; `start()` completing
+without raising proves zero business-port calls at Stage 6.1.
+
+### Q4 — MemoryPort write contract constants
+
+**Confirmed** — locked at 6.1 so downstream Stage-6 tests + Phrouros
+grounding checks can pin exact strings, even though the first write
+lands at Stage 6.3:
+
+- `ZETESIS_MEMORY_PROVENANCE = "zetesis_research"`
+- `ZETESIS_MEMORY_PREDICATE = "zetesis.research.completed"`
+- `ZETESIS_MEMORY_DEFAULT_CONFIDENCE = 0.75`
+
+The default confidence mirrors Tektos ADR-036's pre-Reflexion
+default; Zetesis's Phase-6.3 inner loop will replace it with a
+task-tuned score once ADR-010 resolves. `0.75 ∈ (0, 1]` — passes
+`ports.memory.validate_zero_trust_write` (ADR-008).
+
+### Q5 — Zetesis stub fate
+
+**C** — The real `ZetesisPlugin` **is** the `zetesis-stub` that
+spec §191 + Build-Sequence §1.6 require for Tektos Phase-10
+model-swap-under-load. There is no separate stub package. Spec §191
+explicitly says: *"When the real plugins are built (Phase 6), they
+must pass the identical fixture-stub contract test before
+promotion."* — this ADR interprets that as "the real plugin at
+Stage 6.1 is what Tektos's Phase-10 rig binds to; no interim stub
+exists."
+
+Rejected: **A** (go back and build a separate `plugins/zetesis_stub/`
+package — creates code the spec says will be deleted at Phase 6).
+Rejected: **B** (KNOWN_ISSUES.md deferral — leaves the spec-literal
+obligation unresolved for an entire phase).
+
+Practical consequence: `ResourcePort` becomes a required (non-None)
+port slot at 6.1 landing because the fixture-stub contract requires
+the stub to *request a background model load on a fixed schedule to
+exercise priority-queue arbitration.* At Stage 6.1 the request is
+not fired yet, but the port must be wired.
+
+### Q6 — ADR shape
+
+**A** — Single composite ADR-052 covers Q1–Q7. The questions are
+load-bearing on each other (Q5=C forces ResourcePort into Q7=B-plus;
+Q3=A forbids business-port calls that Q7's expanded port list would
+otherwise invite). Splitting into per-question ADRs would fragment
+the lock-in trail.
+
+### Q7 — Port surface at Stage 6.1
+
+**B-plus** — 10 required (non-None) + 1 optional slot.
+
+**Required:**
+
+1. `FrontendContractPort` — descriptor registration.
+2. `LLMPort` — inner-loop query decomposition / summarization /
+   citation grounding (first call at Stage 6.3).
+3. `MemoryPort` — `zetesis.research.completed` writes + prior-research
+   retrieval (first call at Stage 6.3).
+4. `VectorPort` — semantic retrieval over prior research + external
+   corpora (first call at Stage 6.3).
+5. `DataPort` — JSON-LD import/export for research questions +
+   reports (first call at Stage 6.3).
+6. `SearchPort` — web-search substrate (**Q7 correction to §6.1
+   omission**; primary means of gathering fresh evidence).
+7. `EventBusPort` — publishes `zetesis.research.completed` for
+   Synedrion strategic-signal consumption (**Q7 addition**; spec
+   §35 System-4 requires it).
+8. `ResourcePort` — priority-queue arbitration per spec §172
+   (**Q7 addition**; required by Q5=C stub-role obligation via
+   spec §191).
+9. `NotificationPort` — algedonic path for grounding-failure /
+   source-diversity-gate violations (**Q7 addition**; spec §46
+   two-layer anti-hallucination). Required so no research path
+   silently swallows a signal.
+10. `ObservabilityPort` — trace + metrics for every inner-loop call
+    (**Q7 addition**). Required so no Phase-6.3+ inference escapes
+    observation.
+
+**Optional:**
+
+11. `SecretsPort` — external-service credentials (academic APIs,
+    alternate SearchPort backends). Defaults to `None` at 6.1;
+    wired when Zetesis first consumes a non-local SearXNG backend
+    or paywalled data source.
+
+Rejected: **B** (as above but with `ResourcePort` + `EventBusPort`
+optional — weakens the Q5=C stub-role commitment and invites
+plugins that silently swallow events, breaking ADR-007's events-only
+cross-plugin coupling model). Rejected: keeping the original §6.1
+four-port list verbatim (leaves the SearchPort omission unresolved
+and forces a Q7 amendment at Stage 6.3, when the port surface is
+harder to change without touching real inner-loop code).
+
+## Rationale
+
+- **Minimal DoD honored literally.** §6.1 says "Plugin loads." The
+  skeleton loads, registers with FrontendContractPort, and does
+  nothing else. Every choice above defends that literal.
+- **ADR-010 pristine.** Zero business-port calls at 6.1 means the
+  head-to-head eval remains a clean apples-to-apples comparison at
+  Phase 6.2. No sunk-cost bias toward whichever inner loop the 6.1
+  skeleton would have "started to sketch."
+- **Stub-role obligation discharged.** Q5=C + Q7=B-plus together
+  mean the Phase-1 debt for `zetesis-stub` closes at 6.1 landing:
+  the real plugin holds ResourcePort and can drive the Tektos
+  Phase-10 rig without any interim shim.
+- **Spec/sequence gap closed.** Q7 upgrading §6.1's port list from
+  4 → 10 required + 1 optional resolves the pre-existing omission
+  of SearchPort + the implicit ResourcePort requirement from
+  §172/§191. Build-Sequence §6.1 is updated in the same fanout.
+- **Zero-trust preserved.** Every write constant sits in `(0, 1]`
+  and every provenance/predicate string is fixed at 6.1, so
+  Phrouros grounding checks (Phase 4 scope) and downstream Stage-6
+  tests can pin exact values before any actual write lands.
+- **Amend-not-overwrite discipline.** ADR-015 stays; a status-
+  amendment block records the deferral rationale ("user elected to
+  jump to Stage 6.1 after Stage 4.6 landed"). Stage 5 remains valid
+  future work; ADR-015 will drive its build order when the user
+  returns.
+
+## Consequences
+
+- **New files:**
+  - `plugins/zetesis/__init__.py` — public re-exports.
+  - `plugins/zetesis/plugin.py` — `ZetesisPlugin` dataclass +
+    `build_zetesis_descriptor()` + locked constants.
+  - `plugins/zetesis/tests/__init__.py`.
+  - `plugins/zetesis/tests/test_zetesis_plugin.py` — 29 fast
+    contract tests, including the ADR-007 AST guard scanning
+    `plugins/zetesis/**/*.py` for `plugins.praxis` /
+    `plugins.phrouros` / `plugins.tektos` imports.
+
+- **ADR-015 amended** with a status-amendment block dated
+  2026-07-30 noting the Stage-5 deferral. Original decision text
+  preserved; status line updated to
+  `Ratified (v24) · Amended 2026-07-30 (Stage-5 deferred by user)`.
+
+- **`Kosmos-Build-Spec-v25.md` §17** — ADR-052 row appended after
+  ADR-051, before §17.1.
+
+- **`Kosmos-Build-Sequence-v25.md` §6.1** rewritten as a LANDED
+  block: DoD stays "Plugin loads"; port list expanded from 4 to
+  10 required + 1 optional per Q7=B-plus, with ADR-052 cited.
+  Tag `stage-6-1-complete` recorded.
+
+- **`docs/adrs/README.md`** — ADR-052 index row inserted before
+  the OPEN section.
+
+- **`PORTING_LEDGER.md`** — no change. No new upstream component
+  vendored (the plugin skeleton is purpose-written; no OSS port).
+
+- **Test surface:** `plugins/zetesis/tests/test_zetesis_plugin.py`
+  = 29 fast tests. Whole-repo fast tier moves from 957 / 19 at
+  Stage 4.6 to **986 / 19** at Stage 6.1 landing (delta +29,
+  matches new file exactly).
+
+- **ADR-007 respected.** AST scan of `plugins/zetesis/**/*.py`
+  finds zero imports of `plugins.praxis`, `plugins.phrouros`, or
+  `plugins.tektos`. Zetesis reaches every other plugin only via
+  the event bus (once EventBusPort is exercised at Stage 6.3+).
+
+- **ADR-008 preserved.** Every Zetesis write path (Stage 6.3+)
+  will carry `ZETESIS_MEMORY_PROVENANCE` +
+  `ZETESIS_MEMORY_DEFAULT_CONFIDENCE ∈ (0, 1]` — zero-trust
+  invariants pinned at 6.1 before any write lands.
+
+- **ADR-010 preserved.** Zetesis at 6.1 makes zero `LLMPort`
+  calls. The Phase-6.2 head-to-head eval remains fully open.
+
+- **ADR-015 amended but not superseded.** Stage-5 (Oikos + APEX-
+  in-plugin + Nomisma-adjacent Phase-5 work) is deferred, not
+  cancelled. When the user returns to Stage 5, ADR-015's
+  sequencing rationale re-activates as guidance for the order of
+  Phase-5 substages.
+
+- **ADR-021 preserved.** SearchPort promotion to a required
+  Zetesis constructor slot at 6.1 (Q7=B-plus) reinforces
+  ADR-021's "web search is first-class" claim.
+
+- **ADR-029 preserved.** ResourcePort's fixed priority order
+  (`Phrouros anomaly > Tektos active > Synedrion/Zetesis
+  background`) is Zetesis's arbitration substrate; Q7=B-plus
+  wires the port slot so Stage 6.3's first LLM inference call
+  will pass through the priority queue by construction.
+
+- **DoD anchor.** `pytest plugins/zetesis/` — 29 fast tests
+  green. Whole-repo fast tier: `pytest` — 986 / 19 (+29 vs.
+  Stage 4.6 close).
+
+- **Tag `stage-6-1-complete`** to be applied on the fanout
+  commit.
+
+- **Stop-condition status:** met — plugin loads, descriptor
+  registers, all 10 required port slots are held, all locked
+  constants pin exactly, ADR-007 AST guard clean, no business
+  port called at 6.1.
+
+## Lock-in phase
+
+Stage 6.1 · Phase 6 (Research + ADR-010 Resolution) · Weeks 9–10.
+
+## References
+
+- `Kosmos-Build-Spec-v25.md` §4.1 (port surface), §17 (ADR
+  summary), §35/§38 (System-4/System-1 role), §46 (anti-
+  hallucination), §95 (SearchPort surface), §172 (priority queue),
+  §191 (fixture-stub contract), §555 (Phase-1 fixture-stub build).
+- `Kosmos-Build-Sequence-v25.md` §1.6 (`zetesis-stub` Phase-1
+  build), §6.1 (Zetesis skeleton, now rewritten as LANDED).
+- `docs/adrs/ADR-015-oikos-before-zetesis.md` — amended in the
+  same commit with the 2026-07-30 status-amendment block.
+- `docs/adrs/ADR-010-arex-vs-langchain-open-deep-research.md` —
+  preserved OPEN; Zetesis at 6.1 makes no inner-loop commitment.
+- `docs/adrs/ADR-021-searchport-as-11th-port.md` — cited by Q7.
+- `docs/adrs/ADR-029-resourceport-full-surface.md` — cited by Q7
+  + Q5=C stub-role obligation.
+- `docs/adrs/ADR-036-tektos-openhands-sdk-vendoring.md` — source
+  of the `0.75` pre-Reflexion default confidence mirrored by Q4.
+- `docs/adrs/ADR-051-stage-4-6-exit-gate-gnosis-surrogate.md` —
+  immediate predecessor; same six-question shape extended to
+  seven here.
 
 ---
 

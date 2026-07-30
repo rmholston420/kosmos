@@ -82,7 +82,7 @@ packages = ["ports", "adapters", "adapters.llm", "adapters.llm.ollama", "adapter
 minversion = "8.0"
 addopts = "-ra -q"
 asyncio_mode = "auto"
-testpaths = ["ports", "adapters", "kernel", "plugins"]
+testpaths = ["ports", "adapters", "kernel", "plugins", "ops"]
 # Harbor-format eval task fixtures live under plugins/tektos/eval/tasks/.
 # Their `tests/` dirs are the Pier verifier's tests — they must not be
 # collected by the Kosmos pytest suite (they expect the sandboxed

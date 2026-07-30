@@ -1,0 +1,23 @@
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: kosmos-adr010-searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./fixtures/searxng_settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - INSTANCE_NAME=kosmos-adr010
+      - BASE_URL=http://127.0.0.1:8888/
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

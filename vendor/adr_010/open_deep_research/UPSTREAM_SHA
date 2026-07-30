@@ -1,0 +1,4 @@
+upstream_url: https://github.com/langchain-ai/open_deep_research.git
+upstream_sha: d337ae32ed4ff8f4c6fbe192ba3bf1b2d6610799
+vendored_at: 2026-07-30 09:57 EDT
+purpose: ADR-010 head-to-head eval only (EVAL-ONLY per PORTING_LEDGER); not promoted to adapters/

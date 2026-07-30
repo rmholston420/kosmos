@@ -1,5 +1,13 @@
 > **v25 STATUS:** OPEN — sole surviving unresolved ADR. Head-to-head evaluation of **AREX** vs. **LangChain Open Deep Research** as Zetesis inner loop must run **immediately before Phase 6.2**. Selection criteria: answer correctness (blind-rated), source diversity, latency, GPU utilization on Colossus, integration effort. Benchmark artifact required at `ops/benchmarks/adr-010-<date>.md`. Winner locked; loser rejected in PORTING_LEDGER.
 
+> **STATUS AMENDMENT (2026-07-30):** Head-to-head eval harness authored and pinned. Contenders:
+> - **AREX** — via the vendored `BAAI/AREX-Turbo` inference bundle (Apache-2.0, HF commit `129812742df4a5de27980ed07bda78d9d27c7370`, subpath `inference/`). Served on Colossus via vLLM. Full BrowseComp harness including `update_context` autonomous context compression and `finish` with confidence score. AREX code repo at `github.com/VectorSpaceLab/arex-model` was **not vendored** — repo ships without a LICENSE file, so per `kosmos-port-workflow` license discipline the harness executor was authored fresh from the Apache-2.0 HF-shipped protocol.
+> - **Open Deep Research** — via the vendored `langchain-ai/open_deep_research@d337ae32ed4ff8f4c6fbe192ba3bf1b2d6610799` (MIT, EVAL-ONLY per PORTING_LEDGER). Served with `qwen2.5:32b-instruct-q4_K_M` on local Ollama. `search_api=NONE` + MCP tools substitute so ODR sees the same search backend AREX does.
+>
+> Both contenders route `search` and `visit` through an identical self-hosted **SearXNG** instance (see `ops/benchmarks/adr_010/docker-compose.yml`) so the eval measures loop quality, not search quality. Ground-truth question fixture (`fixtures/adr_010_question.json`) locks 6 canonical facts across Neo4j Community vs. DozerDB (packaging, license, feature deltas) for blind rating.
+>
+> Six locked metrics per trial: `answer_correctness`, `source_diversity`, `latency_seconds`, `gpu_utilization_peak_pct`, `vram_peak_gb`, `integration_effort_hours` (see `ops/benchmarks/adr_010/metrics.py`). Harness contract-tested in the Perplexity sandbox (17/17 pass); trial execution runs on Colossus. This amendment locks the eval design; winner will be added in a subsequent `LOCKED` amendment once the Colossus run completes.
+
 ---
 
 Status: Proposed (Tier-2 ADR ratification required per Kosmos v20 ADR practice, since this touches PORTING_LEDGER.md and the Zetesis scope entry)
