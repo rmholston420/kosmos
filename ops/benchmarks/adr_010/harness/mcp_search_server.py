@@ -67,11 +67,19 @@ def main() -> None:
     )
     parser.add_argument(
         "--transport",
-        choices=("stdio", "sse"),
+        choices=("stdio", "sse", "streamable-http"),
         default="stdio",
+        help=(
+            "stdio for subprocess wiring; streamable-http for HTTP JSON-RPC "
+            "(the transport ODR's langchain-mcp client expects). SSE is "
+            "kept for legacy callers but does not interoperate with the "
+            "current langchain-mcp streamable_http client."
+        ),
     )
     args = parser.parse_args()
     server = build_server(args.searxng_url)
+    # FastMCP accepts "streamable-http" as the transport name and mounts the
+    # JSON-RPC endpoint at /mcp on host 127.0.0.1 port 8000 by default.
     server.run(transport=args.transport)
 
 
@@ -81,9 +89,12 @@ if __name__ == "__main__":
 
 # Notes for Colossus operators:
 #
-# ODR's Configuration accepts an MCPConfig with a URL; for URL-based (SSE)
-# transport, run:
-#   .venv/bin/python -m ops.benchmarks.adr_010.harness.mcp_search_server \
-#     --transport sse
-# and point ODR at http://127.0.0.1:8765 (FastMCP default) — or set
-# transport=stdio and use ODR's MCP-adapter subprocess wiring.
+# ODR's Configuration accepts an MCPConfig with a URL. langchain-mcp uses the
+# streamable_http transport, which POSTs JSON-RPC to <url>. Run:
+#
+#   .venv-eval/bin/python -m ops.benchmarks.adr_010.harness.mcp_search_server \
+#     --transport streamable-http
+#
+# and point ODR at http://127.0.0.1:8000/mcp/ (FastMCP default mount). SSE
+# transport is retained for backward compatibility but does NOT interoperate
+# with the current langchain-mcp client.

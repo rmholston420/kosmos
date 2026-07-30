@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mcp-url",
-        default=os.environ.get("MCP_URL", "http://127.0.0.1:8765/sse"),
+        default=os.environ.get("MCP_URL", "http://127.0.0.1:8000/mcp/"),
     )
     return parser.parse_args()
 

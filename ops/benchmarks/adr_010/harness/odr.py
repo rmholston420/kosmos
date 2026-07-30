@@ -38,7 +38,7 @@ def build_odr_config(
     *,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
     ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
-    mcp_server_url: str = "http://127.0.0.1:8765/sse",
+    mcp_server_url: str = "http://127.0.0.1:8000/mcp/",
 ) -> dict[str, Any]:
     """Assemble the RunnableConfig ODR needs.
 
@@ -106,7 +106,7 @@ async def run_odr_trial(
     trial_id: str,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
     ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
-    mcp_server_url: str = "http://127.0.0.1:8765/sse",
+    mcp_server_url: str = "http://127.0.0.1:8000/mcp/",
 ) -> TrialMetrics:
     """Run a single ODR trial. Async because ODR is LangGraph async."""
     try:
