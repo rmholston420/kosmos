@@ -169,14 +169,19 @@ async def test_record_event_forwards_expected_kwargs(monkeypatch):
     await idx.record_event("event-42", payload, as_of=as_of)
     kwargs = client.add_episode.await_args.kwargs
     assert kwargs["name"] == "event-event-42"
-    assert kwargs["uuid"] == "event-42"
+    # We do NOT pass uuid= to Graphiti (its semantics are "look up existing"
+    # not "assign this uuid"). Event id is carried in the body instead.
+    assert "uuid" not in kwargs
     assert kwargs["reference_time"] == as_of
     assert kwargs["source"] == "json"  # our fake's EpisodeType.json value
-    # episode_body must be a JSON string, not a dict
+    # episode_body must be a JSON string, not a dict, and must carry
+    # kosmos_event_id so downstream can correlate.
     import json as _json
 
     parsed = _json.loads(kwargs["episode_body"])
-    assert parsed == payload
+    assert parsed["kosmos_event_id"] == "event-42"
+    for k, v in payload.items():
+        assert parsed[k] == v
 
 
 # ── query_temporal ─────────────────────────────────────────────────────────

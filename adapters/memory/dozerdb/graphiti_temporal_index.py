@@ -75,14 +75,18 @@ class GraphitiTemporalIndex:
         # Lazy import EpisodeType for the source enum value.
         from graphiti_core.nodes import EpisodeType
 
-        body = json.dumps(payload, default=str)
+        # Graphiti's add_episode(uuid=X) looks up an existing EpisodicNode
+        # with that uuid — passing our custom event_id there raises
+        # NodeNotFoundError. Let Graphiti mint the UUID and carry event_id
+        # through the episode `name` + body for downstream lookup.
+        enriched = {"kosmos_event_id": event_id, **payload}
+        body = json.dumps(enriched, default=str)
         await client.add_episode(
             name=f"event-{event_id}",
             episode_body=body,
             source=EpisodeType.json,
             source_description=str(payload.get("provenance", "memoryport")),
             reference_time=as_of,
-            uuid=event_id,
         )
 
     async def query_temporal(
