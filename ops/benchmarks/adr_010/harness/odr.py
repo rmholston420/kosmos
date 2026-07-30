@@ -44,7 +44,17 @@ def build_odr_config(
 
     All three ODR model slots (research, summarization, final-report) point at
     the same Ollama-served qwen2.5:32b so the comparison measures one LLM.
+
+    ODR's current deep_researcher wires `configurable_fields=("model",
+    "max_tokens", "api_key")` and calls `init_chat_model` without a
+    `model_provider` keyword. LangChain's `init_chat_model` therefore has to
+    infer the provider from the model string. We force provider=openai by
+    prefixing the model tag with `openai:` — LangChain splits on the first
+    colon, so the tag `openai:qwen2.5:32b-instruct-q4_K_M` parses as
+    (provider=openai, model=qwen2.5:32b-instruct-q4_K_M) and the model name
+    is forwarded verbatim to the OpenAI-compatible endpoint (Ollama).
     """
+    prefixed_model = f"openai:{ollama_model}"
     return {
         "configurable": {
             # Search: disabled — MCP-supplied tools substitute.
@@ -60,27 +70,27 @@ def build_odr_config(
                 "web search results, and `visit(url, goal)` fetches a "
                 "URL's text content. Use them to research thoroughly."
             ),
-            # Model slots — all pointed at Ollama.
-            "research_model": ollama_model,
+            # Model slots — all pointed at Ollama via openai-compat.
+            "research_model": prefixed_model,
             "research_model_config": {
                 "base_url": ollama_base_url,
                 "temperature": 0.7,
             },
-            "summarization_model": ollama_model,
+            "summarization_model": prefixed_model,
             "summarization_model_config": {
                 "base_url": ollama_base_url,
                 "temperature": 0.3,
             },
-            "final_report_model": ollama_model,
+            "final_report_model": prefixed_model,
             "final_report_model_config": {
                 "base_url": ollama_base_url,
                 "temperature": 0.3,
             },
-            # Model provider — ODR reads LangChain provider prefix from the
-            # model string OR from model_config; we use OpenAI-compat.
-            "research_model_provider": "openai",
-            "summarization_model_provider": "openai",
-            "final_report_model_provider": "openai",
+            "compression_model": prefixed_model,
+            "compression_model_config": {
+                "base_url": ollama_base_url,
+                "temperature": 0.3,
+            },
             # Environment knobs commonly needed for local models.
             "allow_clarification": False,
             "max_researcher_iterations": 12,
