@@ -132,9 +132,9 @@ Write pure Python `Protocol` interfaces (no implementations) at `ports/`:
 - **Status:** Historically listed here in the aspirational sequence; the actual landing shipped at Stage 1.11 with ADR-029. Retained as a numbering-slot placeholder; DoD satisfied.
 - **DoD:** Attempt to reserve 40GB VRAM on a 32GB card → clean rejection. ✔ (Stage 1.11)
 
-### 1.14 FrontendContractPort adapter — declarative UI schema
-- **Action:** Plugins publish UI descriptors; kernel dashboard renders them (React + shadcn/ui)
-- **DoD:** Empty kernel dashboard renders "Kosmos" title from a schema, no plugin loaded.
+### 1.14 FrontendContractPort adapter — declarative UI schema (landed 2026-07-29 23:05 EDT per ADR-031)
+- **Action:** Ship full FrontendContractPort surface (spec §4.1 line 91 verbs — `register_plugin`/`unregister_plugin`/`list_plugins`/`get_route_manifest`/`get_design_tokens`/`get_state_namespaces`/`get_panel_manifest`/`check_ui_parity`/`render_kernel_schema` plus `is_healthy`/`close` lifecycle) per **ADR-031**. Primary `KernelFrontendContractAdapter` (pure stdlib, zero new deps) with pluggable `ManifestStore` Protocol seam: `InMemoryManifestStore` (dict-backed) primary + `FileManifestStore` (stdlib `pathlib`+`json`, atomic tmp-rename write) stub deferred to Stage 5 auditor wiring. Mirrors Rigpa-LMS `RigpaFrontendPlugin` donor shape (name/state_namespace/design_tokens/routes) extended with typed `Panel` value objects across nine `PanelSlot`s (spec §280 + §17.9 + §17.13) + `version`/`kernel_compat`. `UiParityStatus` enum {NOT_STARTED, IN_PROGRESS, COMPLIANT, GRANDFATHERED}. Non-bypassable port-level zero-trust guard rejects missing/invalid required fields, invalid plugin-name regex, empty route/panel `lazy_module`, and duplicate registrations. Design-token merge is last-registered-wins; panel ordering is `priority DESC` with insertion-order tiebreaker.
+- **DoD:** Empty kernel dashboard renders "Kosmos" title from a schema, no plugin loaded — `render_kernel_schema()` returns `KernelSchema(title="Kosmos", plugins=(), panels=())` (test `test_empty_dashboard_renders_kosmos_title_build_sequence_1_14_dod` literally satisfies this). 56 contract tests green (392 suite total).
 
 ### 1.15 Stage-1 exit gate
 - All ten ports have working adapters

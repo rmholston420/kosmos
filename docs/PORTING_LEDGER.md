@@ -479,6 +479,40 @@
 - **ADR:** ADR-030
 - **Logged:** 2026-07-29 22:52 EDT
 
+### FrontendContractPort
+
+#### Rigpa-LMS `RigpaFrontendPlugin` shape — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (file: `frontend/src/plugins/dashboard/index.ts`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-frontend/rigpa-dashboard-index.ts`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `ports/frontend_contract.py::PluginDescriptor` (Python dataclass mirror of donor TypeScript shape)
+- **Port(s):** `FrontendContractPort` (primary descriptor shape)
+- **Modifications:** ported donor `RigpaFrontendPlugin` shape (`name`, `stateNamespace`, `designTokens`, `routes` — each route with `path`/`label`/`icon` + lazy loader) to Python `PluginDescriptor` frozen dataclass; renamed camelCase to snake_case; typed `routes` as `tuple[Route, ...]` with `lazy_module: str` (frontend resolves via `import(lazy_module)`); extended with Kosmos-specific fields (`version`, `kernel_compat`, `panels: tuple[Panel, ...]`) driven by spec §280 nine-panel kernel dashboard; rejected donor `PluginRoutes.tsx` React-Suspense mount code as too domain-locked to Rigpa file-relative lazy semantics.
+- **Notes:** kernel-side authority is Python (this port); frontend-side Next.js/React 19/Radix/shadcn/ui/Tailwind/Zustand/TanStack Query shell lands separately per spec §21.3.5 and consumes `KernelSchema` via HTTP.
+- **ADR:** ADR-031
+- **Logged:** 2026-07-29 23:05 EDT
+
+#### Rigpa-LMS backend `RigpaPlugin` lifecycle protocol — `PATTERN-VENDORED (reference only)`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (file: `backend/src/rigpa_core/plugins/scaffold_plugin.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-frontend/rigpa-scaffold-plugin.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** reference for backend lifecycle contract (`startup`/`shutdown`/`health_check`) — not vendored at Stage 1.14; Kosmos exposes `is_healthy()` / `close()` on the port itself.
+- **Port(s):** `FrontendContractPort` (informs future `PluginLifecyclePort` if needed)
+- **Modifications:** none at Stage 1.14; Kosmos treats backend plugin lifecycle as orthogonal to frontend UI-schema publication.
+- **ADR:** ADR-031
+- **Logged:** 2026-07-29 23:05 EDT
+
+#### `pathlib` + `json` (stdlib) — `VENDORED (reused stdlib)`
+- **Source:** Python 3.12 standard library
+- **Commit / Version:** stdlib
+- **License:** PSF-2.0
+- **Kosmos location:** `adapters/frontend_contract/kernel/adapter.py::FileManifestStore`
+- **Port(s):** `FrontendContractPort` (ManifestStore stub for Stage 5 auditor wiring)
+- **Modifications:** used unmodified with atomic tmp-rename write via `tempfile.mkstemp` + `Path.replace`; no new runtime dependency added at Stage 1.14.
+- **Notes:** primary storage is `InMemoryManifestStore` (dict-backed) which is sufficient for §1.14 DoD; `FileManifestStore` is present as a proven-swappable stub only.
+- **ADR:** ADR-031
+- **Logged:** 2026-07-29 23:05 EDT
+
 ---
 
 ## Governance (Praxis / Phrouros)
