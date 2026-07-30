@@ -130,10 +130,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--power-cap-watts",
         type=int,
-        default=int(os.environ.get("ADR010_POWER_CAP_WATTS", "400")),
+        default=int(os.environ.get("ADR010_POWER_CAP_WATTS", "425")),
         help=(
             "apply nvidia-smi -pl <watts> at startup to reduce sustained "
-            "board-power draw. RTX 5090 stock TDP is 575W; 400W is the "
+            "board-power draw. RTX 5090 stock TDP is 575W; 425W is the "
             "post-incident conservative default. Requires sudo; if not "
             "available, the runner logs and continues (does NOT fail)."
         ),
@@ -498,7 +498,7 @@ def _apply_power_cap(args: argparse.Namespace) -> None:
     """Apply nvidia-smi -pl <watts> at startup. Never fail the run on this.
 
     Post-2026-07-30-incident hardening. On Colossus the RTX 5090 stock TDP
-    is 575W; capping to 400W drops sustained wattage ~30% at the cost of
+    is 575W; capping to 425W drops sustained wattage ~26% at the cost of
     ~20-30% slower token generation. Requires sudo. If sudo is not
     available or nvidia-smi is missing, logs and continues — do not
     hard-fail the benchmark on a defense-in-depth measure.
