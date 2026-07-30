@@ -21,7 +21,7 @@ from pathlib import Path
 from .harness.arex import run_arex_trial
 from .harness.odr import run_odr_trial
 from .metrics import TrialMetrics
-from .policy import GPUMonitor
+from .policy import GPUMonitor, wait_for_cooldown
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mcp-url",
         default=os.environ.get("MCP_URL", "http://127.0.0.1:8000"),
+    )
+    # ---- Thermal envelope ----
+    #
+    # Colossus is a single-user workstation with an RTX 5090 (Blackwell,
+    # SM_120). Sustained 32B-parameter Ollama load pushes junction temp
+    # above 85 C within a single ~2 min trial. Kosmos runs benchmarks at
+    # BACKGROUND priority (see policy.GPUMonitor / ADR-029 ResourcePort);
+    # the operator-visible boundary is thermal, not compute. These flags
+    # let us serialize trials with a cooldown window and (optionally)
+    # block on a temperature threshold before starting the next trial.
+    parser.add_argument(
+        "--cooldown-target-c",
+        type=float,
+        default=float(os.environ.get("ADR010_COOLDOWN_TARGET_C", "70")),
+        help="target GPU temperature (C) before starting the next trial",
+    )
+    parser.add_argument(
+        "--cooldown-min-seconds",
+        type=float,
+        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "30")),
+        help="minimum cooldown between trials, always applied",
+    )
+    parser.add_argument(
+        "--cooldown-max-seconds",
+        type=float,
+        default=float(os.environ.get("ADR010_COOLDOWN_MAX_SECONDS", "300")),
+        help="cooldown hard cap; proceed even if still above target",
+    )
+    parser.add_argument(
+        "--no-cooldown",
+        action="store_true",
+        help="disable inter-trial cooldown (not recommended on Colossus)",
     )
     return parser.parse_args()
 
@@ -108,6 +140,7 @@ async def run_odr(args: argparse.Namespace, question_id: str, question: str) -> 
         metrics.gpu_utilization_peak_pct = monitor.peak_utilization_pct
         metrics.vram_peak_gb = monitor.peak_vram_gb
         emit(metrics)
+        _cooldown_between_trials(args, i, monitor.peak_temperature_c)
 
 
 def run_arex(args: argparse.Namespace, question_id: str, question: str) -> None:
@@ -129,6 +162,39 @@ def run_arex(args: argparse.Namespace, question_id: str, question: str) -> None:
         metrics.gpu_utilization_peak_pct = monitor.peak_utilization_pct
         metrics.vram_peak_gb = monitor.peak_vram_gb
         emit(metrics)
+        _cooldown_between_trials(args, i, monitor.peak_temperature_c)
+
+
+def _cooldown_between_trials(
+    args: argparse.Namespace, trial_index: int, trial_peak_temp_c: float
+) -> None:
+    """Sleep between trials to keep the GPU inside the thermal envelope.
+
+    Runs after every trial except the final one. Honors --no-cooldown.
+    Uses ``wait_for_cooldown`` from policy.py so behavior stays symmetric
+    with the metrics side of the ResourcePort.
+    """
+    if args.no_cooldown:
+        return
+    if trial_index + 1 >= args.trials:
+        return
+    logger.info(
+        "trial %d peak temp=%.1fC; entering cooldown (target=%.1fC, min=%.0fs, max=%.0fs)",
+        trial_index + 1,
+        trial_peak_temp_c,
+        args.cooldown_target_c,
+        args.cooldown_min_seconds,
+        args.cooldown_max_seconds,
+    )
+    waited, final_temp = wait_for_cooldown(
+        target_c=args.cooldown_target_c,
+        min_seconds=args.cooldown_min_seconds,
+        max_seconds=args.cooldown_max_seconds,
+        logger=logger,
+    )
+    logger.info(
+        "cooldown complete: waited %.1fs, final temp=%.1fC", waited, final_temp
+    )
 
 
 def main() -> int:
