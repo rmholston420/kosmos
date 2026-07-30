@@ -1621,3 +1621,40 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress. Whole-repo pytest **1180 passed, 19 skipped** (+5 new tests). Blocking on Colossus 3-trial rerun to verify F1-F6 mean ≥5/6.
+
+## 2026-07-30 19:14 EDT — Stage 6.3.7 Colossus regression (mean 2.94/6 vs baseline 4.17)
+
+- **Stage / plugin / port:** ADR-010 ODR harness · 6.3.7 Colossus 3-trial verification
+- **What happened:** 3 trials completed cleanly on Colossus at 19:14–19:20 EDT. Blind-rated F1–F6:
+  - trial_01_43132d: mean 2.17. Packaging-error framing ("full source tree fork"); F5 fabrication (hardened Docker containers, telemetry); mangled markdown link `[https://github.com/Doze](...)rDB/...` from a stripped URL.
+  - trial_02_ace65e: mean 2.67. Sources block contained empty `[N] Label:` entries after URL strip (the 6.3.7 sweep matched `*(Source: )*` and `[label]()` but not standalone `[N] Neo4j GitHub Repository:` lines with no URL); F5 fabrication (spatial indexing / full-text search asserted as *non*-features).
+  - trial_03_560ea4: mean 4.00. `[unsupported: no citation in observations]` marker survived the finalize sweep (the 6.3.7 sweep matched `[unverified]` only, not the broader marker family); F5 fabrication of non-source features.
+- **Root cause consensus (three distinct failure modes, all in the free-form-markdown emission channel):**
+  1. Empty `[N] Label:` sources-block entries were not covered by 6.3.7's wrapper regex.
+  2. `[unsupported: ...]`, `[needs citation]`, `[not covered]`, `[unverified: ...]` were not covered by 6.3.7's `[unverified]`-only sweep.
+  3. Writer fabricated feature-delta claims (security-hardened Docker, telemetry, spatial indexing) that the rubric-critique shim (coverage check) does not catch — coverage ≠ overreach prevention.
+- **What we did NOT ship:** an initial 6.3.7b draft with three broadened regex sweeps + an enumerated deny-list "anti-fabrication" directive in shim 6. Deep-research pass (`research_6_3_7b.md`, arXiv ALCE/RARR/FActScore/CoVe/CoNLI/LLMQuoter/I-CALM + Anthropic hallucination guide + Ollama structured-outputs + Instructor + Reducto) established this direction as structurally weaker (open-set failure classes; deny-lists suffer negation-priming under autoregressive decoding). All 6.3.7b uncommitted edits reverted.
+- **Files touched:** none committed. Artifacts at `ops/benchmarks/artifacts/adr-010-2026-07-30/odr/trial_{01_43132d,02_ace65e,03_560ea4}.json`; bodies dump at `/tmp/6.3.7_bodies.txt` on Colossus.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** **regression** — 6.3.7 fails DoD (mean 2.94 < 4.17 baseline). Superseded by 6.3.8 below.
+
+## 2026-07-30 19:45 EDT — Stage 6.3.8: structural finalize (JSON-schema + deterministic render)
+
+- **Stage / plugin / port:** ADR-010 ODR harness · new shim 9 (structural finalize)
+- **What changed:**
+  - **New module** `ops/benchmarks/adr_010/harness/structural_finalize.py`. Contains: strict JSON schema `FINAL_REPORT_JSON_SCHEMA` (`{title, claims:[{text, rubric_ref: F1..F6|null, citations:[{label, url}]}]}`, `additionalProperties: false` throughout); `Claim`/`Citation`/`ValidatedReport` dataclasses; `build_structural_finalize_prompt` (allow-list framing, abstention permission, quote-first grounding, no deny-list); `call_ollama_schema_constrained` (thin `AsyncOpenAI` call with `response_format={"type":"json_schema", ...}` to Ollama's OpenAI-compat endpoint); `parse_and_validate` (JSON parse + allow-list gate: drops claims with `rubric_ref=None` AND no valid http(s) citation URL; strips bad-URL citations); `render_markdown` (deterministic Python renderer — wrapper syntax is a template applied only when URL validates; no channel for scratch markers); `structural_finalize` (public entry point returning `(markdown, event_dict)`).
+  - **Wired as shim 9** in `harness/odr.py`, positioned after shim 8 and before the finalize URL-verify block. Best-effort: on `StructuralFinalizeError` (bad JSON, all claims dropped) or any other exception, falls back to `current_report` and records `schema_error`/`call_error` in `shim_events`. Enabled by new kwarg `enable_structural_finalize=True` on `run_odr_trial`.
+  - **New CLI flag** `--no-structural-finalize` in `runner.py`; runner banner bumped `Stage 6.3.7` → `Stage 6.3.8` (adds `structural_finalize=…` field to the config-summary log line).
+  - **19 new tests** in `ops/benchmarks/adr_010/tests/test_structural_finalize.py`: schema-shape validation (non-JSON, missing title, empty claims), allow-list gate (fabricated non-rubric non-cited claim dropped; unknown rubric ref → downgrade + gate; bad-URL citations stripped), citation URL shape (empty/malformed URLs rejected), render determinism (no bracketed markers under any input; no empty `[N] Label:` entries; citation numbering by appearance; rubric refs surfaced as `[F1]` tags), prompt semantics (allow-list not deny-list; abstention permission present; bracketed markers named as forbidden; verified-URL list injected; long notes truncated).
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/structural_finalize.py` (new, ~470 lines)
+  - `ops/benchmarks/adr_010/harness/odr.py` (import + kwarg + shim 9 block)
+  - `ops/benchmarks/adr_010/runner.py` (CLI flag + wire-through + banner)
+  - `ops/benchmarks/adr_010/tests/test_structural_finalize.py` (new, 19 tests)
+  - `docs/adrs/ADR-053-adr-010-odr-structural-finalize.md` (new)
+  - `docs/adrs/README.md` (ADR-053 row appended)
+  - `research_6_3_7b.md` (research trail, root-cause + design source)
+- **Ports / adapters affected:** none (harness-internal).
+- **PORTING_LEDGER / ADR updated:** ADR-053 authored (Ratified v25).
+- **Stop-condition status:** in-progress. Whole-repo pytest **1199 passed, 19 skipped** (+19 new tests, baseline was 1180). Blocking on Colossus 3-trial 6.3.8 rerun to verify F1–F6 mean ≥ 4.17 baseline (target ≥ 5/6).

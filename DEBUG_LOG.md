@@ -383,3 +383,18 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/fixtures/adr_010_question.json`
   - `ops/benchmarks/adr_010/tests/test_rubric_critique.py`
 - **Related BUILD_LOG entry:** 2026-07-30 19:09 EDT
+
+## 2026-07-30 19:14 EDT — Stage 6.3.7 regression: 3 leak classes survive regex sweeps
+
+- **Symptom:** Blind rating regressed 4.17 → 2.94/6 on 3-trial Colossus 6.3.7 run.
+  - trial_01_43132d (2.17): mangled markdown link `[https://github.com/Doze](...)rDB/...` in-body; framing DozerDB as a "full source tree fork" (F1 contrastive polarity leak); F5 "hardened Docker containers" / "telemetry / phone-home" fabrication asserted as non-features.
+  - trial_02_ace65e (2.67): sources block emitted `[N] Neo4j GitHub Repository:` and similar Label-only lines with no URL (URL stripped upstream, wrapper not caught by 6.3.7's `*(Source: )*`-family regex); F5 spatial-indexing / full-text-search fabrication.
+  - trial_03_560ea4 (4.00): body contained literal `[unsupported: no citation in observations]` marker (6.3.7's `[unverified]`-only sweep didn't catch the marker family); F5 fabrication of non-source features.
+- **Affected stage / plugin / port:** ADR-010 ODR harness (`ops/benchmarks/adr_010/`), finalize block.
+- **Root cause:**
+  1. **Empty-wrapper leak class is open-set.** 6.3.6/6.3.7 kept adding regex sweeps for wrapper variants (`*(Source: )*`, `[label]()`, `()`, `<>`, `[]`), but the writer kept inventing new wrapper syntax between stages (`[N] Label:` with no URL is a novel variant). Regex approach is structurally reactive — cannot cover a class the writer has open-ended generative freedom over.
+  2. **Bracketed-marker leak class is open-set.** Same shape: `[unverified]` sweep didn't cover `[unsupported: ...]`, `[needs citation]`, `[not covered]`, `[unverified: source unreachable]`. Enumerated deny-lists in prompt would also fail — literature (Anthropic hallucination guide, autoregressive priming research) shows deny-listed items get *more* likely under negation-priming ("pink elephant") in decoding.
+  3. **F5 fabrication is a coverage-vs-overreach gap.** The rubric-critique shim (shim 6) checks *coverage* of F1–F6 canonical facts. It does not check *overreach* — the writer freely adds plausible-sounding claims outside F1–F6. The shim is architecturally the wrong place to catch this; the emission channel itself must be constrained.
+- **Fix applied:** Reverted the 6.3.7b regex-sweep draft entirely. Shipped **Stage 6.3.8 structural finalize** (see BUILD_LOG entry 2026-07-30 19:45 EDT). Approach: JSON-schema-constrained finalize turn via Ollama's native `response_format=json_schema` + deterministic Python markdown renderer. The three leak classes become structurally impossible: no free-form emission channel for wrapper syntax; no channel for scratch markers; F1–F6 allow-list gate drops rubric-orphan uncited claims before render.
+- **Files changed:** all 6.3.8 files listed in BUILD_LOG 2026-07-30 19:45 EDT entry.
+- **Related BUILD_LOG entry:** 2026-07-30 19:14 EDT (regression) and 2026-07-30 19:45 EDT (fix).

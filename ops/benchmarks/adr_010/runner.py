@@ -203,6 +203,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--no-structural-finalize",
+        action="store_true",
+        help=(
+            "disable Stage 6.3.8 shim 9 (JSON-schema-constrained finalize "
+            "turn + deterministic markdown render). Not recommended — the "
+            "shim structurally eliminates the empty-citation-wrapper and "
+            "bracketed-marker leak classes plus the F1–F6 allow-list gate."
+        ),
+    )
+    parser.add_argument(
         "--n-consistency",
         type=int,
         default=int(os.environ.get("ADR010_N_CONSISTENCY", "1")),
@@ -388,6 +398,9 @@ async def run_odr(
                     rubric_lines=rubric_lines,
                     enable_cove=not args.no_cove,
                     enable_claim_support_gate=not args.no_claim_support_gate,
+                    enable_structural_finalize=(
+                        not args.no_structural_finalize
+                    ),
                 )
                 per_run_metrics.append(m)
                 if monitor.thermal_exceeded():
@@ -576,9 +589,10 @@ def main() -> int:
     ) or []
     rubric_lines = build_rubric_lines_from_facts(canonical_facts)
     logger.info(
-        "Stage 6.3.7 shims (model=%s): license_grounding=%s feature_grounding=%s "
+        "Stage 6.3.8 shims (model=%s): license_grounding=%s feature_grounding=%s "
         "enterprise_license_grounding=%s rubric_critique=%s cove=%s "
-        "claim_support_gate=%s n_consistency=%d rubric_points=%d",
+        "claim_support_gate=%s structural_finalize=%s n_consistency=%d "
+        "rubric_points=%d",
         args.ollama_model,
         not args.no_license_grounding,
         not args.no_feature_grounding,
@@ -586,6 +600,7 @@ def main() -> int:
         not args.no_rubric_critique and bool(rubric_lines),
         not args.no_cove,
         not args.no_claim_support_gate,
+        not args.no_structural_finalize,
         args.n_consistency,
         len(rubric_lines),
     )

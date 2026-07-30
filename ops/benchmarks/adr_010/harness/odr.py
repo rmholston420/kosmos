@@ -33,6 +33,7 @@ from . import (
     feature_grounding,
     license_grounding,
     rubric_critique,
+    structural_finalize,
 )
 from .prompts import (
     KOSMOS_MCP_PROMPT,
@@ -232,6 +233,7 @@ async def run_odr_trial(
     rubric_lines: list[str] | None = None,
     enable_cove: bool = True,
     enable_claim_support_gate: bool = True,
+    enable_structural_finalize: bool = True,
 ) -> TrialMetrics:
     """Run a single ODR trial. Async because ODR is LangGraph async."""
     try:
@@ -1145,6 +1147,72 @@ async def run_odr_trial(
                     ],
                 }
             )
+
+        # ---- Shim 9: structural finalize (Stage 6.3.8) ----
+        # Emit the report as a JSON-schema-constrained object via Ollama's
+        # native `response_format=json_schema` and render markdown
+        # deterministically in Python.  This structurally eliminates the
+        # empty-citation-wrapper and bracketed-marker leak classes (the
+        # wrapper text is a template applied only when a URL validates;
+        # scratch markers have no text channel to leak into), and enforces
+        # the F1–F6 allow-list gate (feature-delta fabrications with no
+        # rubric_ref and no valid URL are dropped, not annotated).  See
+        # docs/adrs/ADR-053 and research_6_3_7b.md.
+        #
+        # Best-effort: on any failure (JSON parse error, all claims
+        # dropped, network error) we fall back to `current_report` from
+        # the prior shims.  That preserves prior behavior instead of
+        # regressing to blank output.
+        if (
+            enable_structural_finalize
+            and current_report
+            and rubric_lines
+            and not thermal_aborted
+        ):
+            # Extract verified URLs from the current notes so the writer
+            # can prefer them when citing.
+            _notes_urls = extract_urls(current_notes_text)
+            _verified_urls: list[str] = []
+            if _notes_urls:
+                try:
+                    _verifs = await verify_urls(_notes_urls)
+                    _verified_urls = [u for u, r in _verifs.items() if r.ok]
+                except Exception:  # noqa: BLE001
+                    _verified_urls = []
+            prompt = structural_finalize.build_structural_finalize_prompt(
+                draft_report=current_report,
+                rubric_lines=rubric_lines,
+                notes_text=current_notes_text,
+                verified_urls=_verified_urls,
+            )
+            try:
+                raw_json = await structural_finalize.call_ollama_schema_constrained(
+                    prompt,
+                    base_url=ollama_base_url,
+                    model=ollama_model,
+                    timeout_s=300.0,
+                )
+                rendered, sf_event = structural_finalize.structural_finalize(
+                    raw_json
+                )
+                current_report = rendered
+                shim_events.append(sf_event)
+            except structural_finalize.StructuralFinalizeError as exc:
+                shim_events.append(
+                    {
+                        "shim": "structural_finalize",
+                        "outcome": "schema_error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+            except Exception as exc:  # noqa: BLE001
+                shim_events.append(
+                    {
+                        "shim": "structural_finalize",
+                        "outcome": "call_error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
 
         final_report_override = current_report
 
