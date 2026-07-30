@@ -189,13 +189,52 @@ def test_directive_empty_when_no_present_assertions():
 # ---- shim wiring in odr.run_odr_trial ---------------------------------------
 
 
-def _install_stub_deep_researcher(invocations, responses):
-    """Re-uses the canonical stub from test_odr_retrieval_gate."""
-    from ops.benchmarks.adr_010.tests.test_odr_retrieval_gate import (
-        _install_stub_deep_researcher as _canonical,
-    )
+def _install_stub_deep_researcher(
+    invocations,
+    responses,
+    rewrite_invocations=None,
+    rewrite_responses=None,
+):
+    """Stage 6.3.5-aware stub that also serves final_report_generation.
 
-    return _canonical(invocations, list(responses))
+    - ``ainvoke`` returns the next item from ``responses``.
+    - ``final_report_generation`` (the rewrite path used by shims 3/5/9/10)
+      records into ``rewrite_invocations`` and returns the next item from
+      ``rewrite_responses`` (falling back to ``responses`` if unset, for
+      tests that don't distinguish the two queues).
+    """
+    import sys
+    import types
+    from typing import Any
+
+    async def _ainvoke(payload: dict, config: dict) -> dict:
+        invocations.append({"payload": payload, "config": config})
+        assert responses, "test drained responses without a queued reply"
+        reply = responses.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    async def _final_report_generation(state: dict, config: Any) -> dict:
+        if rewrite_invocations is not None:
+            rewrite_invocations.append({"state": state, "config": config})
+        queue = rewrite_responses if rewrite_responses is not None else responses
+        assert queue, "test drained rewrite responses without a queued reply"
+        reply = queue.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        if isinstance(reply, dict) and "final_report" in reply:
+            return reply
+        return {"final_report": str(reply)}
+
+    fake_dr = types.SimpleNamespace(ainvoke=_ainvoke)
+    fake_module = types.ModuleType("open_deep_research.deep_researcher")
+    fake_module.deep_researcher = fake_dr  # type: ignore[attr-defined]
+    fake_module.final_report_generation = _final_report_generation  # type: ignore[attr-defined]
+    parent = types.ModuleType("open_deep_research")
+    parent.deep_researcher = fake_module  # type: ignore[attr-defined]
+    sys.modules["open_deep_research"] = parent
+    sys.modules["open_deep_research.deep_researcher"] = fake_module
 
 
 @pytest.mark.no_stub_enterprise_license
@@ -208,16 +247,19 @@ def test_shim10_injects_directive_when_facts_ground(monkeypatch):
     )
 
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
             {"final_report": "Initial report.", "raw_notes": ["seed"]},
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
             {
                 "final_report": (
                     "Neo4j Community Edition is licensed under GPLv3. "
                     "Neo4j Enterprise Edition is commercial."
                 ),
-                "raw_notes": ["seed"],
             },
         ],
     )
@@ -249,8 +291,14 @@ def test_shim10_injects_directive_when_facts_ground(monkeypatch):
             enable_claim_support_gate=False,
         )
     )
-    assert len(invocations) == 2, invocations
-    correction_text = invocations[1]["payload"]["messages"][0]["content"]
+    # Stage 6.3.5: retry is a synthesis-only rewrite, not a fresh ainvoke.
+    # Only one full-graph invocation (the initial); the correction lands
+    # in the rewrite state's notes[0].
+    assert len(invocations) == 1, invocations
+    assert len(rewrite_invocations) == 1, rewrite_invocations
+    rewrite_state = rewrite_invocations[0]["state"]
+    assert rewrite_state["notes"], "rewrite state has no notes"
+    correction_text = rewrite_state["notes"][0]
     assert "SYSTEM CORRECTION" in correction_text
     assert "GPLv3" in correction_text
 
@@ -264,6 +312,7 @@ def test_shim10_injects_directive_when_facts_ground(monkeypatch):
     )
     assert ent["directive_emitted"] is True
     assert ent["retry_outcome"] == "retry_ok"
+    assert ent["retry_mode"] == "rewrite_only"
 
 
 @pytest.mark.no_stub_enterprise_license

@@ -1509,3 +1509,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Stop-condition status:** in-progress (Stage 6.3.4 DoD unchanged: mean ≥5/6 F1-F6, no final_unverified_urls, no [unsupported] markers, no post_retry_mismatches). Awaiting Colossus 3-trial run.
 - **Test status:** 1167 passed, 19 skipped (unchanged).
 - **GPU cap:** 435 W (persisted this session).
+
+## 2026-07-30 17:27 EDT — Stage 6.3.5 · rewrite-only retries + revert q4_K_M
+
+- **Stage / plugin / port:** Stage 6.3.5 · ADR-010 harness (ops/benchmarks/adr_010/harness/odr.py)
+- **What changed:**
+  - **Root cause of 6.3.4e/f rating stall isolated.** Shims 3, 5, 9, 10 emitted correct SYSTEM CORRECTION directives with `directive_emitted=true` + `retry_outcome=retry_ok`, but the retry itself was `deep_researcher.ainvoke(directive + anchored_question)` — a fresh full research cycle (plan → search → note → synthesize, 400–600 s). The prior report was never in the payload, so the model rebuilt the report from scratch and the directive was diluted across the newly-retrieved snippets. Model capacity and quantization were red herrings.
+  - **Fix: synthesis-only rewrite path.** Introduced `_rewrite_report_call` + `_rewrite_report_with_directive` helpers that call the vendor's `open_deep_research.deep_researcher.final_report_generation` node **directly** with the state we already have. The SYSTEM CORRECTION directive is prepended to `state.notes` (index 0) inside a `[SYSTEM CORRECTION — REWRITE MANDATE] … [END SYSTEM CORRECTION]` fence, so it's the FIRST finding the writer sees. Single LLM call over the existing findings; one vendor-bug retry on non-thermal exceptions (matches shim 1 discipline).
+  - Migrated shim 3 (fact-check), shim 5 (license grounding), shim 9 (feature grounding), and shim 10 (enterprise-license grounding) retry paths from `_invoke_with_vendor_retry(correction_turn)` to `_rewrite_report_with_directive(directive, result)`. Retrieval gate (shim 2), CoVe (shim 6/7), and rubric rewrite (shim 8) legitimately require fresh retrieval and remain on `_invoke_with_vendor_retry`.
+  - Reverted `qwen2.5:32b-instruct-q5_K_M` → `qwen2.5:32b-instruct-q4_K_M` in `runner.py`, `harness/odr.py`, and `tests/test_prompts.py`. The q5 uplift was speculative — the real bottleneck was the retry architecture.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/odr.py` (rewrite helpers + 4 shim retry sites + q5→q4)
+  - `ops/benchmarks/adr_010/runner.py` (q5→q4)
+  - `ops/benchmarks/adr_010/tests/test_prompts.py` (q5→q4)
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py` (stub + 2 retry-path tests)
+  - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` (stub + 5 retry-path tests)
+  - `ops/benchmarks/adr_010/tests/test_enterprise_license_grounding.py` (stub + shim-10 retry test)
+- **Ports / adapters affected:** none. Vendor tree untouched (ADR-007 + porting rules).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress. Whole-repo pytest green (1167 passed / 19 skipped, no regressions). Colossus 3-trial validation pending: rewrite path must land ≥5/6 mean rating AND cut trial wall-clock from 400–600 s to ≤150 s.
+- **Expected shim-retry cost:** ~15–40 s each (one writer-node call over the existing findings, ~8–15 k input tokens on q4_K_M) vs ~400–600 s under 6.3.4f (fresh full-graph run).

@@ -44,7 +44,12 @@ import pytest
 # --------------------------------------------------------------------- helpers
 
 
-def _install_stub_deep_researcher(invocations: list[dict], responses: list[Any]):
+def _install_stub_deep_researcher(
+    invocations: list[dict],
+    responses: list[Any],
+    rewrite_invocations: list[dict] | None = None,
+    rewrite_responses: list[Any] | None = None,
+):
     async def _ainvoke(payload: dict, config: dict) -> dict:
         invocations.append({"payload": payload, "config": config})
         assert responses, "test drained responses without a queued reply"
@@ -53,9 +58,23 @@ def _install_stub_deep_researcher(invocations: list[dict], responses: list[Any])
             raise reply
         return reply
 
+    async def _final_report_generation(state: dict, config: Any) -> dict:
+        if rewrite_invocations is not None:
+            rewrite_invocations.append({"state": state, "config": config})
+        queue = rewrite_responses if rewrite_responses is not None else responses
+        assert queue, "test drained rewrite responses without a queued reply"
+        reply = queue.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        # Node contract: returns dict with 'final_report' key.
+        if isinstance(reply, dict) and "final_report" in reply:
+            return reply
+        return {"final_report": str(reply)}
+
     fake_dr = types.SimpleNamespace(ainvoke=_ainvoke)
     fake_module = types.ModuleType("open_deep_research.deep_researcher")
     fake_module.deep_researcher = fake_dr  # type: ignore[attr-defined]
+    fake_module.final_report_generation = _final_report_generation  # type: ignore[attr-defined]
     parent = types.ModuleType("open_deep_research")
     parent.deep_researcher = fake_module  # type: ignore[attr-defined]
     sys.modules["open_deep_research"] = parent
@@ -188,6 +207,7 @@ def test_all_urls_verify_no_retry_no_annotation(monkeypatch):
 
 def test_bad_urls_trigger_retry_and_retry_succeeds(monkeypatch):
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
@@ -198,10 +218,11 @@ def test_bad_urls_trigger_retry_and_retry_succeeds(monkeypatch):
                 "notes": ["ok"],
                 "raw_notes": ["r1"],
             },
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
             {
                 "final_report": "corrected https://real.example/y and https://also-real.example/z",
-                "notes": ["ok"],
-                "raw_notes": ["r1", "r2"],
             },
         ],
     )
@@ -221,7 +242,9 @@ def test_bad_urls_trigger_retry_and_retry_succeeds(monkeypatch):
             question="Q?", question_id="q1", trial_id="t1"
         )
     )
-    assert len(invocations) == 2, "shim 3 should retry exactly once"
+    # Stage 6.3.5: exactly ONE ainvoke (initial) + ONE rewrite (retry).
+    assert len(invocations) == 1, "initial pass only; retry is rewrite-only"
+    assert len(rewrite_invocations) == 1, "shim 3 should rewrite exactly once"
     outcomes = [a["outcome"] for a in _attempts(metrics)]
     assert outcomes == ["ok", "fact_check_retry_ok"], outcomes
     events = _fact_check_events(metrics)
@@ -230,14 +253,16 @@ def test_bad_urls_trigger_retry_and_retry_succeeds(monkeypatch):
     assert initial["urls_unverified"] == 1
     assert retry["urls_unverified"] == 0
     assert "[unverified]" not in metrics.final_answer
-    # retry's correction directive appeared in the 2nd ainvoke payload
-    turn2 = invocations[1]["payload"]["messages"][0]["content"]
-    assert "FACT-CHECK CORRECTION" in turn2
-    assert "https://fake.example/x" in turn2
+    # retry's correction directive landed as the first note of the rewrite
+    rewrite_note0 = rewrite_invocations[0]["state"]["notes"][0]
+    assert "SYSTEM CORRECTION" in rewrite_note0
+    assert "FACT-CHECK CORRECTION" in rewrite_note0
+    assert "https://fake.example/x" in rewrite_note0
 
 
 def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
@@ -246,11 +271,12 @@ def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
                 "notes": ["ok"],
                 "raw_notes": ["r1"],
             },
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
             {
-                # Retry still hallucinated a bad URL
+                # Rewrite still hallucinated a bad URL
                 "final_report": "cites https://fake2.example/",
-                "notes": ["ok"],
-                "raw_notes": ["r1"],
             },
         ],
     )
@@ -269,7 +295,8 @@ def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
             question="Q?", question_id="q1", trial_id="t1"
         )
     )
-    assert len(invocations) == 2
+    assert len(invocations) == 1, invocations
+    assert len(rewrite_invocations) == 1, rewrite_invocations
     assert "https://fake2.example/ [unverified]" in metrics.final_answer
     unverified_entry = next(
         e for e in metrics.trajectory

@@ -5,7 +5,7 @@ search + visit through the MCP server in harness/mcp_search_server.py. This
 gives ODR the same tool contract as AREX, so ADR-010 measures loop quality,
 not search quality.
 
-Model: qwen2.5:32b-instruct-q5_K_M served by Ollama at 127.0.0.1:11434,
+Model: qwen2.5:32b-instruct-q4_K_M served by Ollama at 127.0.0.1:11434,
 addressed via LangChain's OpenAI-compatible provider (langchain-openai +
 base_url override).
 
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 def build_odr_config(
     *,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
-    ollama_model: str = "qwen2.5:32b-instruct-q5_K_M",
+    ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
     mcp_server_url: str = "http://127.0.0.1:8000",
 ) -> dict[str, Any]:
     """Assemble the RunnableConfig ODR needs.
@@ -74,8 +74,8 @@ def build_odr_config(
     `model_provider` keyword. LangChain's `init_chat_model` therefore has to
     infer the provider from the model string. We force provider=openai by
     prefixing the model tag with `openai:` — LangChain splits on the first
-    colon, so the tag `openai:qwen2.5:32b-instruct-q5_K_M` parses as
-    (provider=openai, model=qwen2.5:32b-instruct-q5_K_M) and the model name
+    colon, so the tag `openai:qwen2.5:32b-instruct-q4_K_M` parses as
+    (provider=openai, model=qwen2.5:32b-instruct-q4_K_M) and the model name
     is forwarded verbatim to the OpenAI-compatible endpoint (Ollama).
     """
     prefixed_model = f"openai:{ollama_model}"
@@ -128,7 +128,7 @@ async def run_odr_trial(
     question_id: str,
     trial_id: str,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
-    ollama_model: str = "qwen2.5:32b-instruct-q5_K_M",
+    ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
     mcp_server_url: str = "http://127.0.0.1:8000",
     thermal_event: Any | None = None,
     thermal_poll_seconds: float = 1.0,
@@ -270,6 +270,102 @@ async def run_odr_trial(
         except Exception:  # noqa: BLE001
             return await _invoke_once(user_content)
 
+    # Stage 6.3.5 · synthesis-only rewrite path.
+    #
+    # Root cause of Stage 6.3.4e / 6.3.4f rating stall (mean 2.75 / 3.0 out
+    # of 6): shims 3, 4, 9, 10 emitted SYSTEM CORRECTION directives with
+    # ``retry_outcome=retry_ok``, but the retry was ``deep_researcher
+    # .ainvoke(directive + anchored_question)`` — a fresh full research
+    # cycle (plan → search → note → synthesize, 400-600 s). The prior
+    # report was never in the payload, so the model had no report to
+    # ``correct``; it drafted a new one from scratch, and the directive
+    # was diluted across hundreds of newly-retrieved snippets. Model
+    # capacity and quantization were red herrings: the retry architecture
+    # made the directive unenforceable.
+    #
+    # Fix: rewrite-only. Reuse the vendor's ``final_report_generation``
+    # node directly with the state we already have. That node is a single
+    # ``final_report_model`` call — no research, no supervisor, no tool
+    # use. We prepend the SYSTEM CORRECTION as a synthetic ``notes`` entry
+    # so it lands as the FIRST finding the writer sees, and it's fenced
+    # inside a ``[SYSTEM CORRECTION]`` block so the writer treats it as a
+    # rewrite mandate, not just another data point.
+    #
+    # Cost: ~15-40 s per shim retry (one LLM call over ~8-15 k input
+    # tokens) vs 400-600 s per full-graph retry. Aggregate trial time
+    # collapses ~5x. Vendor tree untouched (ADR-007 + porting rules).
+    async def _rewrite_report_call(
+        state: dict,
+    ) -> dict:
+        """Single call to the vendor's ``final_report_generation`` node,
+        with one vendor-bug retry (mirrors _invoke_with_vendor_retry).
+        ThermalAbort is NEVER retried (physical envelope).
+        """
+        from open_deep_research.deep_researcher import (  # type: ignore[import-not-found]
+            final_report_generation,
+        )
+
+        try:
+            return await final_report_generation(state, config)
+        except ThermalAbort:
+            raise
+        except Exception:  # noqa: BLE001
+            # One retry — covers intermittent vendor bugs like
+            # KeyError('reflection') seen in DEBUG_LOG 2026-07-30.
+            return await final_report_generation(state, config)
+
+    async def _rewrite_report_with_directive(
+        directive: str, base_result: dict
+    ) -> dict:
+        """Rewrite the final report by re-running ONLY the vendor's
+        ``final_report_generation`` node with the SYSTEM CORRECTION
+        prepended to ``notes``.
+
+        Returns a dict shaped like ``deep_researcher.ainvoke()`` output:
+        ``{"final_report": ..., "raw_notes": [...], "notes": [...],
+        "research_brief": ..., "messages": [...]}`` — downstream shims
+        that read ``final_report``, ``raw_notes``, or ``notes`` stay
+        unchanged.
+        """
+        from open_deep_research.deep_researcher import (  # type: ignore[import-not-found]
+            final_report_generation,
+        )
+
+        existing_notes = list(base_result.get("notes") or [])
+        # SYSTEM CORRECTION lands as the first finding. Fencing +
+        # explicit "REWRITE THE REPORT" framing makes the writer treat
+        # this as a mandate, not just another retrieval snippet.
+        correction_note = (
+            "[SYSTEM CORRECTION — REWRITE MANDATE]\n"
+            "The prior draft of the final report contradicts verified\n"
+            "external facts. Rewrite the report from these findings so\n"
+            "every position in the report is consistent with the\n"
+            "following corrections. Do NOT re-assert the contradicted\n"
+            "claims. Do NOT add caveats hedging the corrections.\n\n"
+            + directive.strip()
+            + "\n[END SYSTEM CORRECTION]"
+        )
+        rewrite_state = {
+            "research_brief": base_result.get("research_brief") or question,
+            "messages": base_result.get("messages") or [],
+            "notes": [correction_note] + existing_notes,
+            "raw_notes": list(base_result.get("raw_notes") or []),
+        }
+        update = await _rewrite_report_call(rewrite_state)
+
+        merged: dict = {**base_result}
+        # ``final_report_generation`` returns ``{'final_report': ...,
+        # 'messages': [...], 'notes': {'type':'override','value':[]}}``.
+        # We only propagate the report and messages; the base_result's
+        # raw_notes / notes / research_brief remain accurate for the
+        # next shim in the chain.
+        if isinstance(update, dict):
+            if "final_report" in update:
+                merged["final_report"] = update["final_report"]
+            if "messages" in update:
+                merged["messages"] = update["messages"]
+        return merged
+
     result: dict | None = None
     last_exc: Exception | None = None
     attempts: list[dict] = []
@@ -399,11 +495,10 @@ async def run_odr_trial(
                 }
             )
             if unverified_first:
-                # One retry with correction directive.
-                correction_turn = (
-                    anchored_question
-                    + "\n\n"
-                    + build_fact_check_correction_directive(unverified_first)
+                # Stage 6.3.5: synthesis-only rewrite (see
+                # _rewrite_report_with_directive above).
+                directive = build_fact_check_correction_directive(
+                    unverified_first
                 )
                 attempts.append(
                     {
@@ -413,10 +508,13 @@ async def run_odr_trial(
                             f"{len(unverified_first)} of {len(verifications)} "
                             "cited URLs failed live verification"
                         ),
+                        "retry_mode": "rewrite_only",
                     }
                 )
                 try:
-                    retry_result = await _invoke_with_vendor_retry(correction_turn)
+                    retry_result = await _rewrite_report_with_directive(
+                        directive, result
+                    )
                 except ThermalAbort as exc:
                     attempts[-1]["outcome"] = "fact_check_retry_thermal_abort"
                     attempts[-1]["error"] = f"{type(exc).__name__}: {exc}"
@@ -505,16 +603,12 @@ async def run_odr_trial(
                     }
                 )
                 if directive:
-                    # Stage 6.3.4d: PREPEND the directive so the model
-                    # reads the SYSTEM CORRECTION before the anchored
-                    # question. In 6.3.4c we appended it; the model's
-                    # parametric bias on Neo4j/DozerDB licensing won on
-                    # regeneration because it processed the original
-                    # prompt first and only saw the correction as
-                    # trailing context.
-                    correction_turn = directive + "\n\n" + anchored_question
+                    # Stage 6.3.5: synthesis-only rewrite.
+                    shim_events[-1]["retry_mode"] = "rewrite_only"
                     try:
-                        retry_result = await _invoke_with_vendor_retry(correction_turn)
+                        retry_result = await _rewrite_report_with_directive(
+                            directive, result
+                        )
                     except ThermalAbort as exc:
                         shim_events[-1]["retry_outcome"] = "thermal_abort"
                         shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
@@ -599,9 +693,12 @@ async def run_odr_trial(
                     }
                 )
                 if directive:
-                    correction_turn = directive + "\n\n" + anchored_question
+                    # Stage 6.3.5: synthesis-only rewrite.
+                    shim_events[-1]["retry_mode"] = "rewrite_only"
                     try:
-                        retry_result = await _invoke_with_vendor_retry(correction_turn)
+                        retry_result = await _rewrite_report_with_directive(
+                            directive, result
+                        )
                     except ThermalAbort as exc:
                         shim_events[-1]["retry_outcome"] = "thermal_abort"
                         shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
@@ -675,9 +772,12 @@ async def run_odr_trial(
                     }
                 )
                 if directive:
-                    correction_turn = directive + "\n\n" + anchored_question
+                    # Stage 6.3.5: synthesis-only rewrite.
+                    shim_events[-1]["retry_mode"] = "rewrite_only"
                     try:
-                        retry_result = await _invoke_with_vendor_retry(correction_turn)
+                        retry_result = await _rewrite_report_with_directive(
+                            directive, result
+                        )
                     except ThermalAbort as exc:
                         shim_events[-1]["retry_outcome"] = "thermal_abort"
                         shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"

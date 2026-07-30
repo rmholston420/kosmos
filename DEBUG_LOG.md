@@ -269,3 +269,20 @@ Entry format per `kosmos-log-maintenance` skill:
   - ops/benchmarks/adr_010/harness/odr.py
   - ops/benchmarks/adr_010/tests/test_prompts.py
 - **Related BUILD_LOG entry:** 2026-07-30 17:11 EDT
+
+## 2026-07-30 17:27 EDT — shims 3/5/9/10 retries triggered fresh full research instead of report rewrite
+
+- **Symptom:**
+  - Stage 6.3.4e mean rating 2.75 / 6 (3 trials, DoD ≥5).
+  - Stage 6.3.4f mean rating 3.0 / 6 (3 trials).
+  - Every shim (3, 5, 9, 10) recorded `directive_emitted=true` and `retry_outcome=retry_ok`, yet final reports still contradicted the grounded facts (e.g. re-emitted "DozerDB is Apache-2.0" after the license-grounding shim emitted the "GPL-3.0 MUST" directive; re-fabricated URLs after the fact-check shim listed them as unverified).
+  - Per-trial wall-clock 400–600 s on Colossus (RTX 5090, 435 W). ~30-minute 3-trial runs.
+- **Affected stage / plugin / port:** Stage 6.3.4e → 6.3.4f · ADR-010 harness · `ops/benchmarks/adr_010/harness/odr.py`
+- **Root cause:** Every directive-emitting shim retry was implemented as `_invoke_with_vendor_retry(directive + "\n\n" + anchored_question)` → `deep_researcher.ainvoke(...)`. LangGraph's `deep_researcher_builder` runs `clarify_with_user → write_research_brief → research_supervisor → final_report_generation` from scratch on every ainvoke. The prior report was NEVER in the payload; the model had no report to "correct". It performed brand-new plan→search→note→synthesize, and the SYSTEM CORRECTION directive was diluted across hundreds of newly-retrieved snippets by the time the writer ran. `retry_ok` meant "the graph returned", not "the model complied".
+- **Fix applied:** Introduced `_rewrite_report_with_directive` in `odr.py` that invokes the vendor's `final_report_generation` node directly with the state we already have and the SYSTEM CORRECTION directive prepended to `state.notes[0]` inside a `[SYSTEM CORRECTION — REWRITE MANDATE]` fence. This is a single writer-node call — no supervisor, no research, no tool use — so the directive lands as the first thing the writer reads over the existing findings, and cost drops from ~500 s to ~15–40 s per shim retry. Migrated shims 3, 5, 9, 10. Shims 2, 6, 7, 8 legitimately need fresh retrieval and remain on `_invoke_with_vendor_retry`. Vendor tree untouched.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/odr.py` (helpers + 4 shim retry sites)
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py`
+  - `ops/benchmarks/adr_010/tests/test_enterprise_license_grounding.py`
+- **Related BUILD_LOG entry:** 2026-07-30 17:27 EDT

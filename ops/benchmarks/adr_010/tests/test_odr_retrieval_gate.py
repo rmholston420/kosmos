@@ -31,11 +31,22 @@ import pytest
 # --------------------------------------------------------------------- helpers
 
 
-def _install_stub_deep_researcher(invocations: list[dict], responses: list[Any]):
-    """Install a fake `open_deep_research.deep_researcher.deep_researcher`
-    whose ``ainvoke`` returns the next queued response (or raises it, if the
-    response is an Exception instance). Every call is appended to
-    ``invocations``.
+def _install_stub_deep_researcher(
+    invocations: list[dict],
+    responses: list[Any],
+    rewrite_invocations: list[dict] | None = None,
+    rewrite_responses: list[Any] | None = None,
+):
+    """Install a fake `open_deep_research.deep_researcher`.
+
+    - ``ainvoke`` returns the next queued response from ``responses``
+      (raises it, if it's an Exception).
+    - ``final_report_generation`` (Stage 6.3.5 rewrite path used by shims
+      3, 5, 9, 10) records into ``rewrite_invocations`` (if provided) and
+      returns the next queued response from ``rewrite_responses`` (if
+      provided). If ``rewrite_responses`` is not provided, the function
+      raises AssertionError — catching tests that trip the rewrite path
+      unexpectedly.
     """
 
     async def _ainvoke(payload: dict, config: dict) -> dict:
@@ -46,9 +57,29 @@ def _install_stub_deep_researcher(invocations: list[dict], responses: list[Any])
             raise reply
         return reply
 
+    async def _final_report_generation(state: dict, config: Any) -> dict:
+        if rewrite_invocations is not None:
+            rewrite_invocations.append({"state": state, "config": config})
+        if rewrite_responses is None:
+            raise AssertionError(
+                "final_report_generation was invoked without a queued "
+                "rewrite_responses list; this test did not expect the "
+                "Stage 6.3.5 rewrite path."
+            )
+        assert rewrite_responses, (
+            "test drained rewrite_responses without a queued reply"
+        )
+        reply = rewrite_responses.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        if isinstance(reply, dict) and "final_report" in reply:
+            return reply
+        return {"final_report": str(reply)}
+
     fake_dr = types.SimpleNamespace(ainvoke=_ainvoke)
     fake_module = types.ModuleType("open_deep_research.deep_researcher")
     fake_module.deep_researcher = fake_dr  # type: ignore[attr-defined]
+    fake_module.final_report_generation = _final_report_generation  # type: ignore[attr-defined]
     parent = types.ModuleType("open_deep_research")
     parent.deep_researcher = fake_module  # type: ignore[attr-defined]
     sys.modules["open_deep_research"] = parent
@@ -344,9 +375,15 @@ def test_thermal_abort_cancels_ainvoke_and_does_not_retry(monkeypatch):
         await asyncio.sleep(3600)
         return {"final_report": "never reaches here"}
 
+    async def _final_report_generation_unused(state: dict, config: Any) -> dict:
+        raise AssertionError(
+            "thermal-abort test tripped the rewrite path unexpectedly"
+        )
+
     fake_dr = types.SimpleNamespace(ainvoke=_slow_ainvoke)
     fake_module = types.ModuleType("open_deep_research.deep_researcher")
     fake_module.deep_researcher = fake_dr  # type: ignore[attr-defined]
+    fake_module.final_report_generation = _final_report_generation_unused  # type: ignore[attr-defined]
     parent = types.ModuleType("open_deep_research")
     parent.deep_researcher = fake_module  # type: ignore[attr-defined]
     sys.modules["open_deep_research"] = parent
@@ -433,6 +470,7 @@ def test_license_grounding_shim_retry_survives_vendor_bug(monkeypatch):
     """
 
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
@@ -445,11 +483,12 @@ def test_license_grounding_shim_retry_survives_vendor_bug(monkeypatch):
                 "notes": ["primary"],
                 "raw_notes": ["mcp hit 1", "mcp hit 2"],
             },
-            KeyError("reflection"),
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
+            KeyError("reflection"),  # first rewrite call: vendor bug
             {
                 "final_report": "corrected report: both GPL-3.0",
-                "notes": ["corrected"],
-                "raw_notes": ["mcp hit 1", "mcp hit 2"],
             },
         ],
     )
@@ -491,8 +530,9 @@ def test_license_grounding_shim_retry_survives_vendor_bug(monkeypatch):
         )
     )
 
-    # 1 primary + 2 shim retries = 3 ainvoke calls total
-    assert len(invocations) == 3, invocations
+    # Stage 6.3.5: 1 primary ainvoke + 2 rewrite calls (KeyError then ok)
+    assert len(invocations) == 1, invocations
+    assert len(rewrite_invocations) == 2, rewrite_invocations
     # shim event should record retry_ok (not retry_failed on KeyError)
     shim_events_entry = next(
         e for e in metrics.trajectory
@@ -513,13 +553,16 @@ def test_license_grounding_shim_retry_survives_vendor_bug(monkeypatch):
 def test_license_grounding_shim_prepends_directive_before_anchored_question(
     monkeypatch,
 ):
-    """Stage 6.3.4d: the correction turn must place the SYSTEM CORRECTION
-    directive BEFORE the anchored question, not after. In 6.3.4c the
-    directive was appended and the qwen2.5:7b-instruct model's parametric
-    bias on Neo4j/DozerDB licensing won on regeneration.
+    """Stage 6.3.5 (was 6.3.4d): the SYSTEM CORRECTION directive must be
+    the FIRST finding the writer sees. Under Stage 6.3.5 the retry is a
+    synthesis-only rewrite via ``final_report_generation`` rather than a
+    fresh full-graph ainvoke; the directive lands as ``state.notes[0]``
+    and its position ahead of the primary notes replaces the old
+    "prepend before anchored question" invariant.
     """
 
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
@@ -528,15 +571,16 @@ def test_license_grounding_shim_prepends_directive_before_anchored_question(
                     "pre-license citing "
                     "https://github.com/neo4j/neo4j"
                 ),
-                "notes": ["p"],
+                "notes": ["primary-note-A", "primary-note-B"],
                 "raw_notes": ["hit"],
             },
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
             {
                 "final_report": (
                     "corrected: https://github.com/neo4j/neo4j is GPL-3.0"
                 ),
-                "notes": ["c"],
-                "raw_notes": ["hit"],
             },
         ],
     )
@@ -567,18 +611,17 @@ def test_license_grounding_shim_prepends_directive_before_anchored_question(
         )
     )
 
-    assert len(invocations) == 2, invocations
-    # Second invocation is the shim-4 correction turn. It must lead with
-    # the SYSTEM CORRECTION block; the anchored question follows.
-    correction_payload = invocations[1]["payload"]
-    correction_text = correction_payload["messages"][0]["content"]
+    assert len(invocations) == 1, invocations
+    assert len(rewrite_invocations) == 1, rewrite_invocations
+    # The rewrite state's notes list must lead with SYSTEM CORRECTION,
+    # ahead of the primary notes.
+    rewrite_state = rewrite_invocations[0]["state"]
+    notes = rewrite_state["notes"]
+    assert notes, "rewrite state has no notes"
+    correction_text = notes[0]
     assert "SYSTEM CORRECTION" in correction_text
-    assert "ANCHORED_Q_SENTINEL" in correction_text
-    directive_idx = correction_text.index("SYSTEM CORRECTION")
-    question_idx = correction_text.index("ANCHORED_Q_SENTINEL")
-    assert directive_idx < question_idx, (
-        "Stage 6.3.4d requires directive prepended, not appended."
-    )
+    # Original primary notes must survive after the correction note.
+    assert "primary-note-A" in notes[1:], notes
     # Directive must include the MUST/DO NOT enumeration.
     assert "MUST emit: GPL-3.0" in correction_text
     assert "AGPL" in correction_text  # forbidden-family list
@@ -603,6 +646,7 @@ def test_license_grounding_shim_records_post_retry_mismatches(monkeypatch):
     """
 
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
@@ -614,16 +658,17 @@ def test_license_grounding_shim_records_post_retry_mismatches(monkeypatch):
                 "notes": ["p"],
                 "raw_notes": ["hit"],
             },
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
             {
-                # Model IGNORES the directive and re-emits AGPLv3/Apache-2.0
-                # exactly the Stage 6.3.4c failure pattern.
+                # Model IGNORES the directive on rewrite and re-emits
+                # AGPLv3/Apache-2.0 — the Stage 6.3.4c failure pattern.
                 "final_report": (
                     "Report: https://github.com/neo4j/neo4j is AGPLv3. "
                     "https://github.com/DozerDB/dozerdb-plugin is "
                     "Apache-2.0."
                 ),
-                "notes": ["noncompliant"],
-                "raw_notes": ["hit"],
             },
         ],
     )
@@ -661,8 +706,9 @@ def test_license_grounding_shim_records_post_retry_mismatches(monkeypatch):
         )
     )
 
-    # Only two invocations: shim 4 does NOT re-retry after a mismatch.
-    assert len(invocations) == 2, invocations
+    # Stage 6.3.5: 1 initial ainvoke + 1 rewrite; shim 5 does NOT re-retry.
+    assert len(invocations) == 1, invocations
+    assert len(rewrite_invocations) == 1, rewrite_invocations
     shim_events_entry = next(
         e for e in metrics.trajectory
         if isinstance(e, dict) and "shim_events" in e
@@ -693,6 +739,7 @@ def test_feature_grounding_shim_emits_directive_and_records_facts(monkeypatch):
     from ops.benchmarks.adr_010.harness import feature_grounding, odr as odr_mod
 
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
@@ -701,14 +748,16 @@ def test_feature_grounding_shim_emits_directive_and_records_facts(monkeypatch):
                 "final_report": "Initial report with no feature mentions.",
                 "raw_notes": ["seed note"],
             },
-            # Retry driven by shim 9 correction directive.
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
+            # Retry (rewrite) driven by shim 9 correction directive.
             {
                 "final_report": (
                     "DozerDB supports multi-database. Backup is available. "
                     "Enterprise metrics via monitoring endpoint. "
                     "Property-existence constraints re-enabled."
                 ),
-                "raw_notes": ["seed note"],
             },
         ],
     )
@@ -747,8 +796,10 @@ def test_feature_grounding_shim_emits_directive_and_records_facts(monkeypatch):
             enable_claim_support_gate=False,
         )
     )
-    assert len(invocations) == 2, invocations
-    correction_text = invocations[1]["payload"]["messages"][0]["content"]
+    assert len(invocations) == 1, invocations
+    assert len(rewrite_invocations) == 1, rewrite_invocations
+    correction_text = rewrite_invocations[0]["state"]["notes"][0]
+    assert "SYSTEM CORRECTION" in correction_text
     assert "FEATURE GROUNDING" in correction_text
     assert "MUST mention" in correction_text
     assert "COMPLIANCE RULE" in correction_text
@@ -775,17 +826,20 @@ def test_feature_grounding_shim_records_post_retry_omissions(monkeypatch):
     from ops.benchmarks.adr_010.harness import feature_grounding, odr as odr_mod
 
     invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
         [
             {"final_report": "Initial report.", "raw_notes": ["seed note"]},
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
             {
-                # Model IGNORES the correction and negates both features.
+                # Model IGNORES the correction on rewrite and negates both features.
                 "final_report": (
                     "Multi-database is not supported in DozerDB. "
                     "Backup is under development."
                 ),
-                "raw_notes": ["seed note"],
             },
         ],
     )
@@ -824,8 +878,9 @@ def test_feature_grounding_shim_records_post_retry_omissions(monkeypatch):
             enable_claim_support_gate=False,
         )
     )
-    # Exactly 2 invocations \u2014 no second re-retry after non-compliance.
-    assert len(invocations) == 2, invocations
+    # Stage 6.3.5: 1 initial ainvoke + 1 rewrite; no second re-retry.
+    assert len(invocations) == 1, invocations
+    assert len(rewrite_invocations) == 1, rewrite_invocations
     shim_events_entry = next(
         e for e in metrics.trajectory
         if isinstance(e, dict) and "shim_events" in e

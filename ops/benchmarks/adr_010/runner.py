@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ollama-model",
-        default=os.environ.get("OLLAMA_MODEL", "qwen2.5:32b-instruct-q5_K_M"),
+        default=os.environ.get("OLLAMA_MODEL", "qwen2.5:32b-instruct-q4_K_M"),
     )
     parser.add_argument(
         "--mcp-url",
