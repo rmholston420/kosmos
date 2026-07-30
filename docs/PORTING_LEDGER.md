@@ -801,12 +801,15 @@
 - **Note:** ADR-041 Q10=Option X defer — Stage 3.7 plan renderer landed pure-Python over the Stage 3.6 `Plan` dataclass (`plugins/tektos/renderer/`); Spec Kit vendor selection deferred until a later stage first requires it. ADR-005 "named alternative mode" position preserved verbatim.
 - **Logged:** 2026-07-30 EDT
 
-#### Pier eval harness — `PLANNED`
-- **Source:** TBD
-- **License:** verify
-- **Port(s):** internal
-- **ADR:** adr-pier-eval-harness
-- **Logged:** —
+#### Pier eval harness — `VENDORED (dev dep, Stage 3.8)`
+- **Source:** <https://github.com/datacurve-ai/pier>
+- **Commit / Version:** upstream `fefa7475a32bb05271abdea378e8083c83eb5c35`; PyPI `datacurve-pier==0.3.0`
+- **License:** Apache-2.0
+- **Kosmos location:** `pyproject.toml [project.optional-dependencies] eval`; subprocess-only integration at `plugins/tektos/eval/harness.py` + kernel runner `scripts/pier_eval.py`
+- **Port(s):** internal (no new port surface — envelope-first per ADR-023; verdicts flow into existing `MemoryPort`)
+- **Modifications:** none — invoked as `pier run` subprocess through public CLI; trajectory JSON parsed into `TrialVerdict`
+- **ADR:** ADR-006 (superseded) · ADR-042 (Ratified v25, authoritative)
+- **Logged:** 2026-07-30 EDT
 
 #### DeepSWE corpus subset — `PLANNED`
 - **Source:** TBD

@@ -1,7 +1,9 @@
 # ADR: Pier as a Tektos Eval-on-Deploy Vendor Candidate
 
+> **STATUS AMENDMENT (2026-07-30):** Superseded by [ADR-042](./ADR-042-tektos-pier-eval-harness.md). The Kosmos v20.2 framing in this ADR (`SandboxProvider`, capability-broker-mediated isolation, Tier-2 promotion pipeline, `PORT_CONTRACTS.md` logging, Phase 10 fixture scenarios) does not survive under Kosmos v25's ports-plus-plugins architecture. ADR-042 replaces it with a Tektos-internal Pier eval subsystem that: (a) vendors `datacurve-pier==0.3.0` from PyPI as a dev-only optional dependency, (b) invokes Pier as a subprocess through its `pier run` CLI — no in-process import, (c) locks a single MemoryPort event predicate `tektos.eval.trial_completed` with locked provenance and bounded confidence per ADR-008, (d) treats verdicts as advisory only (ADR-042 Q7=B) so plan cards remain user-approved, and (e) introduces no new port surface per ADR-023. Retained here for the audit trail; not authoritative.
+
 ## Status
-Proposed (requires Tier-2 ADR ratification per Kosmos v20.2 Section 9 continuous eval-on-deploy gate)
+Superseded by ADR-042 (2026-07-30). Original: Proposed (Kosmos v20.2 Section 9 continuous eval-on-deploy gate).
 
 ## Context
 Kosmos v20.2 Addendum Section 9 introduced a continuous eval-on-deploy gate requiring every plugin build — not only initial Tier-2 promotion — to trigger an automated eval-suite run alongside existing SBOM/SCA, contract, and chaos tests. That gate was defined without naming a concrete eval harness. Pier (`datacurve-ai/pier`) is a Harbor-compatible framework for evaluating coding agents in sandboxed environments: it reads Harbor's task format and runs trials against it, giving Tektos a standards-compatible way to define and execute fixture eval scenarios rather than building bespoke eval tooling from scratch.
