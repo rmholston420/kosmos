@@ -18,6 +18,7 @@ __all__ = [
     "AnomalyRecord",
     "AnomalyStatus",
     "LoopAnomaly",
+    "UnauthorizedToolAnomaly",
     "new_id",
     "utc_now",
 ]
@@ -42,6 +43,7 @@ class AnomalyKind(str, Enum):
     MODEL_SWAP_SLO = "model_swap_slo"
     STUB_DEGRADATION = "stub_degradation"
     BUS_FACTOR_1 = "bus_factor_1"
+    UNAUTHORIZED_TOOL = "unauthorized_tool"
 
 
 class AnomalyStatus(str, Enum):
@@ -68,6 +70,24 @@ class LoopAnomaly:
     window_seconds: float
     first_seen_at: datetime
     last_seen_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class UnauthorizedToolAnomaly:
+    """Result value object returned by
+    :class:`UnauthorizedToolDetector.detect` (ADR-035).
+
+    Fires whenever a :class:`~ports.trace_feed.TraceEvent` names a
+    ``(plugin, tool_name)`` combination the detector's allowlist does
+    not contain. Stateless — each event is evaluated independently, so
+    there is no ``count`` or ``window_seconds`` field.
+    """
+
+    trace_id: str
+    plugin: str
+    tool_name: str
+    first_seen_at: datetime
+    allowlist_size: int
 
 
 @dataclass(frozen=True, slots=True)

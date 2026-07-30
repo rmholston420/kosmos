@@ -272,6 +272,8 @@ def _kind_for_detector(detector: Detector) -> AnomalyKind:
         return AnomalyKind.STUB_DEGRADATION
     if name == "bus_factor_1_detector":
         return AnomalyKind.BUS_FACTOR_1
+    if name == "unauthorized_tool_detector":
+        return AnomalyKind.UNAUTHORIZED_TOOL
     # Unknown detectors default to LOOP-labelled — real Stage-3+ detectors
     # will add their own enum values via a spec amendment.
     return AnomalyKind.LOOP

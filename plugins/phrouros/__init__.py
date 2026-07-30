@@ -27,6 +27,7 @@ from plugins.phrouros.detectors import (
     LoopDetector,
     ModelSwapSloDetector,
     StubDegradationDetector,
+    UnauthorizedToolDetector,
 )
 from plugins.phrouros.engine import (
     EVENT_PHROUROS_ANOMALY_DETECTED,
@@ -46,6 +47,7 @@ from plugins.phrouros.models import (
     AnomalyRecord,
     AnomalyStatus,
     LoopAnomaly,
+    UnauthorizedToolAnomaly,
     new_id,
     utc_now,
 )
@@ -72,6 +74,7 @@ __all__ = [
     "AnomalyRecord",
     "AnomalyStatus",
     "LoopAnomaly",
+    "UnauthorizedToolAnomaly",
     "new_id",
     "utc_now",
     # Protocol seam
@@ -81,6 +84,7 @@ __all__ = [
     "LoopDetector",
     "ModelSwapSloDetector",
     "StubDegradationDetector",
+    "UnauthorizedToolDetector",
     # Engine
     "PhrourosEngine",
     "EVENT_PHROUROS_ANOMALY_DETECTED",

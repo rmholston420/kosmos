@@ -11,6 +11,12 @@ Stage 2.3 exports:
   (spec §273).
 - :class:`BusFactor1Detector` — skeleton. Real logic lands at Stage 6.5
   once ``PORT_CONTRACTS.md`` gains machine-readable form (spec §613).
+
+Stage 2.4 addition (ADR-035):
+
+- :class:`UnauthorizedToolDetector` — real. Fires on any
+  :class:`~ports.trace_feed.TraceEvent` whose ``tool_name`` is not in
+  the detector's ``frozenset[str]`` allowlist. Stateless.
 """
 
 from __future__ import annotations
@@ -19,10 +25,12 @@ from plugins.phrouros.detectors.bus_factor_1 import BusFactor1Detector
 from plugins.phrouros.detectors.loop import LoopDetector
 from plugins.phrouros.detectors.model_swap_slo import ModelSwapSloDetector
 from plugins.phrouros.detectors.stub_degradation import StubDegradationDetector
+from plugins.phrouros.detectors.unauthorized_tool import UnauthorizedToolDetector
 
 __all__ = [
     "BusFactor1Detector",
     "LoopDetector",
     "ModelSwapSloDetector",
     "StubDegradationDetector",
+    "UnauthorizedToolDetector",
 ]

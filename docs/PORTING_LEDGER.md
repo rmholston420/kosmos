@@ -626,6 +626,31 @@
 
 ---
 
+### Stage-2 exit gate (AnomalyBridge + Tektos stub)
+
+#### `AnomalyBridge` — `GREENFIELD` (no vendored OSS)
+- **Source:** none. Bridge is entirely greenfield Kosmos code. No upstream framework was adopted at Stage 2.4 — the surface is a 1-topic subscribe → translate → propose → audit-publish loop that stdlib `asyncio` already supplies. Every candidate (celery, dramatiq, faststream, dispatch libs) either drags a broker runtime (Redis/RabbitMQ beyond kernel EventBus), a decorator surface incompatible with `EventBusPort.subscribe()` returning `asyncio.Queue`, or a plugin registry that would violate ADR-007 (would need to import Phrouros types).
+- **Commit / Version:** —
+- **License:** —
+- **Kosmos location:** `plugins/praxis/apex/bridge.py` (Praxis-internal peer service; NOT owned by `PraxisPlugin`, matches ADR-033 decoupled-construction pattern) + `plugins/praxis/apex/tests/test_anomaly_bridge.py`.
+- **Port(s):** EventBusPort (subscribe `phrouros.anomaly.detected`, publish `praxis.escalation.proposed`), APEX `ChangeApprovalProtocol` (`propose(tier=HUMAN_REQUIRED, proposing_domain="phrouros")`).
+- **Modifications:** stdlib-only. `asyncio.Task` for background drain, `asyncio.Queue` (returned by `EventBusPort.subscribe`) as the ingress buffer, `ast` for the ADR-007 static-import check in tests. Zero new runtime dependencies at Stage 2.4. Design invariants: (a) idempotent `start()` / `stop()` (double-start no-op, double-stop no-op); (b) per-envelope errors caught + logged, one bad envelope cannot stop the escalator; (c) `stop()` cancels the background task, awaits it, then unsubscribes; (d) zero `plugins.phrouros` imports — event type is a duplicated local literal `EVENT_PHROUROS_ANOMALY_DETECTED = "phrouros.anomaly.detected"`, envelope payload read by string keys only; AST-verified in `test_bridge_never_imports_phrouros`.
+- **ADR:** ADR-035
+- **Logged:** 2026-07-30 00:35 EDT
+
+#### `TektosSimulator` — `GREENFIELD` (test-only, no vendored OSS)
+- **Source:** none. Test-only harness at Stage 2.4 to drive the exit-gate scenario. No upstream framework applicable — the simulator is a plain dataclass with three methods (`simulate_unauthorized_call` / `simulate_authorized_call` / `simulate_loop`) composed with an injected `TraceFeedPort`. Deleted or superseded at Stage 3 by the real Tektos coding plugin (Q6=A).
+- **Commit / Version:** —
+- **License:** —
+- **Kosmos location:** `plugins/tektos/` (`__init__.py` namespace) + `plugins/tektos/stub/` (`__init__.py` re-export, `simulator.py`) + `plugins/tektos/tests/` (`__init__.py`, `test_stage_2_4_exit_gate.py`). Registered under `pyproject.toml` setuptools packages.
+- **Port(s):** TraceFeedPort only (consumer via injected `trace_feed`).
+- **Modifications:** stdlib-only. `dataclasses` for construction, `datetime` for `TraceEvent.timestamp`, `uuid` for `trace_id` / event ids. No `PluginDescriptor`, no `LifecyclePort` verbs, no `AGENT_TRACE` panel — the simulator is not a plugin. Design invariants: (a) `simulate_unauthorized_call(tool_name)` publishes one `TraceEvent(plugin="tektos", tool_name=<denied>)`; (b) `simulate_authorized_call(tool_name)` publishes a `TraceEvent(plugin="tektos", tool_name=<allowed>)`; (c) `simulate_loop(tool_name, count, window_s)` publishes N events at deterministic offsets within a window — drives the Stage-2.3 `LoopDetector` deterministically in the gate.
+- **Deletion trigger:** Stage 3 real Tektos MVP (spec §3). When Tektos ships a real `PluginDescriptor` + LangGraph runtime, the entire `plugins/tektos/stub/` tree is deleted and this ledger entry is superseded by the Stage-3 Tektos entry.
+- **ADR:** ADR-035
+- **Logged:** 2026-07-30 00:35 EDT
+
+---
+
 ## Tektos (Coding Plugin)
 
 #### OpenHands SDK — `PLANNED`
