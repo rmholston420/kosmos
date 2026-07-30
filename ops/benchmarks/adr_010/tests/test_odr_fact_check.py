@@ -590,6 +590,78 @@ def test_verifier_error_is_non_fatal(monkeypatch):
     ), events
 
 
+def test_finalize_strip_removes_empty_citation_wrappers(monkeypatch):
+    """Stage 6.3.7: after finalize URL strip, empty citation wrappers
+    (`*(Raw GitHub Link: )*`, `*(Source: )*`, `[label]()`, `()`, `<>`)
+    must be removed so raters don't see the residue.
+    """
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": (
+                    "Body text before. "
+                    "*(Raw GitHub Link: https://bad.example/)* "
+                    "Middle. "
+                    "*(Source: https://good.example/)* "
+                    "End."
+                ),
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            },
+        ],
+    )
+    call_state = {"n": 0}
+
+    async def _fake_verify(urls, **kw):
+        from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+        call_state["n"] += 1
+        is_finalize = call_state["n"] >= 2
+        out = {}
+        for u in urls:
+            if u == "https://good.example/":
+                ok = True
+            elif u == "https://bad.example/":
+                # Passes at shim 3 (so shim 3 doesn't retry) but fails
+                # at finalize (simulates late-injection or DNS flake).
+                ok = not is_finalize
+            else:
+                ok = True
+            out[u] = VerifyResult(
+                url=u, ok=ok,
+                kind="ok" if ok else "http_4xx",
+                status_code=200 if ok else 404,
+                elapsed_seconds=0.001,
+            )
+        return out
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    monkeypatch.setattr(odr_mod, "verify_urls", _fake_verify)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    body = metrics.final_answer
+    # Bad URL was stripped.
+    assert "https://bad.example/" not in body
+    # Empty wrapper artifact from the bad URL is gone.
+    assert "*(Raw GitHub Link: )*" not in body
+    assert "*(Raw GitHub Link:" not in body
+    # Good URL and its wrapper survived intact.
+    assert "https://good.example/" in body
+    assert "*(Source: https://good.example/)*" in body
+    # No `[unverified]` artifact.
+    assert "[unverified]" not in body
+    # Trajectory records the wrapper sweep.
+    events = _fact_check_events(metrics)
+    assert any(
+        e.get("pass") == "finalize_wrapper_sweep" for e in events
+    ), events
+
+
 def test_thermal_abort_skips_fact_check(monkeypatch):
     """If shim 1 aborts thermally, shim 3 must not fire.
 

@@ -1601,3 +1601,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress. Whole-repo pytest **1175 passed, 19 skipped**.
+
+## 2026-07-30 19:09 EDT — Stage 6.3.7: empty-wrapper sweep + rubric polarity fix
+
+- **Stage / plugin / port:** ADR-010 ODR harness · finalize sweep + shim-6 rubric-critique polarity classification
+- **What changed:**
+  - **Empty citation wrapper sweep.** Added `_sweep_empty_citation_wrappers(text) -> (str, count)` helper in `odr.py`. Removes `*(Source: )*`, `*(Raw GitHub Link: )*`, `[label]()`, `()`, `<>`, `[]` residues left behind after the finalize URL strip. Idempotent; collapses double-spaces and `space, / space) / space.` created by the removals. Wired into the finalize block AFTER the URL strip and the orphan `[unverified]` sweep; records `pass="finalize_wrapper_sweep"` event with `wrappers_removed` count.
+  - **Rubric-critique polarity fix.** Rewrote `_looks_negative` in `rubric_critique.py`. Old heuristic falsely flagged the F1 canonical fact as NEGATE because its statement contains "not a full source fork" as a contrastive tail. This misled the writer in two of three 6.3.6b trials to state DozerDB as a full source fork. New heuristic only triggers NEGATE on top-level negations (`_STRONG_NEG_MARKERS` and a regex requiring the sentence to open with subject + `is/are/does/do/has/have/was/were/had NOT <verb>` and NOT immediately followed by `a`/`the`).
+  - **Explicit `polarity` field authoritative.** Added `polarity: "assert"` (F1-F5) and `polarity: "negate"` (F6) to `fixtures/adr_010_question.json` canonical facts. When explicit, this field is authoritative and overrides the heuristic. `build_rubric_lines_from_facts` now also accepts `fact_id` (fixture uses `fact_id`, tests used `id`) and `"assert"|"affirm"|"positive"` polarity values.
+  - **Tests.** Added `test_finalize_strip_removes_empty_citation_wrappers` (finalize sweep) and four rubric-critique polarity tests (`fact_id` alias, contrastive-clause is ASSERT, explicit polarity overrides heuristic, top-level negation still NEGATE).
+  - **Runner banner** bumped `Stage 6.3.6b` → `Stage 6.3.7`.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/odr.py`
+  - `ops/benchmarks/adr_010/harness/rubric_critique.py`
+  - `ops/benchmarks/adr_010/fixtures/adr_010_question.json`
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`
+  - `ops/benchmarks/adr_010/tests/test_rubric_critique.py`
+  - `ops/benchmarks/adr_010/runner.py`
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress. Whole-repo pytest **1180 passed, 19 skipped** (+5 new tests). Blocking on Colossus 3-trial rerun to verify F1-F6 mean ≥5/6.

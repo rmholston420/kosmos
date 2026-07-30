@@ -1,47 +1,37 @@
-# Kosmos Session Handoff — 2026-07-30 18:45 EDT
+# Kosmos Session Handoff — 2026-07-30 19:09 EDT
 
 ## Current build-sequencing position
-
-- **Stage / phase:** ADR-010 benchmark harness · Stage 6.3.6b
-- **Plugin / kernel component:** ODR harness (`ops/benchmarks/adr_010/harness/odr.py`)
-- **Port(s) in progress:** none (harness-internal)
+- **Stage / phase:** Stage 6.3.7 (empty-wrapper sweep + rubric polarity fix)
+- **Plugin / kernel component:** ADR-010 ODR harness
+- **Port(s) in progress:** none (harness-internal quality fixes)
 
 ## Completed this session
+- Stage 6.3.7:
+  - Added `_sweep_empty_citation_wrappers` helper and wired into finalize block; removes `*(Raw GitHub Link: )*`, `*(Source: )*`, `[label]()`, `()`, `<>`, `[]` residues left by URL strip.
+  - Tightened `_looks_negative` in `rubric_critique.py` — contrastive `"X, not a Y"` clauses no longer flip a fact to NEGATE.
+  - Added authoritative `polarity` field handling in `build_rubric_lines_from_facts` (accepts `"assert"|"affirm"|"positive"` as well as the existing `"negative"|"negate"|"not"`).
+  - `build_rubric_lines_from_facts` now also reads `fact_id` (fixture uses this) alongside legacy `id`.
+  - Fixture `fixtures/adr_010_question.json`: added explicit `polarity` to all six canonical facts (F1-F5 assert, F6 negate).
+  - Runner banner: `Stage 6.3.6b` → `Stage 6.3.7`.
+  - Regression tests: 1 for empty-wrapper sweep (`test_odr_fact_check.py`), 4 for polarity handling (`test_rubric_critique.py`). Whole-repo pytest: **1180 passed, 19 skipped** (up from 1175 in 6.3.6b).
+- BUILD_LOG + DEBUG_LOG entries appended.
 
-- Diagnosed 6.3.6a Colossus leak: 2/3 trials leaked `final_unverified_urls` because downstream shims (5/9/10 grounding, CoVe, rubric) inject URLs AFTER shim 3, so shim 3's enforcement strip was idle.
-- Stage 6.3.6b: replaced finalize-time `annotate_unverified` with a strip loop that removes bad URLs + trailing `[unverified]` markers from the report body and records the URLs as `final_unverified_urls` in `metrics.trajectory`.
-- Cleanup: dropped now-unused `annotate_unverified` import from `odr.py`; fixed runner banner to say `Stage 6.3.6b shims`.
-- New hermetic test `test_finalize_strip_removes_bad_url_from_body` proves the finalize strip catches URLs that pass the shim-3 verify but fail at finalize.
-- Whole-repo pytest green: **1175 passed, 19 skipped** (was 1173; +2 tests).
-- Pre-flight audit caught a prefix-collision bug in the raw `str.replace` strip: a short bad URL would corrupt a longer good URL sharing its prefix. Added `_strip_url_boundary_aware` helper using a negative-lookahead against URL-body characters and wired it into all three strip sites (shim-3 pre-strip, shim-3 new-URL strip, finalize strip). Added orphan-`[unverified]`-marker sweep at end of finalize.
-
-## Remaining before current Definition of Done is met
-
-- Commit + push Stage 6.3.6b.
-- Clean stale artifacts on Colossus: `rm -f ops/benchmarks/artifacts/adr-010-2026-07-30/odr/trial_*.json ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_*.log`.
-- Re-run Colossus 3-trial with the 6.3.6b harness.
-- Verify on every trial: `final_unverified_urls == []`, no `[unverified]` markers, wall-clock ≤150 s.
-- Blind-rate F1–F6; target mean ≥5/6 (baseline 4.33/6).
+## Remaining before current Definition of Done
+- Commit + push Stage 6.3.7.
+- Colossus 3-trial rerun with the same standing command (see below).
+- Blind-rate F1-F6; target mean ≥5/6.
+- If mean ≥5/6, close Stage 6.3.7. Otherwise investigate remaining gap.
 
 ## Open questions / awaiting user answer
-
-- None. If the KeyError('reflection') stray from a prior run recurs in a clean 6.3.6b run, diagnose the vendor's `rubric_critique` / `final_report_generation` state-key expectations at that point.
+- none.
 
 ## Exact next action
-
-- Commit + push:
-  ```bash
-  cd ~/dev/kosmos && git add -A && \
-    git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
-      commit -m "Stage 6.3.6b: finalize-time strip replaces annotate_unverified (catches downstream-shim URL leaks)" && \
-    git push
-  ```
-- Then on Colossus:
-  ```bash
-  cd ~/dev/kosmos && \
-    rm -f ops/benchmarks/artifacts/adr-010-2026-07-30/odr/trial_*.json \
-          ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_*.log && \
-    git pull && source .venv/bin/activate && \
-    python -m ops.benchmarks.adr_010.runner --contender odr --trials 3 \
-      2>&1 | tee ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_6_3_6b.log
-  ```
+On Colossus, pull and rerun:
+```bash
+cd ~/dev/kosmos && \
+  rm -f ops/benchmarks/artifacts/adr-010-2026-07-30/odr/trial_*.json \
+        ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_*.log && \
+  git pull && source .venv/bin/activate && \
+  python -m ops.benchmarks.adr_010.runner --contender odr --trials 3 \
+    2>&1 | tee ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_6_3_7.log
+```

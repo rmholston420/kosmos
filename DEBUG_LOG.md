@@ -357,3 +357,29 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/harness/odr.py`
   - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py` (added `test_finalize_strip_boundary_aware_prefix_collision`)
 - **Related BUILD_LOG entry:** 2026-07-30 18:41 EDT
+
+## 2026-07-30 19:09 EDT — Empty citation wrappers survive finalize URL strip
+
+- **Symptom:** After Stage 6.3.6b finalize URL strip removed `https://raw.githubusercontent.com/neo4j/neo4j/main/LICENSE.txt` from trial_02_276616 body, the surrounding wrapper text `*(Raw GitHub Link: )*` remained in the report. Rater-visible artifact. Cost the trial ≥1 point on F4 grounding in blind rating.
+- **Affected stage / plugin / port:** ADR-010 ODR harness · finalize block in `run_odr_trial`
+- **Root cause:** `_strip_url_boundary_aware` removes the URL text but knows nothing about the writer's citation wrapper. Common wrappers the writer emits: `*(Source: URL)*`, `*(Raw GitHub Link: URL)*`, `[label](URL)`, `(URL)`, `<URL>`. After URL strip these become `*(Source: )*`, `*(Raw GitHub Link: )*`, `[label]()`, `()`, `<>` — leftover text that reads like an incomplete citation.
+- **Fix applied:** Stage 6.3.7 adds `_sweep_empty_citation_wrappers(text) -> (str, count)` in `odr.py` and calls it inside the finalize block after the URL strip. Uses precompiled regex patterns for each wrapper shape; only removes wrappers whose payload is entirely whitespace (so `*(Source: https://x)*` with a real URL is not touched). Collapses double-spaces and `space,` / `space.` / `space)` created by the removal. Records `pass="finalize_wrapper_sweep"` with `wrappers_removed` count in trajectory. Regression test `test_finalize_strip_removes_empty_citation_wrappers`.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/odr.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`
+- **Related BUILD_LOG entry:** 2026-07-30 19:09 EDT
+
+## 2026-07-30 19:09 EDT — F1 canonical fact classified as NEGATE (polarity flip)
+
+- **Symptom:** In blind rating of Stage 6.3.6b run, two of three trials (01, 03) stated DozerDB as a "full source fork" instead of a "bootstrapping plugin". This directly contradicts the F1 canonical fact and cost F1 points across the run. Trial 02 got F1 right but sacrificed other facts.
+- **Affected stage / plugin / port:** ADR-010 ODR harness · shim 6 rubric-critique (`rubric_critique.py`)
+- **Root cause:** `_looks_negative(statement)` classified F1's statement as NEGATE because the fact statement — "DozerDB is a bootstrapping plugin ... **not a full source fork**" — contains "not a" as a contrastive clarifier. The old regex `\bnot\b\s+(a|the|yet|open|available|restored|included)` matched "not a". F1 was then rendered in the rubric-critique as `[F1] NEGATE: DozerDB is a bootstrapping plugin ...`, and the critique shim's directive told the writer to "verify your report states F1 as an explicit negation". Writer interpreted this as license to state DozerDB is NOT a bootstrapping plugin — arriving at "full source fork" — because that was the only sentence-level negation reading available.
+- **Fix applied:** Stage 6.3.7. Two-part fix in `rubric_critique.py`:
+  1. Tightened `_looks_negative` to only fire on top-level negations (`_STRONG_NEG_MARKERS = ["not restored", "never restored", "not open source", "not open-source", "not published", "no clustering", "no high-limit"]` and a case-insensitive regex requiring the sentence to open with subject + `is|are|does|do|has|have|was|were|had NOT <verb>` where the verb is NOT immediately `a` or `the`).
+  2. `build_rubric_lines_from_facts` now honors an explicit `polarity` field ("assert"|"affirm"|"positive" → ASSERT; "negative"|"negate"|"not" → NEGATE) authoritatively, before falling back to the heuristic. Also accepts `fact_id` alongside `id`.
+  Added explicit `polarity` fields to all six facts in `fixtures/adr_010_question.json` (F1-F5 assert, F6 negate). Four new regression tests in `test_rubric_critique.py`.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/rubric_critique.py`
+  - `ops/benchmarks/adr_010/fixtures/adr_010_question.json`
+  - `ops/benchmarks/adr_010/tests/test_rubric_critique.py`
+- **Related BUILD_LOG entry:** 2026-07-30 19:09 EDT

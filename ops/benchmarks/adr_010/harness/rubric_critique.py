@@ -42,40 +42,73 @@ def build_rubric_lines_from_facts(canonical_facts: Sequence[dict]) -> list[str]:
     """
     lines: list[str] = []
     for i, f in enumerate(canonical_facts, start=1):
-        fact_id = str(f.get("id") or f"F{i}")
+        fact_id = str(f.get("fact_id") or f.get("id") or f"F{i}")
         statement = str(f.get("statement") or f.get("text") or "").strip()
         if not statement:
             continue
         polarity_field = str(f.get("polarity") or "").lower()
-        is_negative = (
-            polarity_field in {"negative", "negate", "not"}
-            or _looks_negative(statement)
-        )
+        # Explicit polarity field is authoritative when present.
+        if polarity_field in {"negative", "negate", "not"}:
+            is_negative = True
+        elif polarity_field in {"positive", "assert", "affirm"}:
+            is_negative = False
+        else:
+            is_negative = _looks_negative(statement)
         polarity = "NEGATE" if is_negative else "ASSERT"
         lines.append(f"[{fact_id}] {polarity}: {statement}")
     return lines
 
 
-_NEG_MARKERS = (
+# Stage 6.3.7: tightened heuristic. Only classify as NEGATE if the
+# PRIMARY predicate is negative, not a contrastive clause. Examples:
+#
+#   NEGATE: "clustering is not restored"          -> primary: "is not restored"
+#   NEGATE: "the source has not been published"   -> primary: "has not been published"
+#   ASSERT: "DozerDB is X, not a full source fork" -> primary: "is X"; "not"
+#           is a contrastive clarifier
+#   ASSERT: "the maintainer says clustering, live backups... are not primary
+#           deliverables" -> attributive assertion, not a top-level negation
+#
+# The old heuristic tripped on the F1 fixture statement because it
+# contained "not a full source fork" as a contrastive tail, which
+# gave the writer a wrong polarity instruction and caused two of the
+# three 6.3.6b trials to state DozerDB as a full source fork.
+_STRONG_NEG_MARKERS = (
     "not restored",
-    "is not",
-    "are not",
-    "does not",
-    "never ",
-    "excluded",
-    "not included",
-    "cannot",
+    "never restored",
+    "not open source",
+    "not open-source",
+    "not published",
     "no clustering",
     "no high-limit",
-    "not open",
 )
 
 
 def _looks_negative(statement: str) -> bool:
+    """Best-effort NEGATE detection.
+
+    Only triggers when the statement's PRIMARY predicate is negative,
+    not when "not" appears inside a contrastive clause. Explicit
+    ``polarity="negative"`` in the fact record is the authoritative
+    signal; this heuristic is only a fallback.
+    """
     low = statement.lower()
-    if re.search(r"\bnot\b\s+(a|the|yet|open|available|restored|included)", low):
+    # Strong markers: unambiguous top-level negation of the primary
+    # predicate (e.g. "clustering is not restored", "source is not
+    # published").
+    if any(m in low for m in _STRONG_NEG_MARKERS):
         return True
-    return any(m in low for m in _NEG_MARKERS)
+    # Weak marker: sentence begins with a subject followed directly by
+    # an "is/are/does/has NOT <verb>" construction, and the "not" is
+    # NOT immediately followed by "a" or "the" (which typically
+    # indicates a contrastive clause like "X, not a Y").
+    if re.search(
+        r"^\s*[A-Za-z][^,;]*?\b(is|are|does|do|has|have|was|were|had)\s+not\b(?!\s+(a|the)\b)",
+        statement,
+        re.IGNORECASE,
+    ):
+        return True
+    return False
 
 
 def build_rubric_critique_turn(

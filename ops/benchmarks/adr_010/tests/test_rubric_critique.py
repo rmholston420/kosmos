@@ -58,3 +58,63 @@ def test_extract_rewrite_none_when_empty_interior():
         "----- END REWRITTEN FINAL REPORT -----"
     )
     assert extract_rewritten_report(output) is None
+
+
+def test_rubric_polarity_fact_id_alias():
+    """Stage 6.3.7: `fact_id` field is accepted as an alias for `id`.
+
+    The adr_010 fixture uses `fact_id`; older tests use `id`. Both must
+    work.
+    """
+    facts = [
+        {"fact_id": "F1", "polarity": "assert",
+         "statement": "DozerDB is a plugin, not a full source fork."},
+    ]
+    lines = build_rubric_lines_from_facts(facts)
+    assert lines == [
+        "[F1] ASSERT: DozerDB is a plugin, not a full source fork."
+    ]
+
+
+def test_rubric_polarity_contrastive_clause_is_assert():
+    """Stage 6.3.7 regression guard: a statement with a contrastive
+    'not a <noun>' tail must NOT be classified as NEGATE.
+
+    This is the bug that caused two of the three 6.3.6b trials to
+    state DozerDB as a full source fork: the F1 statement contained
+    'not a full source fork' as a contrastive clarifier, and the
+    naive heuristic flipped F1 to NEGATE, giving the writer the
+    wrong polarity instruction.
+    """
+    facts_without_polarity = [
+        {"fact_id": "F1",
+         "statement": (
+             "DozerDB is a bootstrapping plugin that loads into an "
+             "unmodified Neo4j Community Edition installation, not a "
+             "full source fork."
+         )},
+    ]
+    lines = build_rubric_lines_from_facts(facts_without_polarity)
+    assert lines[0].startswith("[F1] ASSERT:"), lines
+
+
+def test_rubric_polarity_explicit_field_overrides_heuristic():
+    """Stage 6.3.7: explicit `polarity="assert"` beats any heuristic."""
+    # This statement has 'is not' which the OLD heuristic would flip
+    # to NEGATE. The explicit polarity="assert" must override that.
+    facts = [
+        {"fact_id": "F1", "polarity": "assert",
+         "statement": "X is a Y, not a Z."},
+    ]
+    lines = build_rubric_lines_from_facts(facts)
+    assert lines[0].startswith("[F1] ASSERT:"), lines
+
+
+def test_rubric_polarity_top_level_negation_still_negate():
+    """Stage 6.3.7: legitimate top-level negations must remain NEGATE."""
+    facts = [
+        {"fact_id": "F6",
+         "statement": "Clustering is not restored by DozerDB."},
+    ]
+    lines = build_rubric_lines_from_facts(facts)
+    assert lines[0].startswith("[F6] NEGATE:"), lines

@@ -90,6 +90,65 @@ def _strip_url_boundary_aware(text: str, url: str) -> tuple[str, bool]:
     return out, out != text
 
 
+# Stage 6.3.7: empty-citation-wrapper cleanup.
+#
+# When ``_strip_url_boundary_aware`` removes a URL, it can leave behind
+# a citation wrapper the writer emitted around it, e.g.:
+#
+#     *(Source: https://x)*      -> *(Source: )*
+#     *(Raw GitHub Link: URL)*  -> *(Raw GitHub Link: )*
+#     [label](URL)              -> [label]()
+#     (URL)                     -> ()
+#     <URL>                     -> <>
+#     [URL]                     -> []
+#
+# These artifacts are rater-visible and read as "the writer didn't
+# finish a citation". Sweep them after the per-URL strip loop.
+#
+# The sweep is intentionally narrow: only wrappers whose payload is
+# ENTIRELY whitespace after strip get removed. A wrapper that still
+# contains any text is left alone.
+_EMPTY_WRAPPER_PATTERNS = [
+    # Italicized parenthetical citation with a label:
+    #   `*(Source: )*`, `*(Raw GitHub Link: )*`, `*(URL: )*`, etc.
+    re.compile(r"\s?\*\([^*()]*?:\s*\)\*"),
+    # Plain parenthetical citation with a label and no URL:
+    #   `(Source: )`, `(URL: )`
+    re.compile(r"\s?\((?:Source|URL|Link|Ref|Reference|Cite):\s*\)"),
+    # Markdown link with empty target: `[label]()` (any label).
+    re.compile(r"\[[^\]\[]*\]\(\s*\)"),
+    # Bare empty parens/angles/brackets: `()`, `<>`, `[]`.
+    re.compile(r"\s?\(\s*\)"),
+    re.compile(r"\s?<\s*>"),
+    re.compile(r"\s?\[\s*\]"),
+]
+
+
+def _sweep_empty_citation_wrappers(text: str) -> tuple[str, int]:
+    """Remove empty citation wrappers left behind by URL strips.
+
+    Returns ``(new_text, count_removed)``. Idempotent.
+    """
+    if not text:
+        return text, 0
+    out = text
+    total = 0
+    for pat in _EMPTY_WRAPPER_PATTERNS:
+        new_out, n = pat.subn("", out)
+        if n:
+            total += n
+            out = new_out
+    # Collapse the double-spaces that a mid-line wrapper removal may
+    # leave behind. Only collapse runs of >1 space; leave tabs and
+    # newlines alone.
+    if total:
+        out = re.sub(r"  +", " ", out)
+        # Also collapse `space,` -> `,` and `space.` -> `.` and
+        # `space)` -> `)` that the removal often creates.
+        out = re.sub(r" ([,.);:])", r"\1", out)
+    return out, total
+
+
 def build_odr_config(
     *,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
@@ -1147,6 +1206,19 @@ async def run_odr_trial(
                 if "[unverified]" in final_report:
                     final_report = re.sub(
                         r"\s?\[unverified\]", "", final_report
+                    )
+                # Stage 6.3.7: sweep empty citation wrappers left
+                # behind by the URL strip (e.g. `*(Source: )*`,
+                # `[label]()`, `()`). Rater-visible artifacts otherwise.
+                final_report, wrappers_removed = (
+                    _sweep_empty_citation_wrappers(final_report)
+                )
+                if wrappers_removed:
+                    fact_check_events.append(
+                        {
+                            "pass": "finalize_wrapper_sweep",
+                            "wrappers_removed": wrappers_removed,
+                        }
                     )
         # Legacy alias for downstream trajectory expectations.
         annotation_urls = final_unverified_urls

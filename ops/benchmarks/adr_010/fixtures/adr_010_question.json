@@ -7,6 +7,7 @@
     "canonical_facts": [
       {
         "fact_id": "F1",
+        "polarity": "assert",
         "statement": "DozerDB is a bootstrapping plugin that loads into an unmodified Neo4j Community Edition installation to enable enterprise-tier features, not a full source fork. This distinguishes it from ONgDB, which was a complete source fork of Neo4j Enterprise pre-3.5.",
         "supporting_urls": [
           "https://github.com/orgs/DozerDB/discussions/1",
@@ -16,6 +17,7 @@
       },
       {
         "fact_id": "F2",
+        "polarity": "assert",
         "statement": "The plugin model means DozerDB can be added or removed at any time without recompiling or migrating Neo4j Community Edition; the underlying store format remains compatible with vanilla Community binaries when the plugin is uninstalled.",
         "supporting_urls": [
           "https://github.com/orgs/DozerDB/discussions/1",
@@ -24,6 +26,7 @@
       },
       {
         "fact_id": "F3",
+        "polarity": "assert",
         "statement": "Neo4j Community Edition is licensed under GPLv3 and its source is publicly published; Neo4j Enterprise Edition is licensed under a commercial (proprietary) license and its source has not been published on GitHub since Neo4j 3.5 (November 2018).",
         "supporting_urls": [
           "https://neo4j.com/open-core-and-neo4j/",
@@ -32,6 +35,7 @@
       },
       {
         "fact_id": "F4",
+        "polarity": "assert",
         "statement": "DozerDB itself is GPLv3, matching the license of the Neo4j Community host it plugs into; this is a deliberate contrast with ONgDB's AGPLv3 posture, chosen by the DozerDB maintainer specifically to avoid AGPL's network-copyleft implications for downstream users.",
         "supporting_urls": [
           "https://github.com/orgs/DozerDB/discussions/1",
@@ -40,6 +44,7 @@
       },
       {
         "fact_id": "F5",
+        "polarity": "assert",
         "statement": "DozerDB restores four enterprise-tier feature families onto Community Edition: (a) multi-database support (multiple named databases in one server, beyond the two — system + default — that Community allows); (b) enterprise-tier schema constraints (property-existence, property-type, and node/relationship key uniqueness constraints); (c) backup and restore (offline dump is in Community; DozerDB adds the online/hot-backup family that Community lacks); (d) advanced monitoring/diagnostics.",
         "supporting_urls": [
           "https://greystonesgroup.com/solutions/opensourcetools/",
@@ -49,6 +54,7 @@
       },
       {
         "fact_id": "F6",
+        "polarity": "negate",
         "statement": "The DozerDB maintainer has explicitly stated that clustering, live/hot backups, and the high-limit store class are not primary DozerDB deliverables at the plugin layer; DozerDB's roadmap focuses on multi-database, composite/fabric-successor databases, enterprise metrics, and a modular ABAC-based security framework, with high-limit and live-backup features added only if the community demands them.",
         "supporting_urls": [
           "https://github.com/orgs/DozerDB/discussions/1"
