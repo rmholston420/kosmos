@@ -100,8 +100,8 @@ def parse_args() -> argparse.Namespace:
             "trials. Progression: 30 -> 60 (post-88C incident) -> 45 -> 30 "
             "-> 15 -> 10 -> 5 -> 3 -> 1 (Stage 6.3.4e: Stage 6.3.4d 3-trial "
             "run with 3s waits peaked at 76C \u2014 9C below the 85C watchdog "
-            "and 12C below the 88C driver-crash line. GPU power cap raised "
-            "to 425W (see kosmos-nvidia-power-cap.service). Target C held "
+            "and 10C below the 88C driver-crash line. GPU power cap raised "
+            "to 450W (see kosmos-nvidia-power-cap.service). Target C held "
             "at 60.)"
         ),
     )
@@ -130,10 +130,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--power-cap-watts",
         type=int,
-        default=int(os.environ.get("ADR010_POWER_CAP_WATTS", "425")),
+        default=int(os.environ.get("ADR010_POWER_CAP_WATTS", "450")),
         help=(
             "apply nvidia-smi -pl <watts> at startup to reduce sustained "
-            "board-power draw. RTX 5090 stock TDP is 575W; 425W is the "
+            "board-power draw. RTX 5090 stock TDP is 575W; 450W is the "
             "post-incident conservative default. Requires sudo; if not "
             "available, the runner logs and continues (does NOT fail)."
         ),
@@ -498,7 +498,7 @@ def _apply_power_cap(args: argparse.Namespace) -> None:
     """Apply nvidia-smi -pl <watts> at startup. Never fail the run on this.
 
     Post-2026-07-30-incident hardening. On Colossus the RTX 5090 stock TDP
-    is 575W; capping to 425W drops sustained wattage ~26% at the cost of
+    is 575W; capping to 450W drops sustained wattage ~22% at the cost of
     ~20-30% slower token generation. Requires sudo. If sudo is not
     available or nvidia-smi is missing, logs and continues — do not
     hard-fail the benchmark on a defense-in-depth measure.
