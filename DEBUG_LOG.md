@@ -286,3 +286,30 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py`
   - `ops/benchmarks/adr_010/tests/test_enterprise_license_grounding.py`
 - **Related BUILD_LOG entry:** 2026-07-30 17:27 EDT
+
+## 2026-07-30 18:01 EDT — fact-check rewrite leaves failed URLs in final report with `[unverified]` annotation
+
+- **Symptom:** In Stage 6.3.5 3-trial Colossus run (2026-07-30 17:47), trials 1 and 3 both produced final reports still containing cited URLs that had failed live verification pre-retry. Verbatim: `dozerdb.org/features/`, `docs.dozerdb.org/security-overview` (T1), `dozerdb.org/license` (T3). Each was annotated `[unverified]` inline by the harness's finalize-pass `annotate_unverified` — but the DoD calls for these URLs to not survive at all.
+- **Affected stage / plugin / port:** ADR-010 ODR harness · shim 3 (fact-check retry) — Stage 6.3.5 output body.
+- **Root cause:** The Stage 6.3.5 fact-check correction directive (`build_fact_check_correction_directive`) still instructed the writer to "Retrieve a verified replacement URL via the MCP visit tool during this retry" — but under Stage 6.3.5's synthesis-only rewrite path there is no MCP call, no fresh retrieval. The writer, given a directive it cannot satisfy, defaulted to the least-effort option: keep the failed URL in the text and let the harness annotate it. The directive had no rule against re-emitting the URLs.
+- **Fix applied:**
+  - Rewrote directive text for synthesis-only rewrite mode: mandate REMOVAL of the failed URLs from the report body, forbid `[unverified]` markers as a substitute for removal, forbid alias/variant re-citation, and explicitly declare "synthesis-only rewrite mode: you cannot fetch replacement URLs".
+  - Added deterministic enforcement net in `harness/odr.py` shim 3 retry path: after `fact_check_retry_ok`, strip every occurrence of every `unverified_first` URL substring from the retry report body, plus any dangling bare `[unverified]` markers. Guarantees the exact pre-retry failed URLs cannot survive under their original spelling regardless of writer compliance.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/prompts.py`
+  - `ops/benchmarks/adr_010/harness/odr.py`
+- **Related BUILD_LOG entry:** 2026-07-30 18:01 EDT
+
+## 2026-07-30 18:01 EDT — claim-support gate false-positive: grounded license claim flagged `[unsupported: no citation in observations]`
+
+- **Symptom:** In Stage 6.3.5 3-trial Colossus run, trials 1 and 3 appended `[unsupported: no citation in observations]` to license sentences that had citations. T1: "DozerDB is distributed under the GPL-3.0 license... [unsupported: no citation in observations]" — despite `license_grounding` having grounded DozerDB as GPL-3.0 immediately upstream in the same trial. T3: same marker attached to a Neo4j-Community GPL-3.0 sentence that carried a bracket citation `[2]`.
+- **Affected stage / plugin / port:** ADR-010 ODR harness · shim 8 (`claim_support.find_unsupported_claims`).
+- **Root cause:** The gate's support check was strictly "does the claim's subject substring appear inside any URL in `raw_notes` or in the notes-text?". Two gaps: (1) it did not consult `license_grounding` / `feature_grounding` / `enterprise_license_grounding` outputs, so a subject the harness had just proven correct via a live LICENSE fetch could still be flagged as unsupported when the URL list happened to lack the subject token; (2) it did not recognize the writer's actual citation format (`[N]` bracket refs), so a properly-cited sentence would be flagged whenever the URL check missed.
+- **Fix applied:**
+  - `find_unsupported_claims` extended with `grounded_subjects: Iterable[str]` parameter. Token-matched, case-insensitive. Any subject overlapping a grounded token is exempt.
+  - Added `_sentence_has_bracket_citation`: sentences containing `[N]` are skipped.
+  - `harness/odr.py`: populate `grounded_subjects: set[str]` from `LicenseFact.owner|repo`, `FeatureFact.owner|repo`, and (for the enterprise shim) the canonical Neo4j subject set, when facts resolved successfully. Passed into shim 8 call site.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/claim_support.py`
+  - `ops/benchmarks/adr_010/harness/odr.py`
+- **Related BUILD_LOG entry:** 2026-07-30 18:01 EDT

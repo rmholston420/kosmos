@@ -1,31 +1,41 @@
-# Kosmos Session Handoff — 2026-07-30 17:27 EDT
+# Kosmos Session Handoff — 2026-07-30 18:01 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 6.3.5 (post-6.3.4f) · ADR-010 harness retry architecture fix
-- **Plugin / kernel component:** ADR-010 benchmark harness (`ops/benchmarks/adr_010/harness/odr.py`)
-- **Port(s) in progress:** none (harness-only change)
+- **Stage / phase:** ADR-010 · Stage 6.3.6 (fact-check rewrite hardening + claim-support false-positive fix)
+- **Plugin / kernel component:** ODR benchmark harness (`ops/benchmarks/adr_010/harness/`)
+- **Port(s) in progress:** none (harness-internal patch; no port/adapter changes)
 
 ## Completed this session
-- Diagnosed 6.3.4e/f rating stall root cause: shim retries (3/5/9/10) triggered fresh full ODR runs (~500 s each) instead of rewriting the existing report; SYSTEM CORRECTION directives were diluted across new retrieval snippets.
-- Reverted `qwen2.5:32b-instruct-q5_K_M` → `qwen2.5:32b-instruct-q4_K_M` (q5 uplift was speculative).
-- Added `_rewrite_report_call` + `_rewrite_report_with_directive` helpers to `harness/odr.py` that invoke the vendor's `final_report_generation` node directly with the SYSTEM CORRECTION prepended to `state.notes[0]`.
-- Migrated shims 3, 5, 9, 10 retry paths to the rewrite helper. Vendor tree untouched.
-- Updated the three ADR-010 test stubs to serve `final_report_generation` alongside `ainvoke`; rewrote all retry-path tests to assert on `rewrite_invocations[0]["state"]["notes"][0]` instead of `invocations[1]["payload"]`.
-- Whole-repo pytest green: 1167 passed / 19 skipped (same baseline as pre-6.3.5).
-- BUILD_LOG + DEBUG_LOG updated.
+- Rewrote fact-check correction directive for synthesis-only rewrite mode: mandate URL removal, forbid `[unverified]` hedges, forbid alias/variant re-citation, declare synthesis-only mode
+- Added deterministic enforcement-strip pass in shim 3 retry path: guarantees no pre-retry failed URL survives to final report
+- Extended shim 8 (`find_unsupported_claims`) with `grounded_subjects` allowlist + `[N]` bracket-citation skip
+- Wired `grounded_subjects: set[str]` accumulator across license_grounding / feature_grounding / enterprise_license_grounding shims → passed into shim 8
+- Added 4 new claim_support tests + 1 new odr_fact_check test; updated prompts test
+- Hermetic pytest green: **ADR-010 186 passed** (from 181), **whole-repo 1172 passed + 19 skipped** (from 1167)
+- Appended BUILD_LOG and DEBUG_LOG entries
 
 ## Remaining before current Definition of Done
-- Commit + push Stage 6.3.5 to origin/main.
-- Colossus 3-trial validation run of the rewrite-only retry path (single power-cap: 435 W).
-- Blind-rate the three trials on F1–F6.
-- DoD: mean rating ≥5/6 AND `final_unverified_urls` empty AND no `[unsupported]` markers AND no `post_retry_mismatches` AND no `post_retry_omissions` AND per-trial wall-clock ≤150 s (vs 400–600 s in 6.3.4f).
+- Commit + push Stage 6.3.6 patch
+- Colossus 3-trial re-run with the same command as 6.3.5:
+  ```bash
+  cd ~/dev/kosmos && git pull && source .venv/bin/activate \
+    && python -m ops.benchmarks.adr_010.runner --contender odr --trials 3 \
+       2>&1 | tee ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_6_3_6.log
+  ```
+- Verify:
+  - `final_unverified_urls` empty across all 3 trials
+  - No `[unsupported: no citation in observations]` markers in any final_answer
+  - No `[unverified]` markers in any final_answer
+  - `retry_enforce_strip` events present when writer regresses
+  - Blind F1–F6 mean ≥ 5/6
 
 ## Open questions / awaiting user answer
-- none.
+- none
 
 ## Exact next action
-```bash
-cd ~/dev/kosmos && git pull && source .venv/bin/activate \
-  && python -m ops.benchmarks.adr_010.runner --contender odr --trials 3 \
-     2>&1 | tee ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_6_3_5.log
-```
+- On Colossus:
+  ```bash
+  cd ~/dev/kosmos && git pull && source .venv/bin/activate \
+    && python -m ops.benchmarks.adr_010.runner --contender odr --trials 3 \
+       2>&1 | tee ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_6_3_6.log
+  ```

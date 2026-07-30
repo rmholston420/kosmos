@@ -68,3 +68,60 @@ def test_apply_marks_skips_missing_sentence():
     )
     rewritten = "The report was rewritten and no longer says that."
     assert apply_unsupported_marks(rewritten, unsupported) == rewritten
+
+
+# ---------------------------------------------------------------------------
+# Stage 6.3.6: grounded-subject allowlist + bracket-citation skip
+# ---------------------------------------------------------------------------
+
+
+def test_grounded_subject_exempts_license_claim():
+    """A license claim whose subject was verified by a prior grounding
+    shim must not be flagged, even if no URL in ``notes_urls`` contains
+    the subject token."""
+    report = "DozerDB is licensed under GPL-3.0."
+    # notes_urls empty, notes_text empty: without the allowlist this
+    # would flag as unsupported.
+    result = find_unsupported_claims(
+        report,
+        [],
+        "",
+        grounded_subjects={"DozerDB", "dozerdb-plugin", "DozerDB/dozerdb-plugin"},
+    )
+    assert result == []
+
+
+def test_grounded_subject_token_match_case_insensitive():
+    """Token-level matching so \"DozerDB\" grounds a claim about
+    \"dozerdb\", and \"Neo4j Community\" grounds \"Neo4j\"."""
+    report = "Neo4j Community Edition is licensed under GPLv3."
+    result = find_unsupported_claims(
+        report,
+        [],
+        "",
+        grounded_subjects={"neo4j", "neo4j"},
+    )
+    assert result == []
+
+
+def test_bracket_citation_skips_flag():
+    """A sentence carrying a ``[N]`` reference marker is considered
+    cited and must not be flagged as \"no citation in observations\"."""
+    report = "DozerDB is licensed under GPL-3.0 [2]."
+    # No grounded subject, no URL support: only the bracket ref saves
+    # this sentence from being flagged.
+    result = find_unsupported_claims(report, [], "")
+    assert result == []
+
+
+def test_ungrounded_uncited_still_flagged():
+    """Sanity: neither grounded nor bracket-cited claims still flag."""
+    report = "Ghostware is licensed under Apache-2.0."
+    result = find_unsupported_claims(
+        report,
+        [],
+        "",
+        grounded_subjects={"DozerDB", "Neo4j"},
+    )
+    assert len(result) == 1
+    assert result[0].claim.subject.lower() == "ghostware"

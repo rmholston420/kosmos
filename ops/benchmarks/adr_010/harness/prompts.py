@@ -214,38 +214,48 @@ def _build_anchor_advisory(urls: list[str]) -> str:
 def build_fact_check_correction_directive(unverified_urls: list[str]) -> str:
     """Assemble the one-shot correction turn used by shim 3.
 
+    Stage 6.3.6: the fact-check retry runs in synthesis-only rewrite
+    mode (no MCP, no fresh retrieval). The writer cannot fetch a
+    replacement URL, so the directive MUST mandate removal of the failed
+    URLs and any claims that depended solely on them. It must also
+    explicitly forbid the writer from re-emitting the failed URLs with
+    `[unverified]` annotations (the vendor's default hedging behavior).
+
     Called by the ODR harness only when at least one URL cited in the
     prior final_report failed live verification (HTTP != 2xx, DNS error,
-    connect timeout). The directive:
-
-    1. Lists the exact URLs that failed to resolve.
-    2. Instructs the model to either replace each with a verified URL it
-       retrieves via the MCP visit tool during THIS retry, or drop the
-       claim entirely.
-    3. Explicitly forbids inventing a substitute URL from memory.
-    4. Warns that any URL cited in the retry will ALSO be verified and
-       marked `[unverified]` if it fails, so guessing is not a viable
-       strategy.
+    connect timeout).
     """
     numbered = "\n".join(
         f"  {i + 1}. {u}" for i, u in enumerate(unverified_urls)
     )
     return (
         "### FACT-CHECK CORRECTION (mandatory)\n"
-        "Your previous answer cited URL(s) that failed live verification. "
-        "These URLs did not resolve (DNS error, HTTP 4xx/5xx, or timeout):\n"
+        "Your previous draft of the report cited URL(s) that failed live "
+        "verification. These URLs did NOT resolve (DNS error, HTTP 4xx/5xx, "
+        "or timeout) and are NOT available for citation:\n"
         f"{numbered}\n\n"
-        "For EACH failed URL, do ONE of the following:\n"
-        "  (a) Retrieve a verified replacement URL via the MCP visit tool "
-        "during this retry, and cite the replacement instead. The retrieved "
-        "page must actually establish the claim it is attached to.\n"
-        "  (b) Drop the claim entirely. Do NOT keep a claim if you cannot "
-        "attach a URL you have verified during this run.\n\n"
-        "Do NOT invent a substitute URL from memory. Any URL you cite in "
-        "this retry will be re-verified against the live network. Failed "
-        "URLs will be marked [unverified] in the final artifact, so "
-        "guessing is not a viable strategy — the annotation will surface "
-        "the guess."
+        "REWRITE the report with the following rules:\n"
+        "  1. REMOVE every occurrence of each failed URL from the report "
+        "body, including bracketed reference lists, footnotes, and inline "
+        "parentheticals. The final text must not contain these URL strings "
+        "at all.\n"
+        "  2. For any claim whose ONLY citation was a failed URL, DROP the "
+        "claim entirely from the rewritten report. Do not restate the claim "
+        "in a weaker form. Do not add a hedge such as \"reportedly\", "
+        "\"according to some sources\", or \"unconfirmed\".\n"
+        "  3. For claims that had additional citations (a different URL or "
+        "a same-line bracket ref [N] backed by another observation), KEEP "
+        "the claim but drop the failed URL from its citation list.\n"
+        "  4. Do NOT emit the annotation \"[unverified]\" or any similar "
+        "marker next to a URL as a substitute for removing it. The removal "
+        "in rule 1 is the ONLY acceptable outcome for a failed URL.\n"
+        "  5. Do NOT invent a substitute URL from memory. Do not guess.\n"
+        "  6. Do NOT re-cite the failed URL under a different anchor text "
+        "or path variant (e.g. adding/removing a trailing slash, switching "
+        "http/https).\n\n"
+        "You are running in synthesis-only rewrite mode: you cannot fetch "
+        "replacement URLs. Your only lever is to delete the failed URLs and "
+        "the claims they solely supported."
     )
 
 

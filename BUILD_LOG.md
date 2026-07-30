@@ -1529,3 +1529,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress. Whole-repo pytest green (1167 passed / 19 skipped, no regressions). Colossus 3-trial validation pending: rewrite path must land ≥5/6 mean rating AND cut trial wall-clock from 400–600 s to ≤150 s.
 - **Expected shim-retry cost:** ~15–40 s each (one writer-node call over the existing findings, ~8–15 k input tokens on q4_K_M) vs ~400–600 s under 6.3.4f (fresh full-graph run).
+
+## 2026-07-30 18:01 EDT — Stage 6.3.6 fact-check rewrite directive hardening + claim-support false-positive fix
+
+- **Stage / plugin / port:** ADR-010 ODR harness · shims 3 (fact-check) + 8 (claim-support gate)
+- **What changed:**
+  - `harness/prompts.py`: rewrote `build_fact_check_correction_directive` for synthesis-only rewrite mode. New directive mandates REMOVAL of failed URLs (not annotation), forbids `[unverified]` hedge markers as a substitute, forbids alias/variant re-citation, and declares synthesis-only mode so the writer knows it cannot fetch replacements.
+  - `harness/odr.py` shim 3 retry path: added deterministic enforcement-strip pass that removes every `unverified_first` URL substring from the retry report body if the writer regressed and re-emitted it. Also strips dangling bare `[unverified]` markers. Records event as `pass="retry_enforce_strip"` in `fact_check_events`.
+  - `harness/claim_support.py`: extended `find_unsupported_claims` with two new skip conditions — `grounded_subjects` allowlist (subjects verified by prior grounding shims are exempt) and bracket-citation skip (sentences carrying `[N]` reference marker are considered cited).
+  - `harness/odr.py` grounding shim wiring: populate `grounded_subjects: set[str]` from `license_grounding`, `feature_grounding`, `enterprise_license_grounding` fact outputs when `ok=True` / `status="present"`, then pass into shim 8.
+  - Tests: 4 new claim_support tests (grounded exemption, token-match, bracket-cite skip, ungrounded-still-flagged); 1 new odr_fact_check test (retry-writer-regressed → enforcement strip); prompts test updated for new directive assertions.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/prompts.py`
+  - `ops/benchmarks/adr_010/harness/odr.py`
+  - `ops/benchmarks/adr_010/harness/claim_support.py`
+  - `ops/benchmarks/adr_010/tests/test_claim_support.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`
+  - `ops/benchmarks/adr_010/tests/test_prompts_fact_anchors.py`
+- **Ports / adapters affected:** none (harness-internal)
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress; hermetic tests green (ADR-010 186 passed, whole-repo 1172 passed + 19 skipped). Colossus 3-trial re-run pending.

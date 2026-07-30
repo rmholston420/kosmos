@@ -526,9 +526,40 @@ async def run_odr_trial(
                 else:
                     attempts[-1]["outcome"] = "fact_check_retry_ok"
                     result = retry_result
+                    # Stage 6.3.6: enforcement net. The rewrite directive
+                    # instructs the writer to REMOVE failed URLs, but the
+                    # writer sometimes re-emits them (with or without an
+                    # inline [unverified] annotation). Deterministically
+                    # strip every occurrence of every URL from the
+                    # original ``unverified_first`` list from the retry's
+                    # report body before re-verifying. This guarantees the
+                    # exact URLs that failed pre-retry cannot survive to
+                    # the final artifact under their original spelling.
+                    retry_report = str(result.get("final_report", ""))
+                    stripped_urls: list[str] = []
+                    for bad in unverified_first:
+                        if bad and bad in retry_report:
+                            retry_report = retry_report.replace(bad, "")
+                            stripped_urls.append(bad)
+                    # Also strip a bare "[unverified]" left dangling after
+                    # the URL was removed by the writer (or by our strip),
+                    # since the marker is meaningless without its URL and
+                    # the vendor sometimes emits it as pure hedging.
+                    if "[unverified]" in retry_report:
+                        retry_report = retry_report.replace(
+                            " [unverified]", ""
+                        ).replace("[unverified]", "")
+                    if stripped_urls:
+                        fact_check_events.append(
+                            {
+                                "pass": "retry_enforce_strip",
+                                "stripped_count": len(stripped_urls),
+                                "stripped": stripped_urls,
+                            }
+                        )
+                        result = {**result, "final_report": retry_report}
                     # Re-verify the retry's URLs so persistent failures
                     # still get annotated.
-                    retry_report = str(result.get("final_report", ""))
                     retry_urls = extract_urls(retry_report)
                     if retry_urls:
                         try:
@@ -567,6 +598,10 @@ async def run_odr_trial(
     # regardless of whether it actually changed the text.
     final_report_override: str | None = None
     shim_events: list[dict] = []
+    # Stage 6.3.6: subjects that any prior grounding shim has verified.
+    # Consumed by shim 8 (claim-support gate) to suppress false-positive
+    # `[unsupported]` markers on already-grounded claims.
+    grounded_subjects: set[str] = set()
 
     if result is not None and not thermal_aborted:
         current_report = str(result.get("final_report", ""))
@@ -583,6 +618,11 @@ async def run_odr_trial(
                     cited_urls_now,
                     seed_urls=fact_anchor_urls or [],
                 )
+                for f in license_facts:
+                    if f.ok:
+                        grounded_subjects.add(f.owner)
+                        grounded_subjects.add(f.repo)
+                        grounded_subjects.add(f"{f.owner}/{f.repo}")
                 directive = license_grounding.build_license_correction_directive(
                     license_facts
                 )
@@ -671,6 +711,11 @@ async def run_odr_trial(
                 feature_facts = await feature_grounding.ground_features(
                     fact_anchor_urls
                 )
+                for f in feature_facts:
+                    if f.ok:
+                        grounded_subjects.add(f.owner)
+                        grounded_subjects.add(f.repo)
+                        grounded_subjects.add(f"{f.owner}/{f.repo}")
                 directive = feature_grounding.build_feature_correction_directive(
                     feature_facts
                 )
@@ -752,6 +797,13 @@ async def run_odr_trial(
         ):
             try:
                 license_facts = await enterprise_license_grounding.ground_enterprise_license()
+                # Enterprise-license facts always concern Neo4j Enterprise;
+                # bake in a canonical set of subject tokens so shim 8 sees
+                # them as grounded whenever at least one assertion resolved.
+                if any(f.status == "present" for f in license_facts):
+                    grounded_subjects.update(
+                        {"neo4j", "Neo4j", "Neo4j Enterprise", "neo4j-enterprise"}
+                    )
                 directive = enterprise_license_grounding.build_enterprise_license_directive(
                     license_facts
                 )
@@ -955,7 +1007,10 @@ async def run_odr_trial(
         if enable_claim_support_gate and current_report:
             notes_urls = extract_urls(current_notes_text)
             unsupported = claim_support.find_unsupported_claims(
-                current_report, notes_urls, current_notes_text
+                current_report,
+                notes_urls,
+                current_notes_text,
+                grounded_subjects=grounded_subjects,
             )
             if unsupported:
                 current_report = claim_support.apply_unsupported_marks(

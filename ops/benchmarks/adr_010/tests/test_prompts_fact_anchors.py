@@ -73,8 +73,16 @@ def test_correction_directive_lists_bad_urls_and_forbids_invention():
     assert "FACT-CHECK CORRECTION" in directive
     for u in bad:
         assert u in directive
-    # Must forbid invention explicitly.
     lower = directive.lower()
+    # Must forbid invention explicitly.
     assert "do not invent" in lower or "must not invent" in lower or "cannot invent" in lower
-    # Must warn a re-verification pass will happen.
-    assert "re-verified" in lower or "re-verify" in lower or "verified again" in lower
+    # Stage 6.3.6: directive must mandate REMOVAL (not annotation) of
+    # the failed URLs, and must explicitly forbid `[unverified]` hedge
+    # markers as a substitute for removal.
+    assert "remove" in lower
+    assert "[unverified]" in directive  # verbatim marker string
+    # Stage 6.3.6: synthesis-only mode is declared so the model knows
+    # it cannot fetch replacements.
+    assert "synthesis-only" in lower or "cannot fetch" in lower
+    # Must warn against alias/variant re-citation.
+    assert "variant" in lower or "trailing slash" in lower

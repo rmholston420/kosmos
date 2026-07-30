@@ -260,6 +260,65 @@ def test_bad_urls_trigger_retry_and_retry_succeeds(monkeypatch):
     assert "https://fake.example/x" in rewrite_note0
 
 
+def test_retry_report_that_re_emits_failed_url_is_stripped(monkeypatch):
+    """Stage 6.3.6 enforcement net: if the retry writer re-emits one of
+    the ORIGINAL failed URLs (with or without an ``[unverified]``
+    annotation), the harness must deterministically strip that exact URL
+    substring from the retry report body before finalize."""
+    invocations: list[dict] = []
+    rewrite_invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": "cites https://fake.example/x for a claim",
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            },
+        ],
+        rewrite_invocations=rewrite_invocations,
+        rewrite_responses=[
+            {
+                # Writer regressed: kept the bad URL, added [unverified]
+                # rather than removing it. New good URL also present.
+                "final_report": (
+                    "cites https://fake.example/x [unverified] for a claim, "
+                    "but also https://real.example/y"
+                ),
+            },
+        ],
+    )
+    _patch_verify_urls(
+        monkeypatch,
+        {
+            "https://fake.example/x": False,
+            "https://real.example/y": True,
+        },
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    # The bad URL substring MUST be gone.
+    assert "https://fake.example/x" not in metrics.final_answer
+    # The dangling `[unverified]` marker must not survive either.
+    assert "[unverified]" not in metrics.final_answer
+    # The good URL must still be present.
+    assert "https://real.example/y" in metrics.final_answer
+    # Strip event recorded in trajectory.
+    events = _fact_check_events(metrics)
+    strip = next(
+        (e for e in events if e.get("pass") == "retry_enforce_strip"), None
+    )
+    assert strip is not None, events
+    assert strip["stripped_count"] == 1
+    assert "https://fake.example/x" in strip["stripped"]
+
+
 def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
     invocations: list[dict] = []
     rewrite_invocations: list[dict] = []

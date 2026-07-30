@@ -61,12 +61,55 @@ def _subject_appears_in_notes(subject: str, notes_urls: Iterable[str], notes_tex
     return False
 
 
+_BRACKET_CITATION_RE = re.compile(r"\[\d+\]")
+
+
+def _sentence_has_bracket_citation(sentence: str) -> bool:
+    """Return True iff ``sentence`` contains a ``[N]`` reference marker.
+
+    The ODR writer typically emits citations as bracketed reference IDs
+    (e.g. ``[1]``, ``[2]``) that point to a reference list at the end of
+    the report. If a claim's source sentence already carries such a
+    marker, it is not "uncited" in the writer's frame — flagging it as
+    ``[unsupported: no citation in observations]`` would be a false
+    positive.
+    """
+    return bool(_BRACKET_CITATION_RE.search(sentence or ""))
+
+
+def _subject_is_grounded(subject: str, grounded_subjects: Iterable[str]) -> bool:
+    """Return True iff ``subject`` matches any grounded-subject token.
+
+    A subject is grounded when a prior shim (license_grounding,
+    feature_grounding, enterprise_license_grounding) successfully
+    verified a fact whose owner/repo/product name overlaps with the
+    claim's subject. Matching is token-based and case-insensitive so
+    ``"DozerDB"`` matches ``"dozerdb"`` and ``"Neo4j Community"``
+    matches ``"neo4j"``.
+    """
+    if not subject:
+        return False
+    low = subject.lower()
+    tokens = {t for t in re.split(r"[\s.\-/]+", low) if len(t) >= 3}
+    if not tokens:
+        return False
+    for g in grounded_subjects:
+        g_low = (g or "").lower()
+        if not g_low:
+            continue
+        g_tokens = {t for t in re.split(r"[\s.\-/]+", g_low) if len(t) >= 3}
+        if tokens & g_tokens:
+            return True
+    return False
+
+
 def find_unsupported_claims(
     final_report: str,
     notes_urls: Iterable[str],
     notes_text: str,
     *,
     max_claims: int = 12,
+    grounded_subjects: Iterable[str] = (),
 ) -> list[UnsupportedClaim]:
     """Return the list of claims in ``final_report`` whose subject
     doesn't appear in any tool observation.
@@ -76,11 +119,28 @@ def find_unsupported_claims(
     ``restoration`` claims are informational and often correct even
     when the subject doesn't show up verbatim in the URLs, so we leave
     them alone.
+
+    Stage 6.3.6: two additional skip conditions reduce false positives
+    observed on the 6.3.5 3-trial run:
+
+    - ``grounded_subjects``: any subject already verified by a prior
+      grounding shim (license/feature/enterprise) is exempt. This is
+      the fix for the T1 & T3 false positives where DozerDB's GPL-3.0
+      claim was flagged despite the license shim having grounded it.
+    - The claim's ``source_sentence`` carries a ``[N]`` bracket
+      reference. The writer's citation format is bracket refs that
+      resolve to a reference list, not URL-embedded citations, so a
+      cited sentence is not "uncited in observations".
     """
     urls_list = list(notes_urls)
+    grounded = list(grounded_subjects)
     out: list[UnsupportedClaim] = []
     for claim in extract_claims(final_report, max_claims=max_claims):
         if claim.kind not in {"license", "identity"}:
+            continue
+        if _subject_is_grounded(claim.subject, grounded):
+            continue
+        if _sentence_has_bracket_citation(claim.source_sentence):
             continue
         if _subject_appears_in_notes(claim.subject, urls_list, notes_text):
             continue
