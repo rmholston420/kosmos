@@ -1,29 +1,36 @@
-# Kosmos Session Handoff — 2026-07-29 22:19 EDT
+# Kosmos Session Handoff — 2026-07-29 22:36 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 1.9 complete → next is Stage 1.10 (spec-default) OR a different Stage 1.x port (user picks)
-- **Plugin / kernel component:** Kernel ports; seven formal ports locked (Search · LLM · EventBus · Secrets · Observability · Vector · Memory); ADR-013 formally LOCKED
-- **Port(s) in progress:** none active — awaiting Stage 1.10 direction
+- **Stage / phase:** Stage 1.10 · DataPort · **COMPLETE**
+- **Plugin / kernel component:** kernel-layer port (DataPort) — 8th formal port locked
+- **Port(s) in progress:** none — awaiting Stage 1.11 direction
 
 ## Completed this session
-- **Stage 1.5 SecretsPort + hotfixes** (`1a3882f` / `2ab178b` / `5fbe948`): age-file backend; live Colossus smoke test green.
-- **Stage 1.6 ObservabilityPort** (`8ac7377`): OTel + Prometheus + structlog primary; Langfuse deferred; ADR-025.
-- **Stage 1.7 VectorPort** (`813fc3d`): Qdrant primary adapter; port-level §7 zero-trust; typed VectorHit + SnapshotHandle; ADR-026.
-- **Stage 1.8 MemoryPort** (`0e77199`): DozerDB (ADR-008 backend, ADR-027 surface) + Graphiti pulled forward from 4.2 + Agent Memory Guard v0.2.2 all vendored day-one; port-level guard non-bypassable; AMG defense-in-depth atop it; typed MemoryEventId + MemoryHit; CIDOC-CRM triple decomposition on writes; quarantine lane not indexed in temporal; three injectable Protocol seams; 42 contract tests. 176/176 pass.
-- **Stage 1.9 ADR-013 resolution** (this commit): Gnosis provenance schema wins 6/6 axes over Rigpa `MemoryBridge`; ADR-013 status **Ratified v25 → LOCKED**; full comparison in `docs/memory-bridge-comparison.md`; winning shape was already shipped in `0e77199`, so no code changes. Rigpa donor pattern (async driver singleton, Cypher-per-verb) remains VENDORED; Rigpa write schema is formally rejected.
+- ADR-028 authored (`docs/adrs/ADR-028-dataport-jsonld-canonical-export.md`, 367 lines) — Q1=A (full three-verb surface at Stage 1.10 with live never-overwrite migration guard) + Q2=C (JCS + SHA-256 hash + pluggable `Signer` Protocol seam; `NoOpSigner` primary; `Ed25519FileSigner` deferred to Stage 5 governance-key wiring).
+- Landed `ports/data.py` (312 lines) — `DataPort` + `Canonicalizer` + `Signer` + `Storage` Protocols; `PIITier` enum (spec §150 four-tier); `CanonicalExportHandle` + `FormatHealthReport` + `MigrationResult` value objects; `CanonicalRecordRejected` + `MigrationTargetExists` exceptions; non-bypassable `validate_canonical_record` guard rejecting missing/invalid `provenance`/`confidence`/`pii_tier`.
+- Landed `adapters/data/filesystem/` — `FilesystemDataAdapter` (625 lines) composes `SortedJsonCanonicalizer` (stdlib double; `JcsCanonicalizer` production via lazy `rfc8785` import), `NoOpSigner` (Stage 1.10 primary; `Ed25519FileSigner` deferred), `FilesystemStorage`/`InMemoryStorage`.
+- Envelope shape includes `@context` = `https://kosmos.local/context/v1.jsonld` + `@type: CanonicalExport` + trailing `canonical_hash` (sha256 over JCS of envelope-minus-hash-minus-sig) + `signature`; Restricted-tier records route under `{root}/restricted/{record_type}/`.
+- `migrate_schema` writes to `{record_type}/migrations/{migration_id}/{sha256}.jsonld` with deterministic `exported_at` derived from `sha256(migration_id + original_hash)` so re-runs are bit-identical; never-overwrite guard live (raises `MigrationTargetExists` on collision; idempotent same-hash re-runs allowed).
+- 47 new contract tests (706 lines); **223/223 tests green** across all adapters.
+- Fan-out complete:
+  - `docs/Kosmos-Build-Spec-v25.md` §4.1 line 93 DataPort row expanded to full ADR-028 surface + §17 ADR-028 row added
+  - `docs/Kosmos-Build-Sequence-v25.md` §1.10 rewritten as DataPort landing with ADR-028 DoD + Locked timestamp; §1.11 marked historical VectorPort slot already satisfied at Stage 1.7
+  - `docs/adrs/README.md` ADR-028 row added
+  - `docs/PORTING_LEDGER.md` new §DataPort section with 4 entries (rfc8785 VENDORED + cryptography VENDORED-deferred + Rigpa knowsys donor VENDORED-pattern-only + FilesystemDataAdapter KOSMOS-NATIVE)
+  - `pyproject.toml` `rfc8785>=0.1.4` + `cryptography>=49` runtime deps + 2 new packages registered
+  - `BUILD_LOG.md` two entries appended (ADR-028 authoring + Stage 1.10 build)
 
 ## Remaining before current Definition of Done
-- Stage 1.9 DoD met.
-- Standing action per spec §643: **re-check https://github.com/OWASP/www-project-agent-memory-guard/releases immediately before Gnosis Phase 3** for v0.3.0 (LlamaIndex/CrewAI adapters, Redis/PostgreSQL backends, Prometheus metrics).
-- Live Colossus smoke test of `DozerDbMemoryAdapter` deferred until Docker Compose ops-deploy stage (spec §21) — same policy as Stage 1.7 Qdrant.
+- None. Stage 1.10 DoD (spec §1.11 aspirational + ADR-028 concrete) fully satisfied.
+- Commit + push pending (this session's final action).
 
 ## Open questions / awaiting user answer
-- **Stage 1.10 direction.** Remaining Stage-1 port work from `Kosmos-Build-Sequence-v25.md`:
-  - **A. Stage 1.11 spec-default — DataPort · JSON-LD canonical export.** Cross-cutting: DR-drill cross-verify + provenance/PII-tier propagation. Local filesystem-backed JSON-LD store. Round-trip losslessly.
-  - **B. Stage 1.12 — NotificationPort · algedonic channel.** Smallest surface (`notify` / `subscribe` / `ack`). Unblocks Oikos alerting.
-  - **C. ResourcePort — APEX priority queue.** Needed before Tektos (Stage 3): Phrouros anomaly > active Tektos > Synedrion/Zetesis background. Not explicitly numbered in Build-Sequence but the spec §21 rollout implies it.
-  - **D. Stage 1.10 spec-slot — VectorPort adapter is already shipped at 1.7; slot is now open for whichever port the user prioritizes.**
-- **Standing note:** ADR-010 (Zetesis inner loop AREX vs. LangChain Deep Research) remains the sole OPEN v25 ADR. Not touched by this session — it gates Phase 6.2, not Stage 1.
+- **Next stage direction.** Options on the table:
+  - **A.** Stage 1.12 · NotificationPort (algedonic channel) — Direct plugin → kernel dashboard, priority alert delivered within 500ms end-to-end (Build-Sequence §1.12).
+  - **B.** Stage 1.13 · ResourcePort (APEX ResourceProtocol) — `can_allocate` / `allocate` / `replenish` / `priority_queue_position` (spec §4.1 line 92).
+  - **C.** Resolve ADR-010 (Zetesis AREX vs. LangChain Deep Research inner loop) — sole remaining OPEN v25 ADR; unblocks Phase 6.2 eventually but is unrelated to any Stage 1 port.
+  - **D.** Something else you have in mind.
 
 ## Exact next action
-Report Stage 1.10 direction choice (A, B, C, or D).
+- Awaiting user direction on Stage 1.11 (A / B / C / D above).
+- Once chosen, run donor-code inventory via `gh api repos/rmholston420/...` and license-verify any candidate vendors via `gh api repos/<upstream>/<repo>`, then follow the same ADR-first → port → adapter → tests → fan-out → commit workflow just used for Stage 1.10.

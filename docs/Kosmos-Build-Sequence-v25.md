@@ -112,12 +112,15 @@ Write pure Python `Protocol` interfaces (no implementations) at `ports/`:
 - Compare `Rigpa-LMS/memory/bridge.py` against Gnosis schema. Pick the survivor.
 - **DoD:** ADR-013 status = `LOCKED`; one bridge implementation; other deleted.
 
-### 1.10 VectorPort adapter — Qdrant
-- **DoD:** Qdrant up in Compose; `VectorPort.upsert/query` round-trip test green.
+### 1.10 DataPort adapter — JSON-LD file store (ADR-028)
+- **Action:** Local filesystem-backed JSON-LD store with JCS (RFC 8785, `rfc8785` Apache-2.0) canonicalization, pluggable `Signer` Protocol seam (`NoOpSigner` primary; `Ed25519FileSigner` deferred to Stage 5 governance-key wiring via `cryptography>=49` Apache-2.0 OR BSD-3), non-bypassable port-level zero-trust guard on `provenance`/`confidence`/`pii_tier`, four-tier PII routing (Restricted under `restricted/` prefix), and live never-overwrite migration guard (spec §230, §232). YAML permitted for config only; TOON only in LLM context (measured).
+- **Ports:** DataPort (ADR-028 surface + enforcement)
+- **DoD:** `DataPort` full three-verb surface implemented; `FilesystemDataAdapter` composes `Canonicalizer`/`Signer`/`Storage` Protocol seams; canonical envelopes round-trip losslessly (recompute `canonical_hash` ≡ stored `canonical_hash`); `check_format_health` flags hash-tampering; `migrate_schema` never-overwrite guard live (idempotent same-hash re-runs allowed, collision raises `MigrationTargetExists`); ADR-028 status = `Ratified v25`; contract tests green (47 tests, cumulative 223/223).
+- **Locked:** 2026-07-29 EDT (ADR-028); primary Stage 1.10 signer is `NoOpSigner` — envelopes are hash-anchored, signatures activate at Stage 5.
 
-### 1.11 DataPort adapter — JSON-LD file store
-- **Action:** Local filesystem-backed JSON-LD store. YAML permitted for config only; TOON only in LLM context (measured).
-- **DoD:** Docs round-trip losslessly.
+### 1.11 VectorPort adapter — Qdrant (already landed at Stage 1.7 per ADR-026)
+- **Status:** Historically listed here in the aspirational sequence; the actual landing shipped at Stage 1.7 with ADR-026. Retained as a numbering-slot placeholder; DoD satisfied.
+- **DoD:** Qdrant up in Compose; `VectorPort.upsert/query` round-trip test green. ✔ (Stage 1.7)
 
 ### 1.12 NotificationPort adapter — algedonic channel
 - **Action:** Direct plugin → kernel dashboard, bypasses coordination latency

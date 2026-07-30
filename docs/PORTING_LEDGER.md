@@ -359,6 +359,58 @@
 - **ADR:** ADR-025
 - **Logged:** 2026-07-29 21:52 EDT
 
+### DataPort
+
+#### rfc8785 (JCS canonicalizer) — `VENDORED` (Stage 1.10)
+- **Source:** https://github.com/trailofbits/rfc8785.py
+- **Commit / Version:** `rfc8785>=0.1.4` (verified via `gh api repos/trailofbits/rfc8785.py` on 2026-07-29)
+- **License:** Apache-2.0 (SPDX: `Apache-2.0`)
+- **Kosmos location:** runtime dep in `pyproject.toml`; used by `adapters/data/filesystem/adapter.py::JcsCanonicalizer` (lazy import at construction time)
+- **Port(s):** DataPort
+- **Modifications:** none — the wheel is invoked verbatim via `rfc8785.dumps(payload) -> bytes`. Contract tests use a pure-stdlib `SortedJsonCanonicalizer` double so tests do not depend on the wheel being installed.
+- **ADR:** ADR-028
+- **Logged:** 2026-07-29 22:35 EDT
+
+#### cryptography — `VENDORED (deferred use)` (Stage 1.10)
+- **Source:** https://github.com/pyca/cryptography
+- **Commit / Version:** `cryptography>=49` (verified via `gh api repos/pyca/cryptography` on 2026-07-29)
+- **License:** Apache-2.0 OR BSD-3-Clause (SPDX)
+- **Kosmos location:** runtime dep in `pyproject.toml`; **not imported anywhere in Kosmos code at Stage 1.10**. Reserved for `Ed25519FileSigner` which lands at Stage 5 governance-key wiring (age-key-file-backed per ADR-024 SecretsPort pattern). Declared now so the dep exists at the moment the seam is populated, avoiding a future `pyproject` bump entangled with a governance ADR.
+- **Port(s):** DataPort (via `Signer` Protocol seam)
+- **Modifications:** none.
+- **ADR:** ADR-028
+- **Logged:** 2026-07-29 22:35 EDT
+
+#### Rigpa-LMS knowsys export subsystem donor pattern — `VENDORED (pattern only; domain schema rejected)` (Stage 1.10)
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (user's own repo; permissively-licensed donor)
+  - `plugins/knowsys/src/rigpa_knowsys/models/export.py` (`ExportEnvelope` SQLAlchemy row with `envelope_json_hash CHAR(64)` + Ed25519 base64 signature)
+  - `plugins/knowsys/src/rigpa_knowsys/schemas/export.py` (Pydantic `ExportEnvelope` + `NoteExportItem` + `AttachmentRef` + `EXPORT_SIGNED_FIELDS` tuple + `signed_payload()`)
+  - `plugins/knowsys/src/rigpa_knowsys/services/export_service.py` (`build_export_envelope / sign_envelope / verify_envelope_signature / import_envelope`)
+  - `plugins/knowsys/src/rigpa_knowsys/routers/export.py` (FastAPI endpoints)
+  - `plugins/knowsys/tests/test_export.py` (tampering, dedup, signature-failure test patterns)
+  - `backend/src/rigpa/domains/knowledge/schema_registry.py` (`SchemaRegistry` + `SchemaValidationError`)
+- **Commit / Version:** inspected at donor `main` on 2026-07-29 (cached at `/tmp/donor-dataport/`)
+- **License:** user's own code; treated as permissive donor
+- **Kosmos location:** `ports/data.py`, `adapters/data/filesystem/adapter.py`
+- **Modifications:**
+  - Rigpa's schema is **Knowsys-domain-locked** (PostgreSQL `Note`/`NoteAttachment` upsert, PARA folders, Ed25519 constitution key). Kosmos DataPort is **domain-neutral** — every plugin (Gnosis, Tektos, Oikos, Nomisma, Zetesis) will call `export_canonical` with its own `record_type`.
+  - Rigpa uses `rigpa.domains.governance.constitution.signing.{canonicalize, sign, verify}` (Ed25519 with a live constitution key). Kosmos has no governance key at Stage 1.10 — signing is behind a pluggable `Signer` Protocol seam with `NoOpSigner` as Stage 1.10 primary. Envelopes remain hash-anchored (SHA-256 over JCS bytes) so DR-drill cross-verify per spec §187 still works. `Ed25519FileSigner` slots in at Stage 5 with zero port changes (mirrors ADR-027 seam pattern).
+  - Rigpa persists envelopes as PostgreSQL rows in `notes_export_envelopes` with an `envelope_json_hash CHAR(64)` UNIQUE constraint providing dedup. Kosmos writes to `{root}/{record_type}/{sha256}.jsonld` — the filesystem path itself is the dedup key; matches project custom-instructions "single-user, local-first".
+  - Rigpa has no `check_format_health` or `migrate_schema` verbs. Kosmos ships all three spec §4.1-line-93 verbs day-one per ADR-028 Q1=A (same discipline as ADR-027 Q1=A for MemoryPort).
+  - Rigpa has no PII tier concept on the envelope. Kosmos requires a `pii_tier: PIITier` field per spec §150 four-tier classification; Restricted-tier records route under `{root}/restricted/{record_type}/` prefix to enable a future AES-256-at-rest wrapper (spec §147) at ops-deploy.
+  - Rigpa has no never-overwrite migration guard. Kosmos ships one live at Stage 1.10 per spec §230/§232 (`MigrationTargetExists` raised on collision; idempotent same-hash re-runs allowed).
+  - Rigpa signs a specific `EXPORT_SIGNED_FIELDS` subset. Kosmos signs the full envelope-minus-hash-minus-signature bytes; simpler contract, no field-inclusion registry to maintain.
+- **ADR:** ADR-028
+- **Logged:** 2026-07-29 22:35 EDT
+
+#### FilesystemDataAdapter + three Protocol seams (`Canonicalizer` / `Signer` / `Storage`) — `KOSMOS-NATIVE` (Stage 1.10)
+- **Source:** authored in this repo
+- **Kosmos location:** `adapters/data/filesystem/adapter.py`
+- **Port(s):** DataPort
+- **Notes:** three injectable Protocol seams so contract tests run without any third-party imports; mirrors ADR-027 memory-adapter seam pattern (`GraphBackend` / `AmgPolicy` / `TemporalIndex`). Stage 1.10 primary composition: `SortedJsonCanonicalizer` (or `JcsCanonicalizer` in prod) + `NoOpSigner` + `FilesystemStorage`. Stage 5 governance-key wiring swaps in `Ed25519FileSigner` with zero port changes.
+- **ADR:** ADR-028
+- **Logged:** 2026-07-29 22:35 EDT
+
 ---
 
 ## Governance (Praxis / Phrouros)

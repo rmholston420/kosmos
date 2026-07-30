@@ -36,6 +36,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-025 | `ADR-025-observabilityport-otel-prometheus-structlog.md` | ObservabilityPort adopts OpenTelemetry SDK + prometheus-client + structlog; Langfuse LLM-specific adapter deferred | **Ratified v25** | Stage 1.6 |
 | ADR-026 | `ADR-026-vectorport-qdrant-backend.md` | VectorPort adopts Qdrant backend; pgvector fallback deferred; port-level §7 zero-trust enforcement (`provenance` + `confidence` required on writes) | **Ratified v25** | Stage 1.7 |
 | ADR-027 | `ADR-027-memoryport-dozerdb-graphiti-amg.md` | MemoryPort full surface (write_event / query_temporal / link_entities / quarantine_write); DozerDB (ADR-008) + Graphiti + Agent Memory Guard v0.2.2 all vendored at Stage 1.8; port-level §7 zero-trust guard is non-bypassable; AMG runs as second policy layer | **Ratified v25** | Stage 1.8 |
+| ADR-028 | `ADR-028-dataport-jsonld-canonical-export.md` | DataPort full surface (export_canonical / check_format_health / migrate_schema); JCS (RFC 8785, `rfc8785` Apache-2.0) canonicalization + pluggable `Signer` Protocol seam (`NoOpSigner` primary at Stage 1.10; `Ed25519FileSigner` deferred to Stage 5 governance-key wiring via `cryptography>=49` Apache-2.0 OR BSD-3); filesystem storage with Restricted-tier routing prefix; port-level zero-trust guard is non-bypassable; never-overwrite migration guard live | **Ratified v25** | Stage 1.10 |
 
 ## The one remaining open decision
 
