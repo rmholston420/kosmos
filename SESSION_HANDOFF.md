@@ -1,26 +1,26 @@
-# Kosmos Session Handoff — 2026-07-30 06:52 EDT
+# Kosmos Session Handoff — 2026-07-30 07:45 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 4.2 (next — Graphiti temporal-index tuning + benchmarks)
-- **Plugin / kernel component:** Gnosis / MemoryPort · VectorPort · graphiti-core adapter (already VENDORED at Stage 1.8)
-- **Port(s) in progress:** none yet — Stage 4.2 is tuning + metrics fill, not a new port
+- **Stage / phase:** Stage 4.2 **COMPLETE** (tagged `stage-4-2-complete`). Next up: Stage 4.3.
+- **Plugin / kernel component:** MemoryPort · DozerDB memory adapter — real `DozerDbGraphBackend` + `GraphitiTemporalIndex` + `AmgV02Policy` landed at Stage 4.2. Corpora subpackage at `adapters/memory/dozerdb/corpora/` (three corpora, Hybrid tier).
+- **Port(s) in progress:** none — MemoryPort surface locked at Stage 1.8 (ADR-027) and its three backends measured at Stage 4.2 (ADR-047). VectorPort deferred to Stage 4.4 Superpowers KB port.
 
 ## Completed this session
-- **Stage 4.1 · Knowsys → Gnosis merge · LOCKED** (BUILD_LOG 2026-07-30 06:52 EDT).
-  - Verified `plugins/knowsys/` was never ported into Kosmos (repo scan). Mirrors ADR-013 lock-in pattern.
-  - Zero `knowsys` imports in Python surface (`grep -rniE "^(from|import).*knowsys" --include="*.py"` → 0).
-  - Cleaned 3 residual string references: otel_stack test spans + Tektos `forbidden_prefixes` tuple.
-  - Fan-out: ADR-016 file + spec §17 + `docs/adrs/README.md` + `docs/Kosmos-ADRs-Bundle.md` (index row + embedded ADR) + Build-Sequence §4.1 (LANDED block).
-- Fast tier: **825 passed + 9 skipped** (unchanged from Stage 3.12 baseline).
+- Stage 4.2 Commit A `d6e5e87` — real DozerDB / Graphiti / AMG backends + Compose service + contract tests.
+- Stage 4.2 Commit B `5c896bf` — corpora subpackage (`synthetic-lifeline`, `humanities-cidoc-sample`, `rigpa-export`) + `corpus_runner.py` Hybrid-tier switch + fast/live tier tests.
+- Stage 4.2 cross-encoder fix `997cad7` — Graphiti's `OpenAIRerankerClient` routed to local Ollama (no `OPENAI_API_KEY` dependency).
+- Stage 4.2 NodeNotFound fix `e780be9` — dropped `uuid=` from `add_episode`; event id now carried via `name` + JSON body `kosmos_event_id`.
+- Stage 4.2 Commit C (this commit) — ADR-047, `docs/PORT_CONTRACTS.md` with measured live-tier metrics (137.29 s / 37 passed on Colossus 2026-07-30), spec §17 + `docs/adrs/README.md` + Build-Sequence §4.2 (LANDED) + PORTING_LEDGER fan-out + BUILD_LOG + SESSION_HANDOFF + `stage-4-2-complete` tag.
 
 ## Remaining before current Definition of Done
-- Stage 4.2 kickoff:
-  1. Confirm graphiti-core is running against live DozerDB Compose service (Stage 1.9 spun this up).
-  2. Load a corpus and run time-slice queries to verify correct historical state (Stage 4.2 DoD).
-  3. Fill `PORT_CONTRACTS.md` MemoryPort/VectorPort metrics: schema drift, edge-type churn, temporal-episode latency, embedding-model selection for Graphiti's built-in NER.
+- None. Stage 4.2 DoD met on both tiers.
 
 ## Open questions / awaiting user answer
-- Corpus choice for Stage 4.2 time-slice DoD (small synthetic corpus vs. sample from Stage 4.5 humanities port target). Ask user at start.
+- **Stage 4.3 (Agent Memory Guard release check):** immediately before Gnosis Phase 3 (per Build-Sequence §4.3 + spec §643) re-check https://github.com/OWASP/www-project-agent-memory-guard/releases for v0.3.0. If adopted, log in `PORTING_LEDGER.md` and update `AmgV02Policy` binding. Sequenced after Stage 4.2 lock-in; can be triggered on demand.
 
 ## Exact next action
-- At start of next session: `read SESSION_HANDOFF.md` then read `docs/Kosmos-Build-Sequence-v25.md` §4.2 + `docs/adrs/ADR-027-graphiti-core-vendor.md` to confirm Stage 1.8 landing surface, then ask the corpus-choice question.
+- **Refresh shared assets** so downstream sessions inherit the Stage 4.2 baseline:
+  - `Kosmos v25 Bundle` (zip) — rebuild from current `docs/`.
+  - `Kosmos ADRs Bundle` (md) — regenerate from `docs/adrs/`.
+  - `pplx project files submit` — persist the Stage 4.2 assets under `/home/user/workspace/projects/kosmos-4i2HipsQQjK4JixpXe0ODA/files`.
+- Then proceed to Stage 4.3 on the user's cue.

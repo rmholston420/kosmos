@@ -971,3 +971,52 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Cross-plugin coupling model unchanged (ADR-007 events-only still enforced). MemoryPort provenance model unchanged. Two test strings on the ObservabilityPort surface were renamed for accuracy post-merge — no protocol change.
 - **PORTING_LEDGER / ADR updated:** ADR-016 LOCKED (2026-07-30). PORTING_LEDGER unchanged — Rigpa Knowsys export subsystem entry remains VENDORED-pattern-only per ADR-028 (pattern reference, not a Kosmos plugin).
 - **Stop-condition status:** met — DoD literal "No import of `knowsys` anywhere; ADR-016 status = LOCKED" satisfied. Fast tier `825 passed + 9 skipped` (unchanged from baseline pre-edit).
+
+## 2026-07-30 07:45 EDT — Stage 4.2 Graphiti tuning · real backends + Hybrid-tier corpora LANDED (ADR-047)
+
+- **Stage / plugin / port:** Stage 4.2 · MemoryPort · DozerDB memory adapter (real backends + corpora tuning subpackage)
+- **What changed:**
+  - **Commit A (`d6e5e87`):** stubbed Stage-1.8 backends replaced with real implementations behind unchanged Protocol seams:
+    - `DozerDbGraphBackend` — Bolt driver against `graphstack/dozerdb:5.26.27` (add_node/add_edge/query_cypher/delete_node/is_healthy/close)
+    - `GraphitiTemporalIndex` — Graphiti wrapping local Ollama (LLM `qwen3-coder`, embedder `nomic-embed-text`, cross-encoder same Ollama URL)
+    - `AmgV02Policy` — `agent-memory-guard==0.2.2` `MemoryGuard(policy=Policy.strict())` with `write`/`snapshot`/`rollback` bindings
+    - Compose service `ops/compose/memory.yml` + `ops/compose/README.md` (Bolt 7687, heap ≤ 4 GiB, page-cache ≤ 2 GiB)
+    - Contract tests for all three real backends (fast tier always-green + env-gated `KOSMOS_STAGE_42_LIVE=1` live tier)
+  - **Commit B (`5c896bf`):** corpora subpackage at `adapters/memory/dozerdb/corpora/`:
+    - `models.py` (`CorpusFact` frozen dataclass, `TemporalQuery`, `Corpus`)
+    - `synthetic_lifeline.py` (10 R.M. Holston lifeline facts 1972 → 2026, 4 as-of queries; biographical schema)
+    - `humanities_cidoc.py` (5 CIDOC-CRM Buddhist facts, 2 as-of queries; humanities scholarly-graph schema)
+    - `rigpa_export.py` + `fixtures/rigpa_sample.jsonl` (20 events 2024-05 → 2024-12; overridable via `KOSMOS_RIGPA_EXPORT_PATH`)
+    - `corpus_runner.py` — Hybrid-tier switch: `InMemoryTemporalIndex` for fast tier, `GraphitiTemporalIndex` for live tier
+    - `test_corpora_contract.py` — 34 fast tests + 3 env-gated live tests
+  - **Cross-encoder fix (`997cad7`):** Graphiti's `OpenAIRerankerClient()` defaults to reading `OPENAI_API_KEY` which is not present on Colossus. Fix: instantiate with `LLMConfig(api_key="ollama-not-used", base_url=$OLLAMA_URL, model=$OLLAMA_LLM_MODEL)` so the reranker also routes through Ollama.
+  - **NodeNotFound fix (`e780be9`):** `add_episode(uuid=X)` in newer graphiti-core looks up an existing `EpisodicNode` by that UUID and raises `NodeNotFoundError` when absent (it does not assign the UUID). Fix: drop the `uuid=` argument; carry our event id through `name="event-<event_id>"` and inject `kosmos_event_id` into the JSON body. Contract test updated to assert `"uuid" not in kwargs` and body carries `kosmos_event_id`.
+  - **Commit C (this commit):** ADR-047 + fan-out + `docs/PORT_CONTRACTS.md` + logs:
+    - `docs/adrs/ADR-047-stage-4-2-corpora-hybrid-tier.md` — Q1=corpora location, Q2=Hybrid tier, Q3=local Ollama, Q4=three corpora
+    - `docs/PORT_CONTRACTS.md` created — MemoryPort surface + Hybrid-tier contract + measured metrics (fast tier < 1 ms; live tier first-run 137.29 s / 37 passed on 2026-07-30 Colossus)
+    - Spec §17 ADR-047 row appended
+    - `docs/adrs/README.md` ADR-047 row appended
+    - `docs/Kosmos-Build-Sequence-v25.md` §4.2 rewritten as **LANDED** block
+    - `docs/PORTING_LEDGER.md` — DozerDB `PLANNED` → `VENDORED` (Stage 4.2); graphiti-core + AMG entries updated with ADR-047 + Stage 4.2 real-backend notes + Ollama wiring + add_episode uuid fix
+- **Files touched:**
+  - `adapters/memory/dozerdb/dozerdb_graph_backend.py` (real backend)
+  - `adapters/memory/dozerdb/graphiti_temporal_index.py` (real backend + Ollama LLM/embedder/cross-encoder + no-uuid fix)
+  - `adapters/memory/dozerdb/amg_v02_policy.py` (real backend)
+  - `adapters/memory/dozerdb/adapter.py` (composition + exports)
+  - `adapters/memory/dozerdb/__init__.py` (exports extended)
+  - `adapters/memory/dozerdb/test_dozerdb_graph_backend_contract.py`
+  - `adapters/memory/dozerdb/test_graphiti_temporal_index_contract.py`
+  - `adapters/memory/dozerdb/test_amg_v02_policy_contract.py`
+  - `adapters/memory/dozerdb/corpora/` (whole subpackage; see Commit B list above)
+  - `ops/compose/memory.yml` + `ops/compose/README.md`
+  - `docs/adrs/ADR-047-stage-4-2-corpora-hybrid-tier.md`
+  - `docs/adrs/README.md` (ADR-047 row)
+  - `docs/Kosmos-Build-Spec-v25.md` (§17 ADR-047 row)
+  - `docs/Kosmos-Build-Sequence-v25.md` (§4.2 LANDED block)
+  - `docs/PORT_CONTRACTS.md` (created)
+  - `docs/PORTING_LEDGER.md` (DozerDB / graphiti-core / AMG entries)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwrite — points at Stage 4.3)
+- **Ports / adapters affected:** `MemoryPort` (three Protocol seams `GraphBackend`, `TemporalIndex`, `AmgPolicy` — signatures unchanged; only backend implementations swapped). `VectorPort` inherits Stage 1.7 measurements; benchmark deferred to Stage 4.4 Superpowers KB.
+- **PORTING_LEDGER / ADR updated:** ADR-047 authored (Ratified v25 at Stage 4.2). PORTING_LEDGER DozerDB flipped `PLANNED` → `VENDORED` with `graphstack/dozerdb:5.26.27` pin; graphiti-core + AMG entries append Stage 4.2 real-backend + ADR-047 references.
+- **Stop-condition status:** met — three corpora ingest through `record_event`; DoD-asserted `TemporalQuery`s pass on the always-green fast tier (34/34); live tier ingest+query end-to-end returns without raising (37/37 including fast, 137.29 s on Colossus 2026-07-30). Tag `stage-4-2-complete` applied on this commit.

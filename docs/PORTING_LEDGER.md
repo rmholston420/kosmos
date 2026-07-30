@@ -140,15 +140,15 @@
 
 ### Memory / Graph
 
-#### DozerDB server — `PLANNED` (Compose service; not vendored into Python code)
+#### DozerDB server — `VENDORED` (Compose service, real backend at Stage 4.2)
 - **Source:** https://github.com/graphstack/DozerDB (community fork of Neo4j Community with enterprise-tier features backported permissively)
-- **Commit / Version:** container image — pinned by Compose (added when Docker Compose lands post-Stage 1.8; last verified upstream at Docker tag 5.26.27 per spec §184)
-- **License:** Apache-2.0 (fork additions; upstream Neo4j Community is GPL-3, but DozerDB fork additions are permissive per ADR-008 requirement) — re-verify at Compose landing
-- **Kosmos location:** Docker Compose service `dozerdb`; Bolt on 7687; Colossus-local; DR-drill dump target per spec §184
-- **Port(s):** `MemoryPort` (ADR-008 backend choice; ADR-027 surface + enforcement)
-- **Modifications:** none — upstream container image; page cache + tx log sizing tuned for Colossus's 128 GB RAM envelope per `ops/dozerdb-tuning.md` when Compose lands
-- **ADR:** ADR-008 + ADR-027
-- **Logged:** 2026-07-29 22:02 EDT
+- **Commit / Version:** container image `graphstack/dozerdb:5.26.27` pinned in `ops/compose/memory.yml`
+- **License:** Apache-2.0 (fork additions; upstream Neo4j Community is GPL-3, but DozerDB fork additions are permissive per ADR-008 requirement)
+- **Kosmos location:** Docker Compose service `kosmos-dozerdb` at `ops/compose/memory.yml` (README `ops/compose/README.md`); Bolt on 7687; Colossus-local; DR-drill dump target per spec §184
+- **Port(s):** `MemoryPort` (ADR-008 backend choice; ADR-027 surface + enforcement; ADR-047 real-backend landing at Stage 4.2)
+- **Modifications:** none — upstream container image; heap capped at 4 GiB (`NEO4J_server_memory_heap_max__size=4G`) + page-cache capped at 2 GiB (`NEO4J_server_memory_pagecache_size=2G`) to sit inside Colossus's 128 GB envelope alongside Ollama + qwen3-coder residency
+- **ADR:** ADR-008 + ADR-027 + ADR-047
+- **Logged:** 2026-07-29 22:02 EDT (initial); 2026-07-30 07:45 EDT (`PLANNED` → `VENDORED` at Stage 4.2 lock-in)
 
 #### neo4j (Python driver) — `VENDORED` (Stage 1.8)
 - **Source:** https://github.com/neo4j/neo4j-python-driver
@@ -163,32 +163,35 @@
 - **ADR:** ADR-008 + ADR-027
 - **Logged:** 2026-07-29 22:02 EDT
 
-#### graphiti-core — `VENDORED` (Stage 1.8)
+#### graphiti-core — `VENDORED` (Stage 1.8 stub → real backend Stage 4.2)
 - **Source:** https://github.com/getzep/graphiti
 - **Commit / Version:** dependency — pinned via pyproject `graphiti-core>=0.5`
 - **License:** Apache-2.0 ([getzep/graphiti pyproject](https://github.com/getzep/graphiti/blob/main/pyproject.toml))
-- **Kosmos location:** `adapters/memory/dozerdb/adapter.py` (used inside the future `GraphitiTemporalIndex` only)
+- **Kosmos location:** `adapters/memory/dozerdb/graphiti_temporal_index.py` (real `GraphitiTemporalIndex` at Stage 4.2); `adapters/memory/dozerdb/adapter.py` composes it behind the `TemporalIndex` Protocol
 - **Port(s):** `MemoryPort` (temporal index only — Graphiti shares DozerDB's Neo4j-driver Bolt connection)
 - **Modifications:**
   - Imported lazily behind `TemporalIndex` Protocol; contract tests use `InMemoryTemporalIndex` (list of typed episodes)
   - Graphiti sits atop the same DozerDB instance via the same `neo4j` driver — no second connection pool
-  - **Sequencing note:** pulled forward from Stage 4.2 to Stage 1.8 per ADR-027 Q1=A. Stage 4.2 reduced to temporal-index tuning + `PORT_CONTRACTS.md` metrics (schema drift, edge-type churn, temporal-episode latency).
-- **ADR:** ADR-027
-- **Logged:** 2026-07-29 22:02 EDT
+  - **Stage 4.2 wiring (ADR-047):** instantiated with `OpenAIGenericClient` + `OpenAIEmbedder` + `OpenAIRerankerClient` all pointed at local Ollama (`http://localhost:11434/v1`, `qwen3-coder` LLM + `nomic-embed-text` embedder). Graphiti's default `OpenAIClient()` (reads `OPENAI_API_KEY`) is not used — violates Kosmos local-first custom instructions.
+  - **Stage 4.2 fix:** we do **not** pass `uuid=<event_id>` to `add_episode()` — Graphiti's semantics look up an existing EpisodicNode by that UUID (raises `NodeNotFoundError`). Our event id is carried through `name="event-<event_id>"` and injected as `kosmos_event_id` inside the JSON body.
+  - **Sequencing note:** pulled forward from Stage 4.2 to Stage 1.8 per ADR-027 Q1=A. Stage 4.2 delivered the real backend + `PORT_CONTRACTS.md` metrics (schema drift, edge-type churn, temporal-episode latency).
+- **ADR:** ADR-027 + ADR-047
+- **Logged:** 2026-07-29 22:02 EDT (initial); 2026-07-30 07:45 EDT (real backend at Stage 4.2)
 
-#### agent-memory-guard v0.2.2 — `VENDORED` (Stage 1.8)
+#### agent-memory-guard v0.2.2 — `VENDORED` (Stage 1.8 stub → real backend Stage 4.2)
 - **Source:** https://github.com/OWASP/www-project-agent-memory-guard
 - **Commit / Version:** PyPI `agent-memory-guard==0.2.2` (pinned exactly; verified upstream May 3, 2026; v0.3.0 not yet shipped)
 - **License:** OWASP Foundation (PyPI-shipped Python package; Python code under permissive OWASP terms; free redistribution)
-- **Kosmos location:** `adapters/memory/dozerdb/adapter.py` (used inside the future `AmgV02Policy` only)
+- **Kosmos location:** `adapters/memory/dozerdb/amg_v02_policy.py` (real `AmgV02Policy` at Stage 4.2 wrapping `MemoryGuard(policy=Policy.strict())` with `write`/`snapshot`/`rollback` bindings); `adapters/memory/dozerdb/adapter.py` composes it behind the `AmgPolicy` Protocol
 - **Port(s):** `MemoryPort` (write-time policy filter, second layer after non-bypassable port-level guard)
 - **Modifications:**
   - Imported lazily behind `AmgPolicy` Protocol; contract tests use `NoOpAmgPolicy` / `AlwaysBlockAmgPolicy` / `AlwaysQuarantineAmgPolicy`
   - Policy loaded from `ops/agent-memory-guard/policy.yaml` at adapter construction (YAML file lands with Compose)
   - AMG v0.2.2 provides SHA-256 cryptographic baseline + declarative YAML policy engine (`allow` / `redact` / `quarantine` / `block`) per spec §112
   - **Standing action per spec §643 + custom-instructions:** re-check https://github.com/OWASP/www-project-agent-memory-guard/releases immediately before Gnosis Phase 3 for v0.3.0 (LlamaIndex/CrewAI adapters, Redis/PostgreSQL backends, Prometheus metrics)
-- **ADR:** ADR-027
-- **Logged:** 2026-07-29 22:02 EDT
+  - **Stage 4.2 (ADR-047):** stub `NoOpAmgPolicy` replaced by real `AmgV02Policy` at `adapters/memory/dozerdb/amg_v02_policy.py`. Contract fakes (`AlwaysAllow`/`AlwaysBlock`/`AlwaysQuarantine`) preserved for always-green Protocol-conformance tests.
+- **ADR:** ADR-027 + ADR-047
+- **Logged:** 2026-07-29 22:02 EDT (initial); 2026-07-30 07:45 EDT (real backend at Stage 4.2)
 
 #### Rigpa-LMS MemoryBridge + GraphClient donor pattern — `VENDORED` (Stage 1.8)
 - **Source:** https://github.com/rmholston420/Rigpa-LMS (user's own repo; permissively-licensed donor)

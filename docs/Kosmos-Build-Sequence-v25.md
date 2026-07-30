@@ -302,11 +302,12 @@ Reference: Spec §18. This is the largest single-plugin build.
 - **Test status:** fast tier 825 passed + 9 skipped (unchanged from baseline).
 - **Next:** Stage 4.2 (Graphiti tuning — largely landed at Stage 1.8 per ADR-027 Q1=A).
 
-### 4.2 Graphiti temporal-index tuning + benchmarks
+### 4.2 Graphiti temporal-index tuning + benchmarks — **LANDED** (2026-07-30, ADR-047)
 - **Ports:** MemoryPort, VectorPort
-- **Note:** graphiti-core is already **VENDORED at Stage 1.8** (ADR-027 Q1=A). Stage 4.2 reduces to tuning + `PORT_CONTRACTS.md` metrics: schema drift, edge-type churn, temporal-episode latency, embedding-model selection for Graphiti's built-in NER.
-- **Action:** Landed at Stage 1.8; here we run Graphiti-specific tuning against the live DozerDB Compose service
-- **DoD:** Ingest a corpus; time-slice query returns correct historical state.
+- **Note:** graphiti-core is already **VENDORED at Stage 1.8** (ADR-027 Q1=A). Stage 4.2 delivered tuning + `PORT_CONTRACTS.md` metrics: real DozerDB/Graphiti/AMG backends replaced Stage-1.8 stubs; three corpora exercise schema drift + edge-type churn; local Ollama (`qwen3-coder` + `nomic-embed-text`) replaces hosted OpenAI as Graphiti's LLM/embedder/cross-encoder.
+- **Action:** Real backends + Hybrid-tier corpora + Compose service + `docs/PORT_CONTRACTS.md` — see ADR-047.
+- **DoD (met):** Three corpora ingest via `record_event`; every DoD-asserted `TemporalQuery` finds its `expected_event_ids` and rejects its `forbidden_event_ids` on the always-green fast tier; live-tier first run 37 passed / 137.29 s on Colossus with metrics recorded in `docs/PORT_CONTRACTS.md`.
+- **Tag:** `stage-4-2-complete`.
 
 ### 4.3 Agent Memory Guard latest release check
 - **Action:** Immediately before Phase 3, check https://github.com/... releases for newer than v0.2.2. If newer → adopt, log to PORTING_LEDGER.
