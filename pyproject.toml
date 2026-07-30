@@ -39,6 +39,9 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.6",
     "mypy>=1.10",
+    # Stage 3.12 · Stage-3 exit gate (ADR-046). Security scanner required
+    # by the DoD literal "Refactor commit passes ruff + bandit + pytest."
+    "bandit>=1.7",
 ]
 # Stage 3.8 · Pier eval harness (ADR-042). Vendored via PyPI as a dev-only
 # dep so the fast unit tier does not require it to be installed; the
@@ -93,3 +96,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
 ignore = ["E501"]
+
+# Stage 3.12 · Stage-3 exit gate (ADR-046). Bandit config for `scripts/stage3_gate.py`.
+# B101 (assert_used) is skipped globally because pytest test collection uses
+# `assert` heavily; keeping other CWE-mapped rules on for real source paths.
+[tool.bandit]
+exclude_dirs = [".venv", "build", "dist", "__pycache__"]
+skips = ["B101"]

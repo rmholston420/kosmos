@@ -880,9 +880,13 @@
 
 #### bandit — `VENDORED (dev dep)`
 - **Source:** https://github.com/PyCQA/bandit
+- **Commit / Version:** `bandit>=1.7` (installed 1.9.4)
 - **License:** Apache-2.0
+- **Kosmos location:** `[project.optional-dependencies] dev` + `[tool.bandit]` config in `pyproject.toml`
 - **Port(s):** none (build-time only)
-- **Logged:** —
+- **Modifications:** none — invoked via `.venv/bin/bandit -q -c pyproject.toml -r <path>` inside `scripts/stage3_gate.py` and via `make stage3-gate`
+- **ADR:** ADR-046
+- **Logged:** 2026-07-30 05:38 EDT
 
 ---
 
