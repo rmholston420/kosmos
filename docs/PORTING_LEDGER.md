@@ -169,12 +169,47 @@
 
 ### Vector store
 
-#### Qdrant — `PLANNED`
+#### Qdrant server — `PLANNED` (Compose service; not vendored into Python code)
 - **Source:** https://github.com/qdrant/qdrant
+- **Commit / Version:** container image — pinned by Compose (added when Docker Compose lands post-Stage 1.7)
 - **License:** Apache-2.0
-- **Kosmos location:** deployed via Docker Compose; adapter at `adapters/vector/qdrant/`
-- **Port(s):** VectorPort
-- **Logged:** —
+- **Kosmos location:** Docker Compose service `qdrant`; ports 6333 (HTTP) + 6334 (gRPC); Colossus-local
+- **Port(s):** `VectorPort` (ADR-026)
+- **Modifications:** none — upstream container image; snapshot artifacts written to a bind-mounted volume for the four-store DR-drill (§11)
+- **ADR:** ADR-026
+- **Logged:** 2026-07-29 21:58 EDT
+
+#### qdrant-client — `VENDORED` (Stage 1.7)
+- **Source:** https://github.com/qdrant/qdrant-client
+- **Commit / Version:** dependency — pinned via pyproject `qdrant-client>=1.11`
+- **License:** Apache-2.0
+- **Kosmos location:** `adapters/vector/qdrant/adapter.py` (used inside the future `RealQdrantBackend` only)
+- **Port(s):** `VectorPort`
+- **Modifications:**
+  - Imported lazily behind `QdrantBackend` Protocol so contract tests using `InMemoryQdrantBackend` do not require the wheel installed — mirrors Stage 1.5 `PyrageBackend` / Stage 1.6 `OtelBackend` splits
+  - `AsyncQdrantClient` is the sole entry point (donor Rigpa `rigpa.core.qdrant` pattern); sync client not used
+  - Free-form point ids hashed to stable UUIDv5 under `POINT_ID_NAMESPACE` before hitting the client (Rigpa `QdrantClaimUpserter.claim_point_id` pattern); Qdrant only accepts numeric or UUID ids
+  - Collection creation is idempotent (get-then-create fallback), dimension inferred from the first vector inserted (Rigpa `_ensure_collection` pattern)
+- **ADR:** ADR-026
+- **Logged:** 2026-07-29 21:58 EDT
+
+#### Rigpa-LMS vector-Protocol donor pattern — `VENDORED` (Stage 1.7)
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (user's own repo; permissively-licensed donor)
+  - `backend/src/rigpa/core/vectors/protocol.py` (Rigpa `VectorStore` Protocol — four verbs + `is_healthy`)
+  - `backend/src/rigpa/core/qdrant.py` (async singleton client pattern)
+  - `plugins/gnosis/src/rigpa_gnosis/services/qdrant_upserter.py` (`QdrantClaimUpserter` — UUIDv5 point-id normalization; idempotent `_ensure_collection`; typed payload assembly)
+  - Rigpa ADR-036 (pgvector→Qdrant threshold decision; referenced but not adopted in Kosmos day-one)
+- **Commit / Version:** inspected at donor `main` on 2026-07-29 (cached at `/tmp/donor-vec/`)
+- **License:** user's own code; treated as permissive donor
+- **Kosmos location:** `ports/vector.py`, `adapters/vector/qdrant/adapter.py`
+- **Modifications:**
+  - Rigpa `VectorStore` Protocol added no `snapshot`, no `close`, and no port-level `provenance`/`confidence` guard — Kosmos adds all three (ADR-026 Q1). `snapshot()` returns a typed `SnapshotHandle` so the §11 DR-drill can verify the artifact directly.
+  - Rigpa `search` returned raw `dict[str, Any]`; Kosmos returns typed `VectorHit` — matches `SearchPort`/`SecretValue` typing discipline (ADR-021/024)
+  - Rigpa allowed unlabeled writes (payload had no schema); Kosmos raises `ValueError` at the port layer if `payload` lacks `provenance` or `confidence` outside `[0.0, 1.0]`. Enforced via `ports.vector.validate_zero_trust_payload`; non-bypassable
+  - Rigpa's `is_healthy` is async; Kosmos version is sync + non-throwing (ADR-023 rule 5 reused) so it can be called in kernel hot paths without spawning a coroutine
+  - pgvector adapter (Rigpa's phase-1 backend) is deferred; trigger for a future pgvector ADR is documented in ADR-026 §Deferred capabilities
+- **ADR:** ADR-026
+- **Logged:** 2026-07-29 21:58 EDT
 
 ### Search
 

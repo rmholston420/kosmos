@@ -224,3 +224,35 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** `ObservabilityPort` declared and satisfied by `OtelStackObservabilityAdapter`; downstream LLMPort cost-accountability wiring path now available for Tektos in Stage 3
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Observability — 5 VENDORED entries (opentelemetry-sdk + opentelemetry-exporter-otlp-proto-grpc + prometheus-client + structlog + Rigpa observability seam pattern)
 - **Stop-condition status:** met — 101/101 tests pass across `adapters/` (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19 + Secrets 27 + Observability 20); Protocol conformance verified via `isinstance(adapter, ObservabilityPort)`, `isinstance(backend, OtelBackend)`, and `isinstance(NoOpSpan(), Span)`
+
+---
+
+## 2026-07-29 21:57 EDT — ADR-026 authored: VectorPort adopts Qdrant backend; port-level zero-trust
+
+- **Stage / plugin / port:** Stage 1.7 · VectorPort
+- **What changed:** Authored ADR-026 to reconcile spec §4.1 (`VectorPort` → `upsert / search / delete / snapshot`) with donor Rigpa `VectorStore` Protocol (four async verbs + `is_healthy`, no `snapshot`, no `close`, no zero-trust guard) and Rigpa's dual-adapter Qdrant/pgvector story (Rigpa ADR-036). Two design questions locked in per user: **Q1=A** — `upsert()` enforces §7 zero-trust at the port layer (`payload` must include truthy `provenance` and a `confidence` float in `[0.0, 1.0]`; `ValueError` otherwise). **Q2=A** — all backend-touching methods are async; `is_healthy` is the sync-non-throwing exception (ADR-023 rule 5). pgvector adapter deferred; Kosmos targets Colossus with one operator, well below the 5M-vector threshold. Deferred capabilities enumerated: pgvector fallback, multi-tenant filter grammar, batch `upsert_many`, named vectors, snapshot `restore`.
+- **Files touched:**
+  - `docs/adrs/ADR-026-vectorport-qdrant-backend.md` (new)
+- **Ports / adapters affected:** `VectorPort` surface + `VectorHit` + `SnapshotHandle` typed value objects declared; port-level `validate_zero_trust_payload` helper declared
+- **PORTING_LEDGER / ADR updated:** ADR-026 Ratified v25 (spec §4.1 + §17 amendments + PORTING_LEDGER §Vector store rewrite pending Stage 1.7 code)
+- **Stop-condition status:** met (ADR authored); Stage 1.7 code + fan-out pending
+
+---
+
+## 2026-07-29 21:58 EDT — Stage 1.7: VectorPort formalized with Qdrant adapter (ADR-026)
+
+- **Stage / plugin / port:** Stage 1.7 · VectorPort
+- **What changed:** Codified ADR-026 by shipping `ports/vector.py` (`VectorPort` Protocol + `VectorHit` + `SnapshotHandle` frozen dataclasses + `validate_zero_trust_payload` helper + `REQUIRED_PAYLOAD_KEYS` constant) and `adapters/vector/qdrant/` (`QdrantVectorAdapter` primary + `QdrantBackend` Protocol seam + `InMemoryQdrantBackend` in-process test backend). Port surface: async `upsert / search / delete / snapshot` + sync non-throwing `is_healthy` + async idempotent `close`. Port-level §7 zero-trust enforcement is non-bypassable — `upsert()` calls `validate_zero_trust_payload(payload)` before any backend I/O, rejecting missing `provenance`, missing/invalid `confidence`, or out-of-range `confidence`. Free-form point ids (e.g. `claim-01`) hashed to stable UUIDv5 under `POINT_ID_NAMESPACE` before hitting the backend (donor Rigpa `QdrantClaimUpserter.claim_point_id` pattern) — Qdrant only accepts numeric or UUID ids. Collection creation lazy: `ensure_collection` inferrs dim from first vector; dim mismatch on same collection raises. `qdrant-client` is a lazy import inside the future `RealQdrantBackend` (not shipped in Stage 1.7 — added when the Docker Compose Qdrant service lands); `qdrant-client>=1.11` declared in `pyproject.toml` runtime deps AT COMMIT TIME per DEBUG_LOG 2026-07-29 21:42 EDT guardrail. `InMemoryQdrantBackend` implements cosine similarity in pure Python + supports snapshot / filter for contract tests; zero third-party imports. 33 new contract tests covering Protocol conformance for `VectorPort` + `QdrantBackend`, zero-trust guard (5 negative cases + 1 positive), `upsert` validation (empty vector, non-numeric elements), `upsert / search` round-trip, `search` ordering + `limit` + `filter` + unknown-collection + zero-limit + empty-query-vector, point-id UUIDv5 stability + upsert/delete id-mapping symmetry, `delete` unknown-collection / unknown-id no-op semantics, `snapshot` typed-handle return, non-throwing `is_healthy` + `close` idempotence + close-error swallowing, first-write dim inference + dim-mismatch rejection.
+- **Files touched:**
+  - `ports/vector.py` (new, 195 lines)
+  - `adapters/vector/__init__.py` (new)
+  - `adapters/vector/qdrant/__init__.py` (new)
+  - `adapters/vector/qdrant/adapter.py` (new, 343 lines: `QdrantVectorAdapter` + `QdrantBackend` + `InMemoryQdrantBackend` + `_to_point_id` + `_cosine` + `_matches_filter`)
+  - `adapters/vector/qdrant/test_contract.py` (new, 33 tests)
+  - `docs/Kosmos-Build-Spec-v25.md` (§4.1 VectorPort row + §17 ADR-026 row)
+  - `docs/adrs/README.md` (ADR-026 row)
+  - `docs/PORTING_LEDGER.md` (§Vector store, 3 entries: Qdrant server PLANNED + qdrant-client VENDORED + Rigpa vector-Protocol donor pattern VENDORED)
+  - `pyproject.toml` (`qdrant-client>=1.11` runtime dep + 2 new packages registered)
+- **Ports / adapters affected:** `VectorPort` declared and satisfied by `QdrantVectorAdapter`; downstream `MemoryPort` (Stage 1.8, DozerDB + Graphiti) will consume this for entity-vector storage; Gnosis (Stage 6, deep-research claim upserts) will consume it directly
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Vector store rewritten — Qdrant `PLANNED` stub expanded to 3 entries (Qdrant server PLANNED as Compose service + qdrant-client VENDORED + Rigpa donor VENDORED)
+- **Stop-condition status:** met — 134/134 tests pass across `adapters/` (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19 + Secrets 27 + Observability 20 + Vector 33); Protocol conformance verified via `isinstance(adapter, VectorPort)` and `isinstance(backend, QdrantBackend)`

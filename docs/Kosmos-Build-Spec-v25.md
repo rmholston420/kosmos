@@ -84,7 +84,7 @@ Four governing principles: Ports & Adapters everywhere; black-box modules with s
 |---|---|---|
 | `LLMPort` | vLLM (nightly-wheel/CUDA 13 on Blackwell) → llama.cpp, fronted by **llama-swap** (fallback: llama.cpp router mode) | `generate()`, `generate_text()`, `chat()`, `generate_stream()`, `embed()`, `list_models()`, `pull_model()`, `delete_model()`, `is_healthy()`, `close()` — see **ADR-022** |
 | `MemoryPort` | Graphiti + Neo4j/CIDOC CRM on **DozerDB fork**, wrapped in Agent Memory Guard middleware | `write_event()`, `query_temporal()`, `link_entities()`, `quarantine_write()` |
-| `VectorPort` | Qdrant | `upsert()`, `search()`, `delete()`, `snapshot()` |
+| `VectorPort` | Qdrant (primary) — pgvector fallback deferred (ADR-026) | `async upsert(collection, id, vector, payload)` (payload MUST carry `provenance` + `confidence` per §7 zero-trust; port-level enforcement), `async search(collection, query_vector, *, limit=10, filter=None) -> list[VectorHit]`, `async delete(collection, id)`, `async snapshot(collection) -> SnapshotHandle` (native Qdrant snapshot; DR-drill artifact for §11), `is_healthy() -> bool` (non-throwing), `async close()` (idempotent) |
 | `EventBusPort` | Valkey/Redis Streams | `publish(envelope)`, `subscribe()`, `unsubscribe()`, `read_recent()`, `is_healthy()`, `close()` — envelope-first; consumer-group `ack()` deferred to ADR-024 — see **ADR-023** |
 | `SecretsPort` | age-encrypted file (primary) · hvac/Vault (deferred) | `get_secret()`, `put_secret()`, `rotate()`, `is_healthy()`, `close()` — age-file primary per **ADR-024**; `lease()` deferred until a future ADR triggered by Tektos per-task scoping (§18.6) |
 | `ObservabilityPort` | OpenTelemetry SDK + `prometheus-client` + `structlog` (LGTM-compatible) — Langfuse deferred (ADR-025) | `trace(name, *, attributes) -> Span` (sync context manager, records exceptions, re-raises), `score(name, value, *, attributes)`, `log_cost(*, model, prompt_tokens, completion_tokens, usd, attributes)`, `bind_context(**keys)` / `clear_context()` (contextvars-backed), `get_tracer(name)` / `get_meter(name)` escape hatches, `is_healthy() -> bool` (non-throwing), `async close()` (idempotent) |
@@ -321,6 +321,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-023 | EventBusPort Envelope-First MVP (spec §4.1 tightening) | **Ratified v25** | Stage 1.4 |
 | ADR-024 | SecretsPort adopts age-encrypted file backend (Vault deferred) | **Ratified v25** | Stage 1.5 |
 | ADR-025 | ObservabilityPort adopts OTel+Prometheus+structlog stack (Langfuse deferred) | **Ratified v25** | Stage 1.6 |
+| ADR-026 | VectorPort adopts Qdrant backend; pgvector fallback deferred; port-level §7 zero-trust enforcement | **Ratified v25** | Stage 1.7 |
 
 ### 17.1 UI Parity Rule (ADR-014, in-line summary)
 

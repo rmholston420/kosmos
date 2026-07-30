@@ -16,6 +16,7 @@ dependencies = [
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp-proto-grpc>=1.27",
     "prometheus-client>=0.20",
+    "qdrant-client>=1.11",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +32,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["ports", "adapters", "adapters.llm", "adapters.llm.ollama", "adapters.llm.llama_swap", "adapters.search", "adapters.search.searxng", "adapters.event_bus", "adapters.event_bus.valkey", "adapters.secrets", "adapters.secrets.age_file", "adapters.observability", "adapters.observability.otel_stack"]
+packages = ["ports", "adapters", "adapters.llm", "adapters.llm.ollama", "adapters.llm.llama_swap", "adapters.search", "adapters.search.searxng", "adapters.event_bus", "adapters.event_bus.valkey", "adapters.secrets", "adapters.secrets.age_file", "adapters.observability", "adapters.observability.otel_stack", "adapters.vector", "adapters.vector.qdrant"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -34,6 +34,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-023 | `ADR-023-eventbusport-envelope-first-mvp.md` | EventBusPort envelope-first MVP; `ack` deferred to ADR-024 | **Ratified v25** | Stage 1.4 |
 | ADR-024 | `ADR-024-secretsport-age-file-backend.md` | SecretsPort adopts age-encrypted file backend; Vault + `lease()` deferred | **Ratified v25** | Stage 1.5 |
 | ADR-025 | `ADR-025-observabilityport-otel-prometheus-structlog.md` | ObservabilityPort adopts OpenTelemetry SDK + prometheus-client + structlog; Langfuse LLM-specific adapter deferred | **Ratified v25** | Stage 1.6 |
+| ADR-026 | `ADR-026-vectorport-qdrant-backend.md` | VectorPort adopts Qdrant backend; pgvector fallback deferred; port-level §7 zero-trust enforcement (`provenance` + `confidence` required on writes) | **Ratified v25** | Stage 1.7 |
 
 ## The one remaining open decision
 
