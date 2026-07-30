@@ -25,8 +25,13 @@ from pathlib import Path
 from typing import Any
 
 from ..metrics import TrialMetrics
-from .prompts import KOSMOS_MCP_PROMPT, build_anchored_user_turn
+from .prompts import (
+    KOSMOS_MCP_PROMPT,
+    build_anchored_user_turn,
+    build_fact_check_correction_directive,
+)
 from .search_backend import unique_domain_count
+from .url_verify import annotate_unverified, verify_urls
 
 
 class ThermalAbort(RuntimeError):
@@ -119,6 +124,8 @@ async def run_odr_trial(
     mcp_server_url: str = "http://127.0.0.1:8000",
     thermal_event: Any | None = None,
     thermal_poll_seconds: float = 1.0,
+    fact_anchor_urls: list[str] | None = None,
+    enable_fact_check: bool = True,
 ) -> TrialMetrics:
     """Run a single ODR trial. Async because ODR is LangGraph async."""
     try:
@@ -145,7 +152,9 @@ async def run_odr_trial(
     # Stage 6.3.1 prompt anchoring: wrap the raw fixture question in the
     # answer-agnostic structural scaffold (Positions A-E). See
     # harness/prompts.py for the full contract.
-    anchored_question = build_anchored_user_turn(question)
+    anchored_question = build_anchored_user_turn(
+        question, fact_anchor_urls=fact_anchor_urls
+    )
 
     cited_urls: list[str] = []
     start = time.monotonic()
@@ -292,6 +301,127 @@ async def run_odr_trial(
                 attempts[-1]["outcome"] = "retrieval_gate_retry_failed"
                 attempts[-1]["error"] = f"{type(exc).__name__}: {exc}"
 
+    # ---- Shim 3: fact-check (URL verification, one retry) ----
+    # Post-Stage 6.3.2 (blind rating 1.33/6): the retrieval gate is
+    # firing but the model still fabricates URLs and swaps SPDX
+    # identifiers. This shim verifies every URL cited in the final
+    # report against the live network. If any URL fails to resolve
+    # (DNS, HTTP 4xx/5xx, timeout, connect error), we re-invoke once
+    # with a correction directive listing the failed URLs.
+    #
+    # Retry rules:
+    #   - Runs only if shim-2 produced a result (final_report present)
+    #     and enable_fact_check is True.
+    #   - Skipped after ThermalAbort (no re-invoke under thermal breach).
+    #   - Bounded to one retry per trial. If retry ALSO cites failing
+    #     URLs, those URLs are annotated `[unverified]` in the final
+    #     artifact and no further retry is issued.
+    #   - The retry's own output is verified in turn and its unverified
+    #     URLs are annotated the same way.
+    import re as _re
+
+    fact_check_events: list[dict] = []
+    if (
+        enable_fact_check
+        and result is not None
+        and not thermal_aborted
+    ):
+        prelim_report = str(result.get("final_report", ""))
+        prelim_urls = _re.findall(r"https?://[^\s\)]+", prelim_report)
+        if prelim_urls:
+            try:
+                verifications = await verify_urls(prelim_urls)
+            except Exception as exc:  # noqa: BLE001
+                # Verifier itself failed — log, skip shim entirely.
+                fact_check_events.append(
+                    {
+                        "pass": "initial",
+                        "outcome": "verifier_error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                verifications = {}
+            unverified_first = [
+                u for u, r in verifications.items() if not r.ok
+            ]
+            fact_check_events.append(
+                {
+                    "pass": "initial",
+                    "urls_checked": len(verifications),
+                    "urls_unverified": len(unverified_first),
+                    "unverified": unverified_first,
+                    "kinds": {
+                        u: r.kind
+                        for u, r in verifications.items()
+                        if not r.ok
+                    },
+                }
+            )
+            if unverified_first:
+                # One retry with correction directive.
+                correction_turn = (
+                    anchored_question
+                    + "\n\n"
+                    + build_fact_check_correction_directive(unverified_first)
+                )
+                attempts.append(
+                    {
+                        "attempt": len(attempts) + 1,
+                        "outcome": "fact_check_retry",
+                        "reason": (
+                            f"{len(unverified_first)} of {len(verifications)} "
+                            "cited URLs failed live verification"
+                        ),
+                    }
+                )
+                try:
+                    retry_result = await _invoke_once(correction_turn)
+                except ThermalAbort as exc:
+                    attempts[-1]["outcome"] = "fact_check_retry_thermal_abort"
+                    attempts[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                    # Keep the pre-fact-check result; annotate its
+                    # unverified URLs in the final block below.
+                except Exception as exc:  # noqa: BLE001
+                    attempts[-1]["outcome"] = "fact_check_retry_failed"
+                    attempts[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                else:
+                    attempts[-1]["outcome"] = "fact_check_retry_ok"
+                    result = retry_result
+                    # Re-verify the retry's URLs so persistent failures
+                    # still get annotated.
+                    retry_report = str(result.get("final_report", ""))
+                    retry_urls = _re.findall(
+                        r"https?://[^\s\)]+", retry_report
+                    )
+                    if retry_urls:
+                        try:
+                            retry_verifs = await verify_urls(retry_urls)
+                        except Exception as exc:  # noqa: BLE001
+                            fact_check_events.append(
+                                {
+                                    "pass": "retry",
+                                    "outcome": "verifier_error",
+                                    "error": f"{type(exc).__name__}: {exc}",
+                                }
+                            )
+                            retry_verifs = {}
+                        unverified_after = [
+                            u for u, r in retry_verifs.items() if not r.ok
+                        ]
+                        fact_check_events.append(
+                            {
+                                "pass": "retry",
+                                "urls_checked": len(retry_verifs),
+                                "urls_unverified": len(unverified_after),
+                                "unverified": unverified_after,
+                                "kinds": {
+                                    u: r.kind
+                                    for u, r in retry_verifs.items()
+                                    if not r.ok
+                                },
+                            }
+                        )
+
     # ---- Finalize metrics ----
     try:
         if result is None:
@@ -300,20 +430,49 @@ async def run_odr_trial(
             raise last_exc
 
         final_report = str(result.get("final_report", ""))
+
+        # Annotate persistent unverified URLs in the FINAL report body
+        # so the blind rater sees them inline. Recomputes verification
+        # on the FINAL text (post-retry if retry ran), rather than
+        # trusting the retry pass's cached results, because the retry
+        # may have introduced new URLs the retry-pass verify missed.
+        annotation_urls: list[str] = []
+        if enable_fact_check and final_report:
+            final_urls = _re.findall(
+                r"https?://[^\s\)]+", final_report
+            )
+            if final_urls:
+                try:
+                    final_verifs = await verify_urls(final_urls)
+                except Exception:  # noqa: BLE001
+                    final_verifs = {}
+                final_report, annotation_urls = annotate_unverified(
+                    final_report, final_verifs
+                )
+
         metrics.final_answer = final_report
         metrics.final_confidence = ""  # ODR does not emit a confidence score
-        import re
 
-        cited_urls = re.findall(r"https?://[^\s\)]+", final_report)
+        cited_urls = _re.findall(r"https?://[^\s\)]+", final_report)
+        # Strip the `[unverified]` marker from the evidence URL list — the
+        # marker sits between the URL and the tag, so the raw URL is
+        # already the token that regex captured.
         metrics.final_evidences = [
             {"evidence": "(auto-extracted from ODR report body)", "url": u}
             for u in cited_urls
+            if not u.startswith("[unverified]")
         ]
         notes = result.get("notes")
         if notes is not None:
             metrics.trajectory.append({"notes": notes})
         raw_notes = result.get("raw_notes") or []
         metrics.trajectory.append({"raw_notes_count": len(raw_notes)})
+        if fact_check_events:
+            metrics.trajectory.append({"fact_check": fact_check_events})
+        if annotation_urls:
+            metrics.trajectory.append(
+                {"final_unverified_urls": annotation_urls}
+            )
     except Exception as exc:  # noqa: BLE001
         metrics.error = f"{type(exc).__name__}: {exc}"
     finally:

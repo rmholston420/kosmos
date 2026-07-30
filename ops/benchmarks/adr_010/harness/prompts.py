@@ -144,16 +144,113 @@ Research question:
 """
 
 
-def build_anchored_user_turn(raw_question: str) -> str:
+def build_anchored_user_turn(
+    raw_question: str,
+    *,
+    fact_anchor_urls: list[str] | None = None,
+) -> str:
     """Wrap the raw fixture question in the structural anchoring scaffold.
 
-    The scaffold is answer-agnostic — it names no canonical facts, no license
-    identifiers, no vendor names. It only anchors the *shape* of the required
-    answer. This makes it safe to leave in place across future Zetesis
-    inner-loop tasks; the same scaffold applies to any architectural
-    comparison with authoritative citations.
+    The scaffold itself is answer-agnostic — it names no canonical facts, no
+    license identifiers, no vendor names. It only anchors the *shape* of the
+    required answer.
+
+    Stage 6.3.3 fact-anchor pass
+    ----------------------------
+    ``fact_anchor_urls`` (optional) is a curated allowlist of authoritative
+    URLs the harness knows the model should prefer when making license and
+    packaging claims. They are injected as an **advisory** block, medium
+    strength: the prompt tells the model to prefer citing one of these when
+    stating an SPDX identifier, source-availability claim, or packaging-model
+    claim, but does NOT restate the fact itself. That preserves the fact-
+    retrieval test for F2/F3/F4 (license posture / source availability); the
+    model still has to visit the anchor and read what it says. All we're
+    doing is eliminating the "guessed a URL that doesn't exist" failure mode.
+
+    Anchor URLs must be sourced from the fixture's ground_truth so the
+    harness never hardcodes canonical facts.
     """
-    return _STRUCTURAL_SCAFFOLD_HEADER + raw_question.strip()
+    body = _STRUCTURAL_SCAFFOLD_HEADER + raw_question.strip()
+    if fact_anchor_urls:
+        anchor_block = _build_anchor_advisory(fact_anchor_urls)
+        body = body + "\n\n" + anchor_block
+    return body
 
 
-__all__ = ["KOSMOS_MCP_PROMPT", "build_anchored_user_turn"]
+def _build_anchor_advisory(urls: list[str]) -> str:
+    """Assemble the medium-strength anchor advisory block.
+
+    The wording:
+    - Instructs the model to visit at least one anchor URL before stating
+      any license / source-availability / packaging claim.
+    - Explicitly forbids stating a license identifier by guess.
+    - Does NOT tell the model what the license IS. That must be verified
+      against the LICENSE file the anchor points to.
+    - Ends with the anchor list.
+    """
+    lines = [
+        "### FACT ANCHOR ADVISORY (mandatory for licensing / packaging claims)",
+        "",
+        "When you state any SPDX license identifier, source-availability claim,",
+        "or packaging-model claim about either compared artifact, you MUST cite",
+        "at least one of the authoritative anchor URLs listed below (or a",
+        "functionally equivalent first-party page you retrieve during THIS run",
+        "via the MCP visit tool). Do NOT guess an SPDX identifier from a repo",
+        "name, a search snippet, or your training memory — visit the LICENSE",
+        "file or an official license-statement page and read what it says.",
+        "",
+        "Authoritative anchors (curated allowlist):",
+    ]
+    for u in urls:
+        lines.append(f"  - {u}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Stage 6.3.3 fact-check shim: URL correction directive
+# ---------------------------------------------------------------------------
+
+
+def build_fact_check_correction_directive(unverified_urls: list[str]) -> str:
+    """Assemble the one-shot correction turn used by shim 3.
+
+    Called by the ODR harness only when at least one URL cited in the
+    prior final_report failed live verification (HTTP != 2xx, DNS error,
+    connect timeout). The directive:
+
+    1. Lists the exact URLs that failed to resolve.
+    2. Instructs the model to either replace each with a verified URL it
+       retrieves via the MCP visit tool during THIS retry, or drop the
+       claim entirely.
+    3. Explicitly forbids inventing a substitute URL from memory.
+    4. Warns that any URL cited in the retry will ALSO be verified and
+       marked `[unverified]` if it fails, so guessing is not a viable
+       strategy.
+    """
+    numbered = "\n".join(
+        f"  {i + 1}. {u}" for i, u in enumerate(unverified_urls)
+    )
+    return (
+        "### FACT-CHECK CORRECTION (mandatory)\n"
+        "Your previous answer cited URL(s) that failed live verification. "
+        "These URLs did not resolve (DNS error, HTTP 4xx/5xx, or timeout):\n"
+        f"{numbered}\n\n"
+        "For EACH failed URL, do ONE of the following:\n"
+        "  (a) Retrieve a verified replacement URL via the MCP visit tool "
+        "during this retry, and cite the replacement instead. The retrieved "
+        "page must actually establish the claim it is attached to.\n"
+        "  (b) Drop the claim entirely. Do NOT keep a claim if you cannot "
+        "attach a URL you have verified during this run.\n\n"
+        "Do NOT invent a substitute URL from memory. Any URL you cite in "
+        "this retry will be re-verified against the live network. Failed "
+        "URLs will be marked [unverified] in the final artifact, so "
+        "guessing is not a viable strategy — the annotation will surface "
+        "the guess."
+    )
+
+
+__all__ = [
+    "KOSMOS_MCP_PROMPT",
+    "build_anchored_user_turn",
+    "build_fact_check_correction_directive",
+]

@@ -81,7 +81,8 @@ def test_happy_path_single_invocation_no_retry(monkeypatch):
 
     metrics = _run(
         odr_mod.run_odr_trial(
-            question="Q?", question_id="q1", trial_id="t1"
+            question="Q?", question_id="q1", trial_id="t1",
+            enable_fact_check=False,
         )
     )
 
@@ -121,7 +122,8 @@ def test_vendor_bug_retry_then_success(monkeypatch):
 
     metrics = _run(
         odr_mod.run_odr_trial(
-            question="Q?", question_id="q1", trial_id="t2"
+            question="Q?", question_id="q1", trial_id="t2",
+            enable_fact_check=False,
         )
     )
 
@@ -150,7 +152,8 @@ def test_vendor_bug_retry_exhausted_surfaces_last_error(monkeypatch):
 
     metrics = _run(
         odr_mod.run_odr_trial(
-            question="Q?", question_id="q1", trial_id="t3"
+            question="Q?", question_id="q1", trial_id="t3",
+            enable_fact_check=False,
         )
     )
 
@@ -190,7 +193,8 @@ def test_retrieval_gate_retries_when_raw_notes_empty(monkeypatch):
 
     metrics = _run(
         odr_mod.run_odr_trial(
-            question="Q?", question_id="q1", trial_id="t4"
+            question="Q?", question_id="q1", trial_id="t4",
+            enable_fact_check=False,
         )
     )
 
@@ -232,7 +236,8 @@ def test_retrieval_gate_retry_failure_keeps_pregate_result(monkeypatch):
 
     metrics = _run(
         odr_mod.run_odr_trial(
-            question="Q?", question_id="q1", trial_id="t5"
+            question="Q?", question_id="q1", trial_id="t5",
+            enable_fact_check=False,
         )
     )
 
@@ -264,7 +269,8 @@ def test_gate_is_bounded_to_one_retry(monkeypatch):
 
     metrics = _run(
         odr_mod.run_odr_trial(
-            question="Q?", question_id="q1", trial_id="t6"
+            question="Q?", question_id="q1", trial_id="t6",
+            enable_fact_check=False,
         )
     )
 
@@ -313,6 +319,7 @@ def test_thermal_abort_cancels_ainvoke_and_does_not_retry(monkeypatch):
             trial_id="t8",
             thermal_event=thermal,
             thermal_poll_seconds=0.01,
+            enable_fact_check=False,
         )
     )
 
@@ -352,7 +359,8 @@ def test_maximum_ainvoke_calls_never_exceeds_three(monkeypatch):
 
     metrics = _run(
         odr_mod.run_odr_trial(
-            question="Q?", question_id="q1", trial_id="t7"
+            question="Q?", question_id="q1", trial_id="t7",
+            enable_fact_check=False,
         )
     )
 

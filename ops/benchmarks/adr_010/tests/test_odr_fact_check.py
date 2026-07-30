@@ -1,0 +1,382 @@
+"""Stage 6.3.3 fact-check shim (shim 3) contract tests.
+
+Behavior under test:
+
+1. **Fact-anchor injection.** When `fact_anchor_urls` is passed to
+   `run_odr_trial`, the anchor advisory block appears in the ainvoke
+   payload's user turn.
+
+2. **Happy path.** All cited URLs verify -> no retry, no annotation,
+   `fact_check` trajectory records `urls_unverified=0`.
+
+3. **Bad URLs -> retry.** Initial report has some unverified URLs ->
+   shim 3 re-invokes ONCE with the correction directive, retry succeeds
+   with all-good URLs -> no annotation, retry recorded in attempts.
+
+4. **Bad URLs -> retry still fails.** Retry cites more bad URLs ->
+   persistent-bad URLs annotated `[unverified]` inline in the final
+   report; `final_unverified_urls` trajectory entry lists them.
+
+5. **enable_fact_check=False disables the shim entirely** (regression
+   guard so existing tests keep passing).
+
+6. **Verifier failure is non-fatal.** If `verify_urls` itself raises,
+   the harness logs the error under `fact_check` events and finishes
+   normally without retry.
+
+7. **Thermal abort skips shim 3.** If a ThermalAbort surfaces from
+   shim 1, the fact-check pass is not attempted (physical envelope).
+
+All tests stub `deep_researcher.ainvoke` and `verify_urls` to avoid
+real network / real GPU.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import sys
+import types
+from typing import Any
+
+import pytest
+
+
+# --------------------------------------------------------------------- helpers
+
+
+def _install_stub_deep_researcher(invocations: list[dict], responses: list[Any]):
+    async def _ainvoke(payload: dict, config: dict) -> dict:
+        invocations.append({"payload": payload, "config": config})
+        assert responses, "test drained responses without a queued reply"
+        reply = responses.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    fake_dr = types.SimpleNamespace(ainvoke=_ainvoke)
+    fake_module = types.ModuleType("open_deep_research.deep_researcher")
+    fake_module.deep_researcher = fake_dr  # type: ignore[attr-defined]
+    parent = types.ModuleType("open_deep_research")
+    parent.deep_researcher = fake_module  # type: ignore[attr-defined]
+    sys.modules["open_deep_research"] = parent
+    sys.modules["open_deep_research.deep_researcher"] = fake_module
+
+
+def _patch_verify_urls(monkeypatch, script: dict[str, bool] | Exception):
+    """Patch verify_urls to return per-URL ok/not-ok from ``script``.
+
+    Passing an Exception makes verify_urls raise it (exercises the
+    verifier-failure branch).
+    """
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+
+    async def _fake(urls, **kwargs):
+        if isinstance(script, Exception):
+            raise script
+        out: dict[str, VerifyResult] = {}
+        seen: set[str] = set()
+        for u in urls:
+            # strip trailing punctuation the harness would strip
+            can = u.rstrip("),.;\"'")
+            if can in seen:
+                continue
+            seen.add(can)
+            ok = script.get(can, True)  # default ok for anything unmentioned
+            out[can] = VerifyResult(
+                url=can,
+                ok=ok,
+                kind="ok" if ok else "http_4xx",
+                status_code=200 if ok else 404,
+                elapsed_seconds=0.01,
+            )
+        return out
+
+    monkeypatch.setattr(odr_mod, "verify_urls", _fake)
+
+
+def _run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro) if False else asyncio.run(coro)
+
+
+def _attempts(metrics) -> list[dict]:
+    entry = next(
+        e for e in metrics.trajectory if isinstance(e, dict) and "attempts" in e
+    )
+    return entry["attempts"]
+
+
+def _fact_check_events(metrics) -> list[dict]:
+    entry = next(
+        (e for e in metrics.trajectory if isinstance(e, dict) and "fact_check" in e),
+        None,
+    )
+    return entry["fact_check"] if entry else []
+
+
+# --------------------------------------------------------------------- tests
+
+
+def test_fact_anchor_urls_inject_into_user_prompt(monkeypatch):
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": "answer with https://neo4j.com/open-core-and-neo4j/",
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            }
+        ],
+    )
+    _patch_verify_urls(monkeypatch, {"https://neo4j.com/open-core-and-neo4j/": True})
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?",
+            question_id="q1",
+            trial_id="t1",
+            fact_anchor_urls=[
+                "https://neo4j.com/open-core-and-neo4j/",
+                "https://github.com/orgs/DozerDB/discussions/1",
+            ],
+        )
+    )
+    assert not metrics.error
+    turn = invocations[0]["payload"]["messages"][0]["content"]
+    assert "FACT ANCHOR ADVISORY" in turn
+    assert "https://neo4j.com/open-core-and-neo4j/" in turn
+    assert "https://github.com/orgs/DozerDB/discussions/1" in turn
+
+
+def test_all_urls_verify_no_retry_no_annotation(monkeypatch):
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": "cite https://good1.example/ and https://good2.example/",
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            }
+        ],
+    )
+    _patch_verify_urls(
+        monkeypatch,
+        {"https://good1.example/": True, "https://good2.example/": True},
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    assert len(invocations) == 1, "no fact-check retry expected when all URLs verify"
+    outcomes = [a["outcome"] for a in _attempts(metrics)]
+    assert outcomes == ["ok"]
+    events = _fact_check_events(metrics)
+    assert events, "fact_check event should always be recorded when URLs are cited"
+    initial = next(e for e in events if e.get("pass") == "initial")
+    assert initial["urls_checked"] == 2
+    assert initial["urls_unverified"] == 0
+    assert "[unverified]" not in metrics.final_answer
+
+
+def test_bad_urls_trigger_retry_and_retry_succeeds(monkeypatch):
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": (
+                    "bad url https://fake.example/x and good https://real.example/y"
+                ),
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            },
+            {
+                "final_report": "corrected https://real.example/y and https://also-real.example/z",
+                "notes": ["ok"],
+                "raw_notes": ["r1", "r2"],
+            },
+        ],
+    )
+    _patch_verify_urls(
+        monkeypatch,
+        {
+            "https://fake.example/x": False,
+            "https://real.example/y": True,
+            "https://also-real.example/z": True,
+        },
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    assert len(invocations) == 2, "shim 3 should retry exactly once"
+    outcomes = [a["outcome"] for a in _attempts(metrics)]
+    assert outcomes == ["ok", "fact_check_retry_ok"], outcomes
+    events = _fact_check_events(metrics)
+    initial = next(e for e in events if e.get("pass") == "initial")
+    retry = next(e for e in events if e.get("pass") == "retry")
+    assert initial["urls_unverified"] == 1
+    assert retry["urls_unverified"] == 0
+    assert "[unverified]" not in metrics.final_answer
+    # retry's correction directive appeared in the 2nd ainvoke payload
+    turn2 = invocations[1]["payload"]["messages"][0]["content"]
+    assert "FACT-CHECK CORRECTION" in turn2
+    assert "https://fake.example/x" in turn2
+
+
+def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": "cites https://fake1.example/",
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            },
+            {
+                # Retry still hallucinated a bad URL
+                "final_report": "cites https://fake2.example/",
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            },
+        ],
+    )
+    _patch_verify_urls(
+        monkeypatch,
+        {
+            "https://fake1.example/": False,
+            "https://fake2.example/": False,
+        },
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    assert len(invocations) == 2
+    assert "https://fake2.example/ [unverified]" in metrics.final_answer
+    unverified_entry = next(
+        e for e in metrics.trajectory
+        if isinstance(e, dict) and "final_unverified_urls" in e
+    )
+    assert "https://fake2.example/" in unverified_entry["final_unverified_urls"]
+
+
+def test_no_fact_check_disables_shim(monkeypatch):
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": "https://would-be-bad.example/",
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            }
+        ],
+    )
+
+    def _boom(urls, **kw):
+        raise AssertionError("verify_urls should not run when enable_fact_check=False")
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    monkeypatch.setattr(odr_mod, "verify_urls", _boom)
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?",
+            question_id="q1",
+            trial_id="t1",
+            enable_fact_check=False,
+        )
+    )
+    assert len(invocations) == 1
+    assert not _fact_check_events(metrics)
+
+
+def test_verifier_error_is_non_fatal(monkeypatch):
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            {
+                "final_report": "cites https://x.example/",
+                "notes": ["ok"],
+                "raw_notes": ["r1"],
+            }
+        ],
+    )
+    _patch_verify_urls(monkeypatch, RuntimeError("verifier crashed"))
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t1"
+        )
+    )
+    assert not metrics.error, metrics.error
+    events = _fact_check_events(metrics)
+    assert any(
+        e.get("outcome") == "verifier_error" for e in events
+    ), events
+
+
+def test_thermal_abort_skips_fact_check(monkeypatch):
+    """If shim 1 aborts thermally, shim 3 must not fire.
+
+    Uses the same pre-set threading.Event trick as the thermal-abort
+    retrieval-gate test.
+    """
+    import threading
+
+    invocations: list[dict] = []
+
+    async def _slow(payload, config):
+        invocations.append({"payload": payload, "config": config})
+        await asyncio.sleep(3600)
+        return {"final_report": "never reaches"}
+
+    fake_dr = types.SimpleNamespace(ainvoke=_slow)
+    fake_module = types.ModuleType("open_deep_research.deep_researcher")
+    fake_module.deep_researcher = fake_dr  # type: ignore[attr-defined]
+    parent = types.ModuleType("open_deep_research")
+    parent.deep_researcher = fake_module  # type: ignore[attr-defined]
+    sys.modules["open_deep_research"] = parent
+    sys.modules["open_deep_research.deep_researcher"] = fake_module
+
+    def _boom(urls, **kw):
+        raise AssertionError("verify_urls should not run after ThermalAbort")
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    monkeypatch.setattr(odr_mod, "verify_urls", _boom)
+
+    thermal = threading.Event()
+    thermal.set()
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?",
+            question_id="q1",
+            trial_id="t1",
+            thermal_event=thermal,
+            thermal_poll_seconds=0.01,
+        )
+    )
+    assert metrics.error.startswith("ThermalAbort:"), metrics.error
+    assert not _fact_check_events(metrics)

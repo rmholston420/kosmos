@@ -81,17 +81,20 @@ def parse_args() -> argparse.Namespace:
             "target GPU temperature (C) before starting the next trial. "
             "Lowered from 70->60 after Colossus 88C driver-crash incident "
             "(2026-07-30). Applied both as pre-flight before every trial "
-            "AND between trials."
+            "AND between trials. Held at 60C in Stage 6.3.3 (only the "
+            "minimum wait was shortened)."
         ),
     )
     parser.add_argument(
         "--cooldown-min-seconds",
         type=float,
-        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "60")),
+        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "45")),
         help=(
             "minimum cooldown seconds, applied both pre-flight and between "
-            "trials. Raised from 30->60 after 88C incident so the 32B model "
-            "can shed VRAM heat (esp. when OLLAMA_KEEP_ALIVE=60s)."
+            "trials. Progression: 30 -> 60 (post-88C incident) -> 45 "
+            "(Stage 6.3.3, after empirical data showed 60s wait consistently "
+            "landed 35-43C at trial start with the 400W power cap; 45s is "
+            "a safe operator-approved compromise)."
         ),
     )
     parser.add_argument(
@@ -133,6 +136,15 @@ def parse_args() -> argparse.Namespace:
         help="skip nvidia-smi -pl entirely (accepts full thermal risk)",
     )
     parser.add_argument(
+        "--no-fact-check",
+        action="store_true",
+        help=(
+            "disable Stage 6.3.3 URL-verification shim (shim 3). Not "
+            "recommended — the shim exists specifically because the 32B "
+            "model was observed fabricating repo URLs and license IDs."
+        ),
+    )
+    parser.add_argument(
         "--ollama-keep-alive",
         default=os.environ.get("ADR010_OLLAMA_KEEP_ALIVE", "60s"),
         help=(
@@ -163,7 +175,32 @@ def emit(metrics: TrialMetrics) -> Path:
     return path
 
 
-async def run_odr(args: argparse.Namespace, question_id: str, question: str) -> None:
+def _collect_fact_anchor_urls(fixture: dict) -> list[str]:
+    """Extract fact-anchor URLs from the fixture's ground_truth.
+
+    Stage 6.3.3 medium-strength anchor policy: the harness pulls a
+    curated allowlist of authoritative URLs from the fixture rather
+    than hardcoding them, so the anchor list stays fixture-owned and
+    the harness is generic. Dedupe while preserving order.
+    """
+    gt = fixture.get("ground_truth", {}) or {}
+    facts = gt.get("canonical_facts", []) or []
+    seen: set[str] = set()
+    urls: list[str] = []
+    for f in facts:
+        for u in f.get("supporting_urls", []) or []:
+            if isinstance(u, str) and u not in seen:
+                seen.add(u)
+                urls.append(u)
+    return urls
+
+
+async def run_odr(
+    args: argparse.Namespace,
+    question_id: str,
+    question: str,
+    fact_anchor_urls: list[str] | None = None,
+) -> None:
     # ODR wires configurable_fields=("model","max_tokens","api_key") in
     # deep_researcher.py, so our research_model_config.base_url is dropped.
     # Point the OpenAI client at Ollama via env vars instead.
@@ -189,6 +226,8 @@ async def run_odr(args: argparse.Namespace, question_id: str, question: str) -> 
                 ollama_model=args.ollama_model,
                 mcp_server_url=args.mcp_url,
                 thermal_event=monitor.thermal_event,
+                fact_anchor_urls=fact_anchor_urls,
+                enable_fact_check=not args.no_fact_check,
             )
         finally:
             monitor.stop()
@@ -356,10 +395,17 @@ def main() -> int:
     )
     logger.info("question_id=%s", question_id)
 
+    fact_anchor_urls = _collect_fact_anchor_urls(fixture)
+    if fact_anchor_urls:
+        logger.info(
+            "fact-anchor advisory active: %d URL(s) injected into prompt",
+            len(fact_anchor_urls),
+        )
+
     if args.contender == "arex":
         run_arex(args, question_id, question)
     else:
-        asyncio.run(run_odr(args, question_id, question))
+        asyncio.run(run_odr(args, question_id, question, fact_anchor_urls))
     logger.info("done. artifacts at %s/%s/", _ARTIFACT_ROOT, args.contender)
     return 0
 

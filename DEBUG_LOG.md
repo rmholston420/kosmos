@@ -125,3 +125,17 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/tests/test_policy_thermal.py` — new fast tests (no real GPU) with a stubbed sample_gpu
   - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` — add thermal-abort case
 - **Related BUILD_LOG entry:** `2026-07-30 12:39 EDT` (Stage 6.3.2 shims that unintentionally increased per-trial thermal load)
+
+## 2026-07-30 13:29 EDT — 32B model fabricates GitHub repo URLs and swaps SPDX license IDs in ADR-010 final reports
+
+- **Symptom:** Stage 6.3.2 3-trial run on Colossus completed cleanly (no thermal aborts, all `error=null`), but blind rating scored ~1.33/6 (threshold ≥4/6 missed). Specific hallucinations observed in `benchmark_artifacts/adr_010/odr/`:
+  - `trial_01_c01436.json` — cited `https://github.com/dozermapping/dozerdb` (repo doesn't exist); claimed Neo4j CE is AGPLv3 (F3 fixture says GPLv3).
+  - `trial_02_9d0975.json` — cited `https://github.com/dozermapping/dozer` (repo doesn't exist); claimed DozerDB is Apache-2.0 (F4 fixture says GPLv3).
+  - `trial_03_54f165.json` — final_report contained 3 concatenated self-contradictory reports.
+- **Affected stage / plugin / port:** Stage 6.3 · Zetesis inner-loop ODR substrate (`ops/benchmarks/adr_010/harness/`). Ollama model `qwen2.5:32b-instruct-q4_K_M`.
+- **Root cause:** The model's parametric memory of DozerDB/Neo4j is stale + confabulated. Even with MCP retrieval available and shim-2 gating on empty `raw_notes`, retrieved context was not always used — the model interleaved retrieved facts with fabricated URLs and swapped license IDs (AGPLv3↔GPLv3, GPLv3↔Apache-2.0). No purely-thermal or purely-schema fix could address this; grounding needed to be enforced at the report-emission boundary.
+- **Fix applied:** Stage 6.3.3 landed two runtime shims (see BUILD_LOG same timestamp):
+  1. **Shim 3 (URL fact-check pass):** every cited URL in `final_report` is verified against the live network; bad URLs trigger one correction retry with a directive listing the failed URLs and forbidding invention; persistent-bad URLs are annotated `[unverified]` inline so the blind rater sees them.
+  2. **Fixture-anchor injection:** runner extracts an authoritative-URL allowlist from `fixture.ground_truth.canonical_facts[*].supporting_urls` and injects it as a **FACT ANCHOR ADVISORY** block in the user turn (URLs only, no SPDX ids, no polarity claims — medium-strength, does not trivialize fact retrieval).
+- **Files changed:** `ops/benchmarks/adr_010/harness/prompts.py`; `ops/benchmarks/adr_010/harness/url_verify.py` (new); `ops/benchmarks/adr_010/harness/odr.py`; `ops/benchmarks/adr_010/runner.py`; `ops/benchmarks/adr_010/tests/test_url_verify.py` (new); `ops/benchmarks/adr_010/tests/test_odr_fact_check.py` (new); `ops/benchmarks/adr_010/tests/test_prompts_fact_anchors.py` (new); `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` (updated to opt out of fact-check).
+- **Related BUILD_LOG entry:** 2026-07-30 13:29 EDT (Stage 6.3.3).

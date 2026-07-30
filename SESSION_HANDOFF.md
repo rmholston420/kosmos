@@ -1,46 +1,50 @@
-# Kosmos Session Handoff — 2026-07-30 12:57 EDT
+# Kosmos Session Handoff — 2026-07-30 13:29 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 6.3.2 landed. Thermal envelope hardened post-incident. Awaiting Colossus empirical run.
-- **Plugin / kernel component:** Zetesis inner-loop ODR substrate tuning.
-- **Port(s) in progress:** none formal. Thermal + retrieval-gate shims live in `ops/benchmarks/adr_010/` (harness-scoped) until promotion.
+- **Stage / phase:** Stage 6.3.3 · ODR substrate fact-grounding
+- **Plugin / kernel component:** Zetesis inner-loop ODR substrate (`ops/benchmarks/adr_010/`)
+- **Port(s) in progress:** none formal — operational tuning inside ADR-010's LOCKED "operational tuning" band. Vendor tree pristine per ADR-007 substrate lock.
 
 ## Completed this session
-- Stage 6.3.1 rating: 0/6 on n=2 (parametric answers, MCP bypassed, hallucinated URLs). Threshold missed. Escalation ratified.
-- Stage 6.3.2 shims landed (commit `206cc93`):
-  - Shim 1: vendor-bug retry on `KeyError: 'reflection'` and other ODR schema-drift exceptions (2 attempts).
-  - Shim 2: MCP retrieval gate — re-invokes with escalated directive when `raw_notes` empty (1 retry).
-- 88 C driver-crash incident on Colossus during Stage 6.3.2 test run (fans and pump at max; cooling ceiling exceeded).
-  - Logged to DEBUG_LOG.
-  - Root cause: workload > cooler capacity + observation-only GPUMonitor.
-- Stage 6.3.2 thermal hardening landed (this commit):
-  - `nvidia-smi -pl 400W` at runner startup (RTX 5090 stock 575W).
-  - Watchdog on GPUMonitor: `thermal_event` latches at 85 C.
-  - `_invoke_once` races ainvoke vs watchdog; on breach cancels ainvoke + raises `ThermalAbort`.
-  - `ThermalAbort` never retried (physical envelope); retrieval gate skipped after thermal abort.
-  - Pre-flight cooldown added (60 C target, 60 s min) applied BEFORE every trial including the first.
-  - `OLLAMA_KEEP_ALIVE=60s` so 32B model releases VRAM during between-trial window.
-- Whole-repo tests: **1033 passed / 19 skipped** (was 1019 at Stage 6.3.1 authoring: +14 exact — 7 retrieval-gate + 6 thermal-policy + 1 thermal-abort harness case).
+- Rated Stage 6.3.2's 3-trial artifacts blind → mean ~1.33/6, threshold ≥4/6 missed. Diagnosed URL hallucination + license-ID swaps.
+- Locked optimal choices for the fact-check response: **Replace + retry once** on bad URLs, **medium-strength** fixture-anchor injection.
+- Landed **Stage 6.3.3**:
+  - `harness/prompts.py` — `build_anchored_user_turn(..., fact_anchor_urls=None)` + `build_fact_check_correction_directive(bad_urls)` + advisory-block builder.
+  - `harness/url_verify.py` (new, 218 lines) — `verify_urls()` async batch verifier (HEAD→GET, redirects, timeouts, classify, dedup, canonicalize); `annotate_unverified()` idempotent inline `[unverified]` marker.
+  - `harness/odr.py` — `run_odr_trial(..., fact_anchor_urls, enable_fact_check=True)`; shim 3 wired between shim 1/2 output and finalize block; trajectory records `fact_check` events + `final_unverified_urls`.
+  - `runner.py` — extracts anchors from `fixture.ground_truth.canonical_facts[*].supporting_urls`, plumbs them to `run_odr_trial`; adds `--no-fact-check`; **`--cooldown-min-seconds` default 60 → 45** (target held at 60 °C).
+  - Tests: `test_url_verify.py` (11), `test_odr_fact_check.py` (7), `test_prompts_fact_anchors.py` (4); existing `test_odr_retrieval_gate.py` (8) opts out of fact-check.
+- **Test tiers (Colossus-independent):** `ops/benchmarks/adr_010/tests/` = **70 passed** (was 47: +23). Whole-repo = **1056 passed / 19 skipped** (was 1033 / 19: +23 exact, zero regressions).
+- Appended BUILD_LOG + DEBUG_LOG entries at 2026-07-30 13:29 EDT.
 
 ## Remaining before current Definition of Done
-- On Colossus: `cd ~/dev/kosmos && git pull` then confirm 47/47 in adr_010 tests, then run the benchmark.
-- Expected run behavior:
-  - Runner exports `OLLAMA_KEEP_ALIVE=60s`, tries `sudo -n nvidia-smi -pl 400W` (may warn if sudo unavailable — non-fatal).
-  - Pre-flight cooldown waits until GPU <=60 C before every trial (60 s min).
-  - Each trial's ainvoke racing a watchdog; abort at 85 C.
-  - Between-trial cooldown also at 60 C target, 60 s min.
-- If any trial aborts on thermal watchdog: reduce workload further. Options in escalation order: (a) drop `--power-cap-watts` further (350 W), (b) reduce `--trials` to 2, (c) accept that qwen2.5:32b is over-budget and downshift to qwen2.5:14b-instruct-q4_K_M.
-- If all 3 trials complete under 85 C: blind-rate against F1-F6; write `RATING_STAGE_6_3_2.md`.
-- Threshold: mean answer_correctness >=4/6 AND `raw_notes_count > 0` on every trial.
+- Commit + push Stage 6.3.3 landing (single commit, message `Stage 6.3.3: URL fact-check shim + fixture anchors + 45s cooldown min`). Sign with `user.email=lawapa.naljor@gmail.com user.name=rmholston420` on the commit (no tag until the 3-trial rated run clears ≥4/6).
+- Pull to Colossus and run a fresh 3-trial pass:
+  ```bash
+  cd ~/dev/kosmos && git pull
+  .venv/bin/python -m pytest ops/benchmarks/adr_010/tests/    # expect 70 green
+  .venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr
+  ```
+  Watch for: `power cap applied: 400W`, `fact-anchor advisory active: N URL(s)`, per-trial `fact_check` blocks in the artifact trajectory, any inline `[unverified]` markers in `final_answer`, `final_unverified_urls` on each trajectory.
+- After the run: blind-rate the 3 trials against F1–F6 rubric; write `/tmp/rating.md`.
+- If mean rated ≥4/6 AND every trial has empty `final_unverified_urls`: promote Stage 6.3.3 → Stage 6.3 close; tag `stage-6-3-complete`; move to Stage 6.4 (substrate promotion out of `ops/benchmarks/` into `adapters/zetesis/inner_loop/`).
+- If mean rated <4/6 or persistent unverified URLs remain: fire option 4 — author `ADR-010 CONTINGENCY-FIRED` amendment authorizing model uplift (`qwen2.5:32b-instruct-q5_K_M` first; then `qwen2.5:72b-instruct-q4_K_M` if q5 still fails). q5_K_M ≈ 31–33 GB VRAM — cuts into 32 GB envelope; measure before locking.
 
 ## Open questions / awaiting user answer
-- If sudo password prompt appears (`sudo -n` returns rc!=0 because passwordless sudo isn't configured for nvidia-smi), the power cap is skipped and the run continues without it. Optional follow-up: `sudo visudo` to add `<user> ALL=(root) NOPASSWD: /usr/bin/nvidia-smi` so the cap applies automatically. Not blocking.
+- None. All Stage 6.3.3 choices previously locked by operator's "make the optimal choice" directive.
+- Cooldown target held at 60 °C per operator (only the minimum wait shortened to 45 s).
 
 ## Exact next action
-On Colossus:
+Commit + push from the local kosmos-scan workspace, then run on Colossus:
+```bash
+cd /home/user/workspace/kosmos-scan
+git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
+    commit -am "Stage 6.3.3: URL fact-check shim + fixture anchors + 45s cooldown min"
+git push origin main
 ```
+Then on Colossus:
+```bash
 cd ~/dev/kosmos && git pull
-.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/  # confirm 47/47
+.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/
 .venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr
 ```
-Watch the log for `power cap applied` (or warning if sudo denied) and `pre-flight cooldown done: waited Ns, temp=NC`. Any `thermal watchdog fired` is expected safety, not failure.
