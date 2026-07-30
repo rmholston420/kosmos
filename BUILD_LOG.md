@@ -1260,3 +1260,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Vendor tree unchanged. Substrate config unchanged.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** Stage 6.3.1 fails threshold on n=2 valid trials by a wide margin. Escalate to Stage 6.3.2 (MCP retrieval gate: runtime enforcement that no final answer may be emitted until at least N successful MCP tool calls have executed and their results have been returned into model context). Do NOT escalate to Stage 6.3.3 (model-swap ADR) yet — two variables remain to exhaust before concluding qwen2.5:32b-instruct-q4_K_M is the wrong model (retrieval gate + higher-precision quantization q5_K_M at ~22 GB VRAM). Also: land runner retry-on-error before the 6.3.2 benchmark run so Trial-3-style vendor bugs don't invalidate that sample too.
+
+## 2026-07-30 12:39 EDT — Stage 6.3.2 · MCP retrieval gate + vendor-bug retry shims (harness-only, vendor-pristine)
+
+- **Stage / plugin / port:** Stage 6.3.2 · Zetesis inner-loop ODR substrate tuning (retrieval-gate enforcement).
+- **What changed:** Two orthogonal shims inside `run_odr_trial`, both harness-side (vendor tree `vendor/adr_010/open_deep_research/` untouched per Stage 6.2 substrate lock + ADR-007 porting discipline).
+  1. **Vendor-bug retry (shim 1).** ODR upstream `deep_researcher.py:275` does `tool_call["args"]["reflection"]` with no fallback; when the 32B Ollama model freelances the argument key (e.g. sends `thought` or `content` instead of `reflection`), the state graph crashes mid-run. Shim 1 catches any exception during `ainvoke`, records it in `trajectory.attempts`, and retries once with a fresh `thread_id`. Hard cap: 2 attempts.
+  2. **Retrieval gate (shim 2).** After a successful `ainvoke`, inspect `result["raw_notes"]`. If empty (== supervisor emitted a final report without the researcher subgraph ever calling an MCP tool — the empirical Stage 6.3.1 failure mode), re-invoke once with an escalated `### RETRIEVAL GATE (mandatory)` directive appended to the user turn (requires >=3 distinct MCP calls, forbids parametric answers, forbids fabricated citations). Hard cap: 1 gate retry.
+  3. **Worst-case ainvoke calls per trial: 3** (2 vendor attempts + 1 gate retry). Bounded so sample-budget stays predictable.
+  4. **All retries + reasons land in `metrics.trajectory`** as an `attempts` list, so the blind rater can distinguish parametric-answer trials from grounded ones without opening logs.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/odr.py` — refactored `run_odr_trial` inner block; introduced `_invoke_once` helper; added shim 1 + shim 2 with attempt-tracking. Removed the top-level `config["configurable"]["thread_id"]` assignment (each attempt now gets a fresh id inside `_invoke_once`).
+  - `ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py` (new — 7 fast contract tests, no Ollama/MCP/LangGraph runtime needed; `open_deep_research.deep_researcher` module is stub-injected via `sys.modules`). Cases:
+    - happy path -> exactly 1 ainvoke, no retries
+    - shim 1: KeyError('reflection') -> retry -> success (asserts fresh thread_id per attempt)
+    - shim 1: both attempts raise -> last exception surfaces in `metrics.error`, capped at 2 attempts
+    - shim 2: empty raw_notes -> gate retry with RETRIEVAL GATE directive in payload -> success
+    - shim 2: gate retry itself raises -> keep pre-gate result (better than losing the trial)
+    - shim 2: gate is bounded to one retry (does not loop on repeated empty raw_notes)
+    - hard cap: worst-case = 3 ainvoke calls total
+- **Test tiers:** `ops/benchmarks/adr_010/tests/` = **40 passed** (was 33: +7). Whole-repo pytest = **1026 passed / 19 skipped** (was 1019: +7 exact).
+- **Ports / adapters affected:** none formal. Substrate stays in `ops/benchmarks/adr_010/harness/`. Promotion to `adapters/zetesis/inner_loop/` waits on Stage 6.3.3 wire-up when rating passes threshold.
+- **PORTING_LEDGER / ADR updated:** none. Both shims are runtime enforcement inside the harness; they do not alter the ODR vendor tree or the ADR-010 winner (still ODR). No ADR needed — this is inside the "operational tuning" band that ADR-010 LOCKED amendment already anticipated.
+- **Stop-condition status:** Ready for a fresh 3-trial run on Colossus (`.venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr`). New closing criterion for Stage 6.3.2: mean answer_correctness >=4/6 across 3 trials AND `raw_notes_count > 0` on every trial's trajectory entry. If retrieval gate fires and still yields empty raw_notes on retry, that's the signal that the model, not the harness, is the limit — escalate to quantization uplift (qwen2.5:32b-instruct-q5_K_M) before authoring Stage 6.3.3 model-swap ADR.

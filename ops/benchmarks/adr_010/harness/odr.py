@@ -127,7 +127,8 @@ async def run_odr_trial(
         ollama_model=ollama_model,
         mcp_server_url=mcp_server_url,
     )
-    config["configurable"]["thread_id"] = str(uuid.uuid4())
+    # thread_id is assigned per-attempt inside _invoke_once() below so
+    # each retry gets a fresh LangGraph checkpoint namespace.
 
     # Stage 6.3.1 prompt anchoring: wrap the raw fixture question in the
     # answer-agnostic structural scaffold (Positions A-E). See
@@ -136,17 +137,102 @@ async def run_odr_trial(
 
     cited_urls: list[str] = []
     start = time.monotonic()
-    try:
-        result = await deep_researcher.ainvoke(
-            {"messages": [{"role": "user", "content": anchored_question}]},
-            config=config,
+
+    # Stage 6.3.2 · MCP retrieval gate (runtime enforcement).
+    #
+    # Two shims wrap ODR's ainvoke, both here in the harness (vendor tree
+    # stays pristine per Stage 6.2 substrate lock + ADR-007 porting rules):
+    #
+    # 1. Vendor-bug retry. ODR upstream d337ae3 assumes hosted-model schema
+    #    conformance (deep_researcher.py:275 does `tool_call["args"]
+    #    ["reflection"]` with no fallback). Small local models freelance
+    #    tool argument keys. On any exception during ainvoke, retry once
+    #    with a fresh thread_id and identical config.
+    #
+    # 2. Retrieval gate. Empty `raw_notes` on the returned state means the
+    #    supervisor emitted a final report without any researcher subgraph
+    #    ever running an MCP tool (parametric-memory answer). This is the
+    #    Stage 6.3.1 failure mode empirically observed on n=2 valid trials.
+    #    On zero-`raw_notes` completion, re-invoke once with an escalated
+    #    directive appended to the user turn. Bounded to one retry per
+    #    trial to keep the sample budget stable.
+    #
+    # Both retries stay inside the same trial artifact; only the final
+    # attempt's outputs land in `metrics`. Retry counts and reasons are
+    # recorded in `metrics.trajectory` so the blind rater and any future
+    # analysis can see them.
+    async def _invoke_once(user_content: str) -> dict:
+        cfg = dict(config)
+        cfg["configurable"] = dict(config["configurable"])
+        cfg["configurable"]["thread_id"] = str(uuid.uuid4())
+        return await deep_researcher.ainvoke(
+            {"messages": [{"role": "user", "content": user_content}]},
+            config=cfg,
         )
-        # ODR returns a compiled report in `final_report`; extract cited URLs
-        # from the raw notes on `notes` state.
+
+    result: dict | None = None
+    last_exc: Exception | None = None
+    attempts: list[dict] = []
+
+    # ---- Shim 1: vendor-bug retry (max 2 attempts) ----
+    for attempt in range(2):
+        try:
+            result = await _invoke_once(anchored_question)
+            attempts.append({"attempt": attempt + 1, "outcome": "ok"})
+            last_exc = None
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            attempts.append(
+                {
+                    "attempt": attempt + 1,
+                    "outcome": "vendor_error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+
+    # ---- Shim 2: retrieval gate (only if shim 1 landed a result) ----
+    if result is not None:
+        raw_notes = result.get("raw_notes", []) or []
+        if not raw_notes:
+            escalated = (
+                anchored_question
+                + "\n\n### RETRIEVAL GATE (mandatory)\n"
+                "Your previous attempt on this question emitted a final report "
+                "without invoking any MCP search tool. That is a discipline "
+                "failure. Do NOT answer from memory. You MUST call the MCP "
+                "search tool at least three times, on distinct queries, "
+                "before emitting any final report. Every claim in your final "
+                "report must cite a URL that appeared in an MCP search result "
+                "during THIS run. If a claim cannot be so cited, drop the "
+                "claim rather than fabricating a source."
+            )
+            attempts.append(
+                {
+                    "attempt": len(attempts) + 1,
+                    "outcome": "retrieval_gate_retry",
+                    "reason": "raw_notes empty on first successful invocation",
+                }
+            )
+            try:
+                retry_result = await _invoke_once(escalated)
+                result = retry_result
+                attempts[-1]["outcome"] = "retrieval_gate_retry_ok"
+            except Exception as exc:  # noqa: BLE001
+                # Keep the pre-gate result; record the gate failure.
+                attempts[-1]["outcome"] = "retrieval_gate_retry_failed"
+                attempts[-1]["error"] = f"{type(exc).__name__}: {exc}"
+
+    # ---- Finalize metrics ----
+    try:
+        if result is None:
+            # Both shim-1 attempts raised. Surface the last exception.
+            assert last_exc is not None
+            raise last_exc
+
         final_report = str(result.get("final_report", ""))
         metrics.final_answer = final_report
         metrics.final_confidence = ""  # ODR does not emit a confidence score
-        # Best-effort URL extraction from the report body.
         import re
 
         cited_urls = re.findall(r"https?://[^\s\)]+", final_report)
@@ -154,13 +240,15 @@ async def run_odr_trial(
             {"evidence": "(auto-extracted from ODR report body)", "url": u}
             for u in cited_urls
         ]
-        # Retain notes trajectory if surfaced.
         notes = result.get("notes")
         if notes is not None:
             metrics.trajectory.append({"notes": notes})
+        raw_notes = result.get("raw_notes") or []
+        metrics.trajectory.append({"raw_notes_count": len(raw_notes)})
     except Exception as exc:  # noqa: BLE001
         metrics.error = f"{type(exc).__name__}: {exc}"
     finally:
+        metrics.trajectory.append({"attempts": attempts})
         metrics.latency_seconds = time.monotonic() - start
         metrics.source_diversity = unique_domain_count(cited_urls)
 
