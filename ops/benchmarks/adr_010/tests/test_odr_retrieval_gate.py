@@ -11,9 +11,9 @@ Behavior under test:
   thread_id. Both attempts are recorded in ``trajectory.attempts``.
 * Shim 2: on empty ``raw_notes`` from the first successful invocation,
   re-invokes with the escalated retrieval-gate directive appended.
-* Both retries: retry count is bounded (max 2 attempts for shim 1, max
-  1 retry for shim 2), so a trial can never spin more than 3 ainvoke
-  calls.
+* Both retries: retry count is bounded (max 3 attempts for shim 1 as of
+  Stage 6.3.4f, max 1 retry for shim 2), so a trial can never spin more
+  than 4 ainvoke calls in the shim-1+shim-2 path.
 * Attempt trail is always appended to ``metrics.trajectory`` regardless
   of outcome, so blind rating can see the full retry history.
 """
@@ -140,12 +140,17 @@ def test_vendor_bug_retry_then_success(monkeypatch):
 
 
 def test_vendor_bug_retry_exhausted_surfaces_last_error(monkeypatch):
-    """Both attempts raise: shim 1 hard-stops after 2 tries, error surfaces."""
+    """All three attempts raise: shim 1 hard-stops after 3 tries (Stage
+    6.3.4f raised the cap from 2 to 3), error surfaces."""
 
     invocations: list[dict] = []
     _install_stub_deep_researcher(
         invocations,
-        [KeyError("reflection"), RuntimeError("still broken")],
+        [
+            KeyError("reflection"),
+            KeyError("reflection"),
+            RuntimeError("still broken"),
+        ],
     )
 
     from ops.benchmarks.adr_010.harness import odr as odr_mod
@@ -157,13 +162,50 @@ def test_vendor_bug_retry_exhausted_surfaces_last_error(monkeypatch):
         )
     )
 
-    assert len(invocations) == 2, "shim 1 is bounded at 2 attempts"
+    assert len(invocations) == 3, "shim 1 is bounded at 3 attempts"
     assert metrics.error.startswith("RuntimeError:")
     attempts_entry = next(
         e for e in metrics.trajectory if isinstance(e, dict) and "attempts" in e
     )
     outcomes = [a["outcome"] for a in attempts_entry["attempts"]]
-    assert outcomes == ["vendor_error", "vendor_error"], outcomes
+    assert outcomes == ["vendor_error", "vendor_error", "vendor_error"], outcomes
+
+
+def test_vendor_bug_retry_recovers_on_third_attempt(monkeypatch):
+    """Stage 6.3.4f: two consecutive KeyError('reflection') followed by
+    a healthy invocation recovers instead of wiping the trial."""
+
+    invocations: list[dict] = []
+    _install_stub_deep_researcher(
+        invocations,
+        [
+            KeyError("reflection"),
+            KeyError("reflection"),
+            {"final_report": "Recovered.", "raw_notes": ["seed"]},
+        ],
+    )
+
+    from ops.benchmarks.adr_010.harness import odr as odr_mod
+
+    metrics = _run(
+        odr_mod.run_odr_trial(
+            question="Q?", question_id="q1", trial_id="t3f",
+            enable_fact_check=False,
+            enable_license_grounding=False,
+            enable_feature_grounding=False,
+            enable_rubric_critique=False,
+            enable_cove=False,
+            enable_claim_support_gate=False,
+        )
+    )
+
+    assert len(invocations) == 3
+    attempts_entry = next(
+        e for e in metrics.trajectory if isinstance(e, dict) and "attempts" in e
+    )
+    outcomes = [a["outcome"] for a in attempts_entry["attempts"]]
+    assert outcomes == ["vendor_error", "vendor_error", "ok"], outcomes
+    assert metrics.error is None or metrics.error == ""
 
 
 def test_retrieval_gate_retries_when_raw_notes_empty(monkeypatch):
@@ -369,7 +411,7 @@ def test_maximum_ainvoke_calls_never_exceeds_three(monkeypatch):
         )
     )
 
-    assert len(invocations) == 3, "hard cap: 2 vendor attempts + 1 gate retry"
+    assert len(invocations) == 3, "1 vendor retry + 1 ok + 1 gate retry"
     attempts_entry = next(
         e for e in metrics.trajectory if isinstance(e, dict) and "attempts" in e
     )

@@ -1456,3 +1456,28 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Test status:** 166 adr_010 tests pass (was 144). Whole-repo 1152 passed, 19 skipped.
 - **GPU cap:** 425 W persisted via `/etc/systemd/system/kosmos-nvidia-power-cap.service` (enabled, verified live).
 
+
+## 2026-07-30 16:32 EDT — Stage 6.3.4f: rework shim 9 canonical spec + dozerdb.org fetch + new shim 10 (Enterprise-license) + shim 1 attempts=3
+
+- **Stage / plugin / port:** Stage 6.3.4f · ADR-010 harness · shim 1/9/10
+- **What changed:**
+  - `harness/feature_grounding.py`: DROPPED `backup_restore` (F6 says NOT primary DozerDB deliverable) and INVERTED `monitoring` → `telemetry_disabled` (dozerdb.org disables telemetry, doesn't provide monitoring). ADDED `hardened_containers`. Renamed `enterprise_constraints` → `schema_constraints`. Canonical spec set now matches dozerdb.org verbatim wording (verified against live fetch). NEW: parallel fetch of README AND `https://dozerdb.org/` inside `ground_features()` (the 33-line README is a pointer; the site carries the real feature copy); either surface counts as evidence; matched-keywords are unioned and source_url combines both when both match. NEW: `_html_to_text()` HTML stripper for the site body (no parsing library dependency).
+  - `harness/enterprise_license_grounding.py` (new, shim 10): fetches `https://neo4j.com/open-core-and-neo4j/` and grounds three canonical assertions (CE=GPLv3, EE=commercial, EE source withdrawn since 3.5). AND-semantics on required_keywords per assertion. Emits SYSTEM CORRECTION directive with the neo4j.com URL, listing only ``present`` assertions. Silent no-op on fetch failure. Directly targets Stage 6.3.4e's systematic F3 miss.
+  - `harness/odr.py`: shim 1 vendor-retry cap raised 2 → 3 attempts (Stage 6.3.4e trial 3 hit `KeyError('reflection')` on BOTH original attempts, wiping the trial; the vendor bug is intermittent so a third attempt materially improves survival). NEW shim 10 wired in between shim 9 and rubric critique (guarded by `enable_enterprise_license_grounding`).
+  - `runner.py`: `--no-enterprise-license-grounding` flag; config-summary log line includes the new shim.
+  - `tests/conftest.py` (new): autouse fixture stubs shim 10's live neo4j.com fetch to keep every ODR integration test hermetic. Opt-out marker `@pytest.mark.no_stub_enterprise_license` for tests that exercise shim 10 with custom stubs.
+- **Files touched:**
+  - ops/benchmarks/adr_010/harness/feature_grounding.py
+  - ops/benchmarks/adr_010/harness/enterprise_license_grounding.py (new)
+  - ops/benchmarks/adr_010/harness/odr.py
+  - ops/benchmarks/adr_010/runner.py
+  - ops/benchmarks/adr_010/tests/conftest.py (new)
+  - ops/benchmarks/adr_010/tests/test_feature_grounding.py (rewritten for new specs + site fetch)
+  - ops/benchmarks/adr_010/tests/test_enterprise_license_grounding.py (new)
+  - ops/benchmarks/adr_010/tests/test_odr_retrieval_gate.py (attempts=3 update + new recovery-on-3rd-attempt test)
+  - BUILD_LOG.md, SESSION_HANDOFF.md, DEBUG_LOG.md
+- **Ports / adapters affected:** none (harness-only)
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress (Stage 6.3.4 DoD unchanged). Awaiting Colossus 3-trial run.
+- **Test status:** 181 adr_010 tests pass (was 166). Whole-repo 1167 passed, 19 skipped.
+- **GPU cap:** 450 W persisted (set in prior session's runner change; systemd file at 450 W).

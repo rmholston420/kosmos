@@ -71,56 +71,68 @@ class FeatureSpec:
     keywords: tuple[str, ...]
 
 
-# Canonical DozerDB features per fixture F5/F6. Kept deliberately
-# narrow \u2014 shim 9 is a floor, not a ceiling.
+# Canonical DozerDB features per fixture F5/F6 as actually documented on
+# https://dozerdb.org/#features (Stage 6.3.4f rewrite - 6.3.4e's specs
+# chased README wording that isn't in the 33-line README; the real
+# feature page is the site). Backup/restore is DROPPED: dozerdb.org
+# does not advertise it, and fixture F6 explicitly notes live/hot
+# backups are NOT primary DozerDB deliverables.
 _DOZERDB_FEATURE_SPECS: tuple[FeatureSpec, ...] = (
     FeatureSpec(
         feature_id="multi_database",
-        label="Multi-database support (multiple named databases)",
+        label="Multi-database support (CREATE/DROP/START/STOP DATABASE)",
         keywords=(
             "multi-database",
             "multi database",
+            "multi-db",
             "multiple databases",
             "multiple named databases",
+            "create database",
+            "drop database",
+            "start database",
+            "stop database",
         ),
     ),
     FeatureSpec(
-        feature_id="enterprise_constraints",
+        feature_id="schema_constraints",
         label=(
             "Enterprise-tier schema constraints "
-            "(property-existence, property-type, node/relationship-key uniqueness)"
+            "(property existence, uniqueness)"
         ),
         keywords=(
             "property existence",
             "property-existence",
-            "property type",
-            "property-type",
-            "node key",
-            "node-key",
-            "relationship key",
-            "relationship-key",
-            "enterprise constraint",
-            "enterprise constraints",
+            "uniqueness constraint",
+            "uniqueness constraints",
+            "unique constraint",
+            "schema constraint",
+            "schema constraints",
+            "enterprise schema",
         ),
     ),
     FeatureSpec(
-        feature_id="backup_restore",
-        label="Backup and restore (online/hot backup family)",
+        feature_id="telemetry_disabled",
+        label="Outgoing telemetry / phone-home reporting disabled",
         keywords=(
-            "backup",
-            "restore",
-            "hot backup",
-            "online backup",
+            "telemetry disabled",
+            "phone-home",
+            "phone home",
+            "outgoing metrics",
+            "nothing leaves your network",
+            "air-gapped",
         ),
     ),
     FeatureSpec(
-        feature_id="monitoring",
-        label="Advanced monitoring and diagnostics",
+        feature_id="hardened_containers",
+        label="Security-hardened Docker containers (non-root, minimized deps)",
         keywords=(
-            "monitoring",
-            "diagnostics",
-            "metrics endpoint",
-            "enterprise metrics",
+            "hardened container",
+            "hardened containers",
+            "security-hardened",
+            "security hardened",
+            "non-root execution",
+            "non-root",
+            "vulnerability scanning",
         ),
     ),
 )
@@ -205,6 +217,52 @@ async def _fetch_readme(
     return "", last_url, last_err
 
 
+_HTML_SCRIPT_STYLE_RE = re.compile(
+    r"<(script|style)[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL
+)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_HTML_ENTITY_NUMERIC_RE = re.compile(r"&#\d+;")
+_HTML_WS_RE = re.compile(r"\s+")
+
+
+def _html_to_text(html: str) -> str:
+    """Strip HTML tags/script/style and collapse whitespace.
+
+    Deliberately minimal - shim 9 only needs a linear body to run
+    keyword search across. No parsing library dependency; a leaky
+    tag-strip is acceptable because keyword-search is whitespace-tolerant.
+    """
+    body = _HTML_SCRIPT_STYLE_RE.sub(" ", html)
+    body = _HTML_TAG_RE.sub(" ", body)
+    body = (
+        body.replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&#39;", "'")
+    )
+    body = _HTML_ENTITY_NUMERIC_RE.sub(" ", body)
+    return _HTML_WS_RE.sub(" ", body).strip()
+
+
+async def _fetch_dozerdb_site(
+    client: httpx.AsyncClient, timeout_s: float
+) -> tuple[str, str, str | None]:
+    """Fetch https://dozerdb.org (Stage 6.3.4f). The DozerDB README at
+    HEAD is a 33-line pointer; the actual feature list lives on the
+    site. Returns ``(text_body, source_url, error)``.
+    """
+    url = "https://dozerdb.org/"
+    try:
+        resp = await client.get(url, timeout=timeout_s)
+    except Exception as exc:  # noqa: BLE001
+        return "", url, f"{type(exc).__name__}: {exc}"
+    if resp.status_code != 200 or not resp.text:
+        return "", url, f"HTTP {resp.status_code}"
+    return _html_to_text(resp.text), url, None
+
+
 def _phrase_pattern(needle: str) -> str:
     """Compile a whitespace/hyphen-tolerant regex for a phrase."""
     parts = re.split(r"[\s\-_]+", needle)
@@ -263,17 +321,25 @@ async def ground_features(
         ]
     owner, repo = target
 
-    limits = httpx.Limits(max_connections=2, max_keepalive_connections=2)
+    limits = httpx.Limits(max_connections=4, max_keepalive_connections=4)
     async with httpx.AsyncClient(
         follow_redirects=True,
         timeout=per_request_timeout_s,
         limits=limits,
         headers={"User-Agent": "kosmos-adr010-feature-grounding/1.0"},
     ) as client:
+        # Stage 6.3.4f: fetch README AND dozerdb.org in parallel. The
+        # README alone is a 33-line pointer; the site carries the real
+        # feature copy. Either surface counts as evidence.
         try:
-            body, source_url, err = await asyncio.wait_for(
-                _fetch_readme(client, owner, repo, per_request_timeout_s),
-                timeout=total_timeout_s,
+            (readme_body, readme_url, readme_err), (site_body, site_url, site_err) = (
+                await asyncio.wait_for(
+                    asyncio.gather(
+                        _fetch_readme(client, owner, repo, per_request_timeout_s),
+                        _fetch_dozerdb_site(client, per_request_timeout_s),
+                    ),
+                    timeout=total_timeout_s,
+                )
             )
         except asyncio.TimeoutError:
             logger.warning(
@@ -293,7 +359,12 @@ async def ground_features(
                 for s in specs
             ]
 
-    if err is not None or not body:
+    readme_ok = readme_err is None and bool(readme_body)
+    site_ok = site_err is None and bool(site_body)
+    if not readme_ok and not site_ok:
+        composite_err = readme_err or "empty README"
+        if site_err:
+            composite_err = f"{composite_err}; dozerdb.org: {site_err}"
         return [
             FeatureFact(
                 owner=owner,
@@ -301,15 +372,30 @@ async def ground_features(
                 feature_id=s.feature_id,
                 label=s.label,
                 status=_STATUS_UNKNOWN,
-                source_url=source_url,
-                error=err or "empty README",
+                source_url=readme_url or site_url,
+                error=composite_err,
             )
             for s in specs
         ]
 
     facts: list[FeatureFact] = []
     for spec in specs:
-        hits = _match_keywords(body, spec.keywords)
+        readme_hits = _match_keywords(readme_body, spec.keywords) if readme_ok else []
+        site_hits = _match_keywords(site_body, spec.keywords) if site_ok else []
+        if readme_hits and site_hits:
+            hits = tuple(readme_hits + [k for k in site_hits if k not in readme_hits])
+            source_url = f"{readme_url} + {site_url}"
+        elif readme_hits:
+            hits = tuple(readme_hits)
+            source_url = readme_url
+        elif site_hits:
+            hits = tuple(site_hits)
+            source_url = site_url
+        else:
+            hits = ()
+            # Prefer the site as the citable source when both fetched
+            # cleanly - it's the authoritative feature surface.
+            source_url = site_url if site_ok else readme_url
         status = _STATUS_PRESENT if hits else _STATUS_ABSENT
         facts.append(
             FeatureFact(
@@ -319,7 +405,7 @@ async def ground_features(
                 label=spec.label,
                 status=status,
                 source_url=source_url,
-                matched_keywords=tuple(hits),
+                matched_keywords=hits,
             )
         )
     return facts

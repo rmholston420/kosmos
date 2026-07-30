@@ -25,7 +25,14 @@ from pathlib import Path
 from typing import Any
 
 from ..metrics import TrialMetrics
-from . import claim_support, cove, feature_grounding, license_grounding, rubric_critique
+from . import (
+    claim_support,
+    cove,
+    enterprise_license_grounding,
+    feature_grounding,
+    license_grounding,
+    rubric_critique,
+)
 from .prompts import (
     KOSMOS_MCP_PROMPT,
     build_anchored_user_turn,
@@ -129,6 +136,7 @@ async def run_odr_trial(
     enable_fact_check: bool = True,
     enable_license_grounding: bool = True,
     enable_feature_grounding: bool = True,
+    enable_enterprise_license_grounding: bool = True,
     enable_rubric_critique: bool = True,
     rubric_lines: list[str] | None = None,
     enable_cove: bool = True,
@@ -266,13 +274,16 @@ async def run_odr_trial(
     last_exc: Exception | None = None
     attempts: list[dict] = []
 
-    # ---- Shim 1: vendor-bug retry (max 2 attempts) ----
+    # ---- Shim 1: vendor-bug retry (max 3 attempts, Stage 6.3.4f) ----
     # A ThermalAbort is NEVER retried — the physical envelope is what it
     # is, and re-attempting will just re-breach. Vendor bugs are retried
-    # once. This is the difference between a schema-drift bug (retriable)
-    # and a real-world constraint (not).
+    # up to twice. Stage 6.3.4e trial 3 hit KeyError('reflection') from
+    # open-deep-research d337ae3 on BOTH original attempts, wiping the
+    # trial. Bumping to 3 attempts (2 retries) reduces vendor-error trial
+    # rate against that intermittent OSS bug without changing behavior
+    # on non-vendor failures. DEBUG_LOG 2026-07-30 14:49 EDT.
     thermal_aborted = False
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             result = await _invoke_once(anchored_question)
             attempts.append({"attempt": attempt + 1, "outcome": "ok"})
@@ -624,6 +635,68 @@ async def run_odr_trial(
                 shim_events.append(
                     {
                         "shim": "feature_grounding",
+                        "outcome": "error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+
+        # ---- Shim 10: Enterprise-license grounding (Stage 6.3.4f) ----
+        # Stage 6.3.4e trials systematically missed F3 (Neo4j Enterprise
+        # is commercial, source withdrawn since 3.5). Shim 4 only covers
+        # per-repo LICENSE files, and there is no public repo for
+        # closed Enterprise binaries. Shim 10 fetches the Neo4j FAQ page
+        # and injects the three canonical license-posture assertions as
+        # a SYSTEM CORRECTION directive. Cheap: one HTTP GET, no LLM
+        # invocation unless assertions ground.
+        if (
+            enable_enterprise_license_grounding
+            and current_report
+            and not thermal_aborted
+        ):
+            try:
+                license_facts = await enterprise_license_grounding.ground_enterprise_license()
+                directive = enterprise_license_grounding.build_enterprise_license_directive(
+                    license_facts
+                )
+                shim_events.append(
+                    {
+                        "shim": "enterprise_license_grounding",
+                        "facts": [
+                            {
+                                "assertion_id": f.assertion_id,
+                                "status": f.status,
+                                "source_url": f.source_url,
+                                "matched_keywords": list(f.matched_keywords),
+                                "error": f.error,
+                            }
+                            for f in license_facts
+                        ],
+                        "directive_emitted": bool(directive),
+                    }
+                )
+                if directive:
+                    correction_turn = directive + "\n\n" + anchored_question
+                    try:
+                        retry_result = await _invoke_with_vendor_retry(correction_turn)
+                    except ThermalAbort as exc:
+                        shim_events[-1]["retry_outcome"] = "thermal_abort"
+                        shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                        thermal_aborted = True
+                    except Exception as exc:  # noqa: BLE001
+                        shim_events[-1]["retry_outcome"] = "retry_failed"
+                        shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                    else:
+                        shim_events[-1]["retry_outcome"] = "retry_ok"
+                        result = retry_result
+                        current_report = str(result.get("final_report", ""))
+                        current_notes = result.get("raw_notes") or []
+                        current_notes_text = "\n".join(
+                            str(n) for n in current_notes if n is not None
+                        )
+            except Exception as exc:  # noqa: BLE001
+                shim_events.append(
+                    {
+                        "shim": "enterprise_license_grounding",
                         "outcome": "error",
                         "error": f"{type(exc).__name__}: {exc}",
                     }

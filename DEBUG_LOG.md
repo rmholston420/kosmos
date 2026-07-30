@@ -226,3 +226,30 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:** ops/benchmarks/adr_010/harness/feature_grounding.py
 - **Related BUILD_LOG entry:** 2026-07-30 15:59 EDT
 
+
+## 2026-07-30 16:32 EDT — Shim 9 canonical spec chased README wording that isn't in the 33-line DozerDB README
+
+- **Symptom:** In Stage 6.3.4e Colossus trials, shim 9 fetched DozerDB README HEAD successfully (HTTP 200) but returned `status="absent"` and `matched_keywords=[]` for ALL 4 features; `directive_emitted=False`. Reports still missed F5 (feature list incomplete) and cited backup/restore which isn't a DozerDB feature per the site.
+- **Affected stage / plugin / port:** Stage 6.3.4e · ADR-010 harness · shim 9 (feature_grounding)
+- **Root cause:** Two compounding errors:
+  (a) The DozerDB README at HEAD is 33 lines and says nothing about features — it just points at https://dozerdb.org for the real feature list. The canonical spec set assumed README-like feature paragraphs.
+  (b) The spec included `backup_restore` and `monitoring` — neither is on dozerdb.org. Fixture F6 explicitly says live/hot backups are NOT primary DozerDB deliverables; the site advertises telemetry-DISABLED (opposite of monitoring).
+- **Fix applied:** Stage 6.3.4f — DROP backup_restore, replace monitoring with telemetry_disabled, ADD hardened_containers, rename enterprise_constraints → schema_constraints. Canonical spec now matches dozerdb.org verbatim (multi_database: CREATE/DROP/START/STOP DATABASE; schema_constraints: property existence + uniqueness; telemetry_disabled: phone-home off; hardened_containers: non-root + vulnerability scanning). `ground_features()` now fetches README AND https://dozerdb.org/ in parallel; either surface counts as evidence; matched-keywords are unioned and source_url records both when both match.
+- **Files changed:**
+  - ops/benchmarks/adr_010/harness/feature_grounding.py (spec rewrite + site fetch + HTML strip)
+  - ops/benchmarks/adr_010/tests/test_feature_grounding.py (rewritten)
+- **Related BUILD_LOG entry:** 2026-07-30 16:32 EDT
+
+## 2026-07-30 16:32 EDT — Stage 6.3.4e reports systematically missed F3 (Neo4j Enterprise license posture)
+
+- **Symptom:** Reports mentioned Neo4j Community Edition as GPLv3 but said NOTHING about (i) Enterprise Edition being under a commercial (proprietary) license, or (ii) Enterprise source not being published on GitHub since Neo4j 3.5 (November 2018). Blind-rating F3 = 0/6 on both surviving trials.
+- **Affected stage / plugin / port:** Stage 6.3.4e · ADR-010 harness · no shim covered this
+- **Root cause:** Shim 4 grounds only GitHub `LICENSE` files. There is no public repo for the closed Enterprise binary — the canonical license posture lives on Neo4j's public FAQ page (https://neo4j.com/open-core-and-neo4j/), and no shim fetched it. The model's parametric knowledge did not surface the 3.5 source-withdrawal detail unprompted.
+- **Fix applied:** Stage 6.3.4f — new shim 10 (`enterprise_license_grounding.py`) fetches the FAQ page, verifies three canonical assertions with AND-semantics on required keywords ("Community Edition" + "GPLv3"; "Enterprise Edition" + "commercial license"; "3.5" + "Enterprise"), and injects a SYSTEM CORRECTION directive citing the FAQ URL. Silent no-op on fetch failure or when no assertion grounds.
+- **Files changed:**
+  - ops/benchmarks/adr_010/harness/enterprise_license_grounding.py (new)
+  - ops/benchmarks/adr_010/harness/odr.py (wire shim 10)
+  - ops/benchmarks/adr_010/runner.py (--no-enterprise-license-grounding flag)
+  - ops/benchmarks/adr_010/tests/test_enterprise_license_grounding.py (new)
+  - ops/benchmarks/adr_010/tests/conftest.py (new — hermetic default)
+- **Related BUILD_LOG entry:** 2026-07-30 16:32 EDT

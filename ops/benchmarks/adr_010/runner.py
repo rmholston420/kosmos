@@ -169,6 +169,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--no-enterprise-license-grounding",
+        action="store_true",
+        help=(
+            "disable Stage 6.3.4f shim 10 (fetches the Neo4j open-core FAQ "
+            "and injects the CE=GPLv3 / EE=commercial / EE-source-withdrawn-"
+            "since-3.5 assertions as a SYSTEM CORRECTION)."
+        ),
+    )
+    parser.add_argument(
         "--no-rubric-critique",
         action="store_true",
         help=(
@@ -370,6 +379,9 @@ async def run_odr(
                     enable_fact_check=not args.no_fact_check,
                     enable_license_grounding=not args.no_license_grounding,
                     enable_feature_grounding=not args.no_feature_grounding,
+                    enable_enterprise_license_grounding=(
+                        not args.no_enterprise_license_grounding
+                    ),
                     enable_rubric_critique=(
                         not args.no_rubric_critique and bool(rubric_lines)
                     ),
@@ -565,10 +577,11 @@ def main() -> int:
     rubric_lines = build_rubric_lines_from_facts(canonical_facts)
     logger.info(
         "Stage 6.3.4 shims: license_grounding=%s feature_grounding=%s "
-        "rubric_critique=%s cove=%s claim_support_gate=%s n_consistency=%d "
-        "rubric_points=%d",
+        "enterprise_license_grounding=%s rubric_critique=%s cove=%s "
+        "claim_support_gate=%s n_consistency=%d rubric_points=%d",
         not args.no_license_grounding,
         not args.no_feature_grounding,
+        not args.no_enterprise_license_grounding,
         not args.no_rubric_critique and bool(rubric_lines),
         not args.no_cove,
         not args.no_claim_support_gate,
