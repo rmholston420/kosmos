@@ -308,7 +308,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-010 | AREX / Open Deep Research as Zetesis / Context Budget Manager Vendor Candidates | **OPEN — head-to-head eval pre-Phase-6.2** | Phase 6.2 |
 | ADR-011 | a2a-sdk as Koinonia Transport | **Ratified v25** | Phase 6.3 |
 | ADR-012 | Rigpa-LMS `ollama.py`/`searxng.py` Consolidation | **Ratified v25** | Stage 1.1 |
-| ADR-013 | Rigpa-LMS `memory/bridge.py` vs. Gnosis Provenance Schema Redundancy Resolution | **Ratified v25** | Stage 1 pre-Phase-2 |
+| ADR-013 | Rigpa-LMS `memory/bridge.py` vs. Gnosis Provenance Schema Redundancy Resolution | **LOCKED** (2026-07-29 · Gnosis schema won 6/6; comparison in `docs/memory-bridge-comparison.md`) | Stage 1.9 |
 | ADR-014 | UI Parity Standing Rule | Ratified (v24) | Every phase after Tektos Phase 2 |
 | ADR-015 | Oikos-Ahead-of-Zetesis Build Sequencing | Ratified (v24) | Stage 5 |
 | ADR-016 | Knowsys–Gnosis Merge | Ratified (v24) | Phase 3.3 |

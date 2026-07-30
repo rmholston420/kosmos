@@ -21,7 +21,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-010 | `ADR-010-zetesis-inner-loop-eval.md` | AREX vs. Open Deep Research inner loop | **OPEN — head-to-head pre-Phase-6.2** | Phase 6.2 |
 | ADR-011 | `ADR-011-a2a-sdk-koinonia-transport.md` | a2a-sdk standalone transport for Koinonia | **Ratified v25** | Phase 6.3 |
 | ADR-012 | `ADR-012-donor-adapter-consolidation.md` | Consolidate ollama.py/searxng.py duplicates | **Ratified v25** | Stage 1.1 |
-| ADR-013 | `ADR-013-memory-bridge-selection.md` | Choose memory/bridge.py vs. Gnosis schema | **Ratified v25** | Stage 1 pre-Phase-2 |
+| ADR-013 | `ADR-013-memory-bridge-selection.md` | Choose memory/bridge.py vs. Gnosis schema | **LOCKED** · Gnosis schema (6/6) · 2026-07-29 | Stage 1.9 |
 | ADR-014 | `ADR-014-ui-parity-rule.md` | UI Parity standing rule | Ratified (v24) | Every phase after Tektos Phase 2 |
 | ADR-015 | `ADR-015-oikos-before-zetesis.md` | Oikos ahead of Zetesis sequencing | Ratified (v24) | Stage 5 |
 | ADR-016 | `ADR-016-knowsys-gnosis-merge.md` | Knowsys merged into Gnosis | Ratified (v24) | Phase 3.3 |

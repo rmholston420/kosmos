@@ -1,6 +1,8 @@
 # ADR-013 — Rigpa-LMS `memory/bridge.py` vs. Gnosis Provenance Schema Redundancy Resolution
 
-**Status:** Ratified v25 · **Lock-in phase:** Stage 1 pre-Phase-2
+> **STATUS AMENDMENT (2026-07-29 EDT):** Comparison procedure complete. **Gnosis provenance schema wins 6/6 axes** (Rigpa `MemoryBridge` scored strictly higher on 0/6 axes; ADR-013 selection-rule threshold of 4/6 not met). Winning implementation was already shipped in Kosmos Stage 1.8 as `ports/memory.py` + `adapters/memory/dozerdb/` (commit `0e77199`, ADR-027). Full evidence in [`docs/memory-bridge-comparison.md`](../memory-bridge-comparison.md). Preserved lessons from the loser documented in §5 of the comparison doc; Rigpa donor **pattern** (async driver singleton + Cypher-per-verb) remains VENDORED, Rigpa **write schema** is rejected.
+
+**Status:** **LOCKED** · 2026-07-29 EDT · verdict: Gnosis schema · **Lock-in phase:** Stage 1.9 (post-Stage 1.8 MemoryPort landing)
 
 ## Context
 
