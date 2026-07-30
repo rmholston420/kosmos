@@ -663,17 +663,25 @@
 - **ADR:** ADR-036
 - **Logged:** 2026-07-30 00:52 EDT
 
-#### MCP python-sdk — `PLANNED`
+#### MCP python-sdk — `PATTERN-VENDORED`
 - **Source:** https://github.com/modelcontextprotocol/python-sdk
+- **Commit / Version:** `a4f4ccd091138771535e17191123f20b30fda68e`
 - **License:** MIT
-- **Port(s):** EventBusPort (bridged)
-- **Logged:** —
+- **Kosmos location:** `ports/mcp.py` (Protocol + value objects, `MCP_PROTOCOL_VERSION="2024-11-05"`), `adapters/mcp/in_process/adapter.py` (in-process `MCPServer`), `adapters/mcp/stdio/adapter.py` (JSON-RPC-over-stdio client)
+- **Port(s):** `MCPPort` (new at Stage 3.2)
+- **Modifications:** PATTERN-VENDORED — no upstream source copied. Client-side JSON-RPC verbs (`initialize`, `tools/list`, `tools/call`) reimplemented from scratch behind `MCPPort` Protocol; zero new pip deps. In-process adapter added for deterministic tests; `MCPServer` Protocol added so plugins can provide fakes.
+- **ADR:** ADR-037
+- **Logged:** 2026-07-30 01:15 EDT
 
-#### Playwright-MCP — `PLANNED`
+#### Playwright-MCP — `PATTERN-VENDORED`
 - **Source:** https://github.com/microsoft/playwright-mcp
+- **Commit / Version:** `55679f5f3d4b4f3e2534ec0ce2fc5683ba2eaf3f` (real subprocess); `plugins/tektos/mcp/fake_playwright_server.py` for deterministic tests
 - **License:** Apache-2.0
-- **Port(s):** via MCP → EventBus
-- **Logged:** —
+- **Kosmos location:** `plugins/tektos/mcp/fake_playwright_server.py` (deterministic in-process fake with `browser_navigate` + `browser_snapshot` + `.invocations` recording); `adapters/mcp/stdio/adapter.py::playwright_stdio_adapter()` factory (spawns `npx -y @playwright/mcp@latest`); env-gated real integration test at `plugins/tektos/tests/test_playwright_stdio_integration.py`
+- **Port(s):** `MCPPort` (consumed by `TektosAgent.call_tool`)
+- **Modifications:** PATTERN-VENDORED — no upstream source copied. Real subprocess launched via `npx` when `KOSMOS_STAGE_32_REAL_PLAYWRIGHT=1`; not part of `make stage1-gate`. Fake server hard-codes tool schemas for `browser_navigate` / `browser_snapshot` and records invocations for test assertions.
+- **ADR:** ADR-037
+- **Logged:** 2026-07-30 01:15 EDT
 
 #### aider repomap — `PLANNED`
 - **Source:** https://github.com/Aider-AI/aider (extract `repomap.py` module)

@@ -1,6 +1,14 @@
 # ADR-036 — Tektos OpenHands SDK Vendoring (Stage 3.1)
 
-**Status:** Ratified v25
+> **STATUS AMENDMENT (2026-07-30):** The Q5=B stub-deletion trigger
+> has fired at Stage 3.2 landing. `plugins/tektos/stub/` (containing
+> `TektosSimulator`) has been removed. The Stage-2.4 exit-gate test
+> (`plugins/tektos/tests/test_stage_2_4_exit_gate.py`) is now driven
+> by the real `TektosAgent.call_tool` path over an in-process fake
+> Playwright MCP server — the trace-emission contract Phrouros relies
+> on is unchanged. See ADR-037 for details.
+
+**Status:** Ratified v25 · Q5=B trigger fired at Stage 3.2 (see ADR-037)
 **Lock-in phase:** Stage 3.1
 **Supersedes:** —
 

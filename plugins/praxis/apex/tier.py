@@ -1,8 +1,10 @@
-"""ChangeApprovalTier enum — Kosmos-Build-Spec-v25 §14 governance ladder.
+"""ChangeApprovalTier — re-export from ``ports.approval`` (ADR-037 §Q5).
 
-Ported verbatim from Rigpa-LMS
-``backend/src/rigpa/domains/apex/protocols.py::ChangeApprovalTier``
-(three-tier ladder locked in by ADR-033).
+The enum was promoted to ``ports/approval.py`` at Stage 3.2 (ADR-037)
+so cross-plugin consumers (Tektos, Forge-OH, Neurolink) can import it
+from a formal port surface per ADR-007. This module re-exports for
+backwards compatibility — every existing APEX import path continues
+to work unchanged.
 
 Tier semantics (from spec §14):
 
@@ -18,18 +20,6 @@ Tier semantics (from spec §14):
 
 from __future__ import annotations
 
-from enum import Enum
+from ports.approval import ChangeApprovalTier
 
 __all__ = ["ChangeApprovalTier"]
-
-
-class ChangeApprovalTier(str, Enum):
-    """Three-tier approval protocol for Intention mutations (ADR-033).
-
-    ``str, Enum`` so JSON serialization is stable and comparable to
-    Rigpa donor rows without translation.
-    """
-
-    AUTONOMOUS = "AUTONOMOUS"
-    HUMAN_REVIEW = "HUMAN_REVIEW"
-    HUMAN_REQUIRED = "HUMAN_REQUIRED"

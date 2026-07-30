@@ -1,6 +1,18 @@
 # ADR-033 — APEX Change Approval Tier engine
 
-**Status:** Ratified v25
+> **STATUS AMENDMENT (2026-07-30):** ADR-037 (Stage 3.2) promotes
+> `ChangeApprovalTier` and a narrow propose-only `ApprovalGatewayPort`
+> Protocol from `plugins/praxis/apex/tier.py` + `.../protocol.py` to
+> `ports/approval.py`, keeping this ADR's decisions load-bearing while
+> letting non-Praxis plugins (Tektos at 3.2, others downstream) gate
+> actions through APEX without violating ADR-007. `plugins/praxis/apex/tier.py`
+> now re-exports the enum from `ports.approval` so every existing APEX
+> import path continues working. The full `ChangeApprovalProtocol`
+> (propose + resolve + list_pending + get_by_id + list_by_intention)
+> stays inside Praxis; only the propose-only surface is public. See
+> ADR-037 for details.
+
+**Status:** Ratified v25 · amended by ADR-037 (Stage 3.2)
 **Lock-in phase:** Stage 2.2 · APEX Change Approval Tier engine · governance kernel-wide gate
 **Supersedes:** —
 

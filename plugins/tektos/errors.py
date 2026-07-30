@@ -28,3 +28,33 @@ class TektosInvalidConfidenceError(TektosError):
     outside ``(0.0, 1.0]``. The port-level guard on
     :meth:`MemoryPort.write_event` would also reject the value, but
     Tektos fails fast with a domain-specific error."""
+
+
+class TektosToolCallPending(TektosError):
+    """Raised by :meth:`TektosAgent.call_tool` when the mapped
+    :class:`ChangeApprovalTier` for the tool is ``HUMAN_REVIEW`` or
+    ``HUMAN_REQUIRED`` and the resulting APEX record is PENDING at
+    Stage 3.2. Callers resolve the approval on a subsequent turn.
+
+    Attributes:
+        approval_id: The APEX approval record id awaiting resolution.
+        tool_name: The MCP tool that was proposed.
+    """
+
+    def __init__(self, message: str, *, approval_id: str, tool_name: str) -> None:
+        super().__init__(message)
+        self.approval_id = approval_id
+        self.tool_name = tool_name
+
+
+class TektosToolCallDenied(TektosError):
+    """Raised by :meth:`TektosAgent.call_tool` when a mapped tool call
+    has been resolved by APEX with ``approved=False``. Stage 3.2 does
+    not reach this path in the DoD test (the DoD uses AUTONOMOUS tier);
+    the class is defined here so Stage 3.5+ resolution flows have a
+    stable error surface."""
+
+    def __init__(self, message: str, *, approval_id: str, tool_name: str) -> None:
+        super().__init__(message)
+        self.approval_id = approval_id
+        self.tool_name = tool_name

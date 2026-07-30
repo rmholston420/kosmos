@@ -5,9 +5,15 @@ AnomalyBridge translates → APEX creates HUMAN_REQUIRED PENDING record →
 user notified (algedonic-cadence scheduler entry queued).
 
 This file is the **single source of truth** for the Stage-2 exit-gate
-scenario. It wires the full stack:
+scenario. Stage 3.2 (ADR-037 Q4=A) rewired the trace source from the
+now-deleted ``TektosSimulator`` stub to the real
+:class:`~plugins.tektos.agent.TektosAgent` backed by an
+in-process fake Playwright MCP server
+(:class:`~plugins.tektos.mcp.FakePlaywrightServer`). The rest of the
+Stage-2.4 pipeline (Phrouros detectors → AnomalyBridge → APEX →
+notification cadence) is unchanged:
 
-    TektosSimulator ─▶ InMemoryTraceFeedAdapter ─▶ PhrourosEngine
+    TektosAgent.call_tool ─▶ InMemoryTraceFeedAdapter ─▶ PhrourosEngine
                                                         │
                                                         ▼
                                        (loop + unauthorized detectors)
@@ -54,7 +60,12 @@ from plugins.praxis.apex.bridge import (
     EVENT_PRAXIS_ESCALATION_PROPOSED,
     AnomalyBridge,
 )
-from plugins.tektos.stub import TektosSimulator
+from adapters.mcp.in_process import InProcessMCPAdapter
+from plugins.tektos import (
+    FakePlaywrightServer,
+    TektosAgent,
+    TektosToolCallPending,
+)
 from ports.event_envelope import EventEnvelope
 from ports.notification import AlgedonicReceipt, AlgedonicTier
 from ports.resource import (
@@ -209,6 +220,86 @@ class _FakeResourcePort:
         pass
 
 
+# ── Minimal LLM + Memory doubles for the real TektosAgent (ADR-037 Q4=A) ──
+
+
+class _FakeLLM:
+    """LLMPort double that raises if used. Gate test exercises only
+    :meth:`TektosAgent.call_tool`, never :meth:`run` (which would touch
+    the LLM). Any accidental LLM traffic in the gate stack surfaces here."""
+
+    async def generate(self, **_: Any) -> dict[str, Any]:  # pragma: no cover
+        raise AssertionError("gate test must not hit LLM.generate")
+
+    async def generate_text(self, **_: Any) -> str:  # pragma: no cover
+        raise AssertionError("gate test must not hit LLM.generate_text")
+
+    def generate_stream(self, **_: Any) -> Any:  # pragma: no cover
+        raise AssertionError("gate test must not hit LLM.generate_stream")
+
+    async def list_models(self) -> list[str]:  # pragma: no cover
+        return []
+
+    async def pull_model(self, **_: Any) -> None:  # pragma: no cover
+        pass
+
+    async def delete_model(self, **_: Any) -> None:  # pragma: no cover
+        pass
+
+    def is_healthy(self) -> bool:
+        return True
+
+
+class _FakeMemory:
+    """MemoryPort double that records writes; empty temporal queries.
+
+    Deliberately does not enforce the zero-trust provenance/confidence
+    check — real DozerDB adapter does; the gate test just needs a
+    successful write to unwedge :meth:`TektosAgent.call_tool`.
+    """
+
+    def __init__(self) -> None:
+        self.writes: list[dict[str, Any]] = []
+
+    async def write_event(
+        self,
+        subject: str,
+        predicate: str,
+        object: str,
+        *,
+        provenance: str,
+        confidence: float,
+        source_citation: str | None = None,
+        pii_tier: str = "Public",
+        attributes: dict[str, Any] | None = None,
+    ) -> Any:
+        self.writes.append(
+            {
+                "subject": subject,
+                "predicate": predicate,
+                "object": object,
+                "provenance": provenance,
+                "confidence": confidence,
+                "attributes": dict(attributes or {}),
+            }
+        )
+        # Return a stand-in duck-typed MemoryEventId.
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            id=f"mem-{len(self.writes)}",
+            written_at=datetime.now(timezone.utc),
+        )
+
+    async def query_temporal(self, *_: Any, **__: Any) -> list[Any]:
+        return []
+
+    async def link_entities(self, *_: Any, **__: Any) -> None:
+        pass
+
+    def is_healthy(self) -> bool:
+        return True
+
+
 # ── Fixture: full Stage-2.4 stack ────────────────────────────────────
 
 
@@ -247,7 +338,18 @@ def _build_stack(
     )
     bridge = AnomalyBridge(event_bus=bus, change_approval=apex)
 
-    simulator = TektosSimulator(trace_feed=trace_feed)
+    # Stage 3.2 (ADR-037 Q4=A): real TektosAgent + in-process fake MCP
+    # server replace the removed TektosSimulator stub. FakeLLM +
+    # FakeMemory doubles are minimal — the gate test exercises the
+    # tool-call path only, never `send_message`/`run` (LLM turns).
+    mcp_adapter = InProcessMCPAdapter(server=FakePlaywrightServer())
+    tektos = TektosAgent(
+        llm=_FakeLLM(),
+        memory=_FakeMemory(),
+        mcp=mcp_adapter,
+        apex=apex,
+        trace_feed=trace_feed,
+    )
 
     return {
         "bus": bus,
@@ -258,8 +360,69 @@ def _build_stack(
         "apex": apex,
         "bridge": bridge,
         "scheduler": scheduler,
-        "simulator": simulator,
+        "tektos": tektos,
+        "mcp": mcp_adapter,
     }
+
+
+# ── Tektos-side helpers (ADR-037 Q4=A) ────────────────────────────────
+
+
+async def _emit_tool_call(
+    tektos: TektosAgent,
+    *,
+    tool_name: str,
+    trace_id: str | None = None,
+) -> None:
+    """Invoke a real ``TektosAgent.call_tool`` for the gate test.
+
+    The tool call always goes through APEX propose(); at Stage 3.2 the
+    tier map returns HUMAN_REQUIRED for tools it doesn't know (e.g.
+    ``rm_rf_slash``, ``read_file``), so we catch the pending exception
+    silently. The gate test only cares about the TraceEvent that fires
+    **before** the APEX gate — Phrouros consumes that.
+    """
+    # Initialize MCP adapter lazily (idempotent).
+    if not tektos.mcp.is_healthy():
+        await tektos.mcp.initialize(
+            client_name="kosmos-tektos-stage24-gate", client_version="3.2"
+        )
+    try:
+        await tektos.call_tool(
+            tool_name,
+            {"note": "stage-2.4 gate synthetic"},
+            turn_id=trace_id,
+        )
+    except TektosToolCallPending:
+        # Expected: unmapped tools fall through to HUMAN_REQUIRED.
+        pass
+
+
+async def _emit_tool_loop(
+    tektos: TektosAgent,
+    *,
+    tool_name: str,
+    count: int,
+    trace_id: str,
+) -> None:
+    """Emit ``count`` TraceEvents sharing a single ``trace_id``.
+
+    Reuses the same ``turn_id`` across every call so LoopDetector can
+    correlate on ``(plugin, tool_name, trace_id)``.
+    """
+    if not tektos.mcp.is_healthy():
+        await tektos.mcp.initialize(
+            client_name="kosmos-tektos-stage24-gate", client_version="3.2"
+        )
+    for _ in range(count):
+        try:
+            await tektos.call_tool(
+                tool_name,
+                {"note": "loop"},
+                turn_id=trace_id,
+            )
+        except TektosToolCallPending:
+            pass
 
 
 async def _wait_for(condition, *, timeout: float = 1.0) -> bool:
@@ -302,14 +465,18 @@ class TestStage24ExitGate:
         bus: _InMemoryEventBus = stack["bus"]
         notification: _FakeNotificationPort = stack["notification"]
         scheduler: FakeScheduler = stack["scheduler"]
-        simulator: TektosSimulator = stack["simulator"]
+        tektos: TektosAgent = stack["tektos"]
 
         # Start the pipeline.
         await phrouros.start()
         await bridge.start()
         try:
-            # 1. Tektos publishes an unauthorized tool call.
-            event = await simulator.simulate_unauthorized_call(
+            # 1. Tektos publishes an unauthorized tool call via the real
+            #    TektosAgent.call_tool path (ADR-037 Q4=A). The trace fires
+            #    BEFORE the APEX gate raises TektosToolCallPending, which
+            #    _emit_tool_call absorbs silently.
+            await _emit_tool_call(
+                tektos,
                 tool_name="rm_rf_slash",
                 trace_id="dod-trace-1",
             )
@@ -337,10 +504,16 @@ class TestStage24ExitGate:
                 "AnomalyBridge must publish praxis.escalation.proposed"
             )
 
-            # 4. APEX has a PENDING HUMAN_REQUIRED record.
+            # 4. APEX has a PENDING HUMAN_REQUIRED record from Phrouros
+            #    (Stage 3.2: Tektos also proposes on its own tool-call
+            #    path, which is real-world behavior, not test noise;
+            #    filter to the phrouros-domain records the DoD asserts).
             pending = await apex.list_pending()
-            assert len(pending) == 1
-            record = pending[0]
+            phrouros_records = tuple(
+                r for r in pending if r.proposing_domain == "phrouros"
+            )
+            assert len(phrouros_records) == 1
+            record = phrouros_records[0]
             assert record.tier is ChangeApprovalTier.HUMAN_REQUIRED
             assert record.status is ApprovalStatus.PENDING
             assert record.proposing_domain == "phrouros"
@@ -372,7 +545,7 @@ class TestStage24ExitGate:
         phrouros: PhrourosEngine = stack["phrouros"]
         bridge: AnomalyBridge = stack["bridge"]
         bus: _InMemoryEventBus = stack["bus"]
-        simulator: TektosSimulator = stack["simulator"]
+        tektos: TektosAgent = stack["tektos"]
 
         await phrouros.start()
         await bridge.start()
@@ -380,14 +553,15 @@ class TestStage24ExitGate:
             # LoopDetector path: 5 identical authorized calls on one trace.
             # UnauthorizedToolDetector must NOT fire here (read_file is
             # in the allowlist) so only LoopDetector raises.
-            await simulator.simulate_loop(
+            await _emit_tool_loop(
+                tektos,
                 tool_name="read_file",
                 count=5,
-                window_seconds=1.0,
                 trace_id="loop-trace",
             )
             # UnauthorizedToolDetector path: one call to a non-allowed tool.
-            await simulator.simulate_unauthorized_call(
+            await _emit_tool_call(
+                tektos,
                 tool_name="rm_rf_slash",
                 trace_id="unauth-trace",
             )
@@ -401,16 +575,22 @@ class TestStage24ExitGate:
             assert AnomalyKind.LOOP.value in kinds
             assert AnomalyKind.UNAUTHORIZED_TOOL.value in kinds
 
-            # Two anomalies → two APEX PENDING records via bridge.
+            # Two anomalies → two APEX PENDING records via bridge
+            # (filter to Phrouros domain; Tektos also proposes on the
+            # 6 loop+1 unauth call path).
             apex: KernelChangeApprovalAdapter = stack["apex"]
             propose_ready = await _wait_for(
                 lambda: len(bus.by_type(EVENT_PRAXIS_ESCALATION_PROPOSED)) >= 2
             )
             assert propose_ready
             pending = await apex.list_pending()
-            assert len(pending) == 2
+            phrouros_records = tuple(
+                r for r in pending if r.proposing_domain == "phrouros"
+            )
+            assert len(phrouros_records) == 2
             assert all(
-                r.tier is ChangeApprovalTier.HUMAN_REQUIRED for r in pending
+                r.tier is ChangeApprovalTier.HUMAN_REQUIRED
+                for r in phrouros_records
             )
         finally:
             await bridge.stop()
@@ -424,73 +604,80 @@ class TestStage24ExitGate:
         phrouros: PhrourosEngine = stack["phrouros"]
         bridge: AnomalyBridge = stack["bridge"]
         bus: _InMemoryEventBus = stack["bus"]
-        simulator: TektosSimulator = stack["simulator"]
+        tektos: TektosAgent = stack["tektos"]
 
         await phrouros.start()
         await bridge.start()
         try:
-            await simulator.simulate_authorized_call(tool_name="read_file")
+            await _emit_tool_call(tektos, tool_name="read_file")
             # Give the pipeline a moment; nothing should propagate.
             for _ in range(10):
                 await asyncio.sleep(0.01)
             assert bus.by_type(EVENT_PHROUROS_ANOMALY_DETECTED) == []
             assert bus.by_type(EVENT_PRAXIS_ESCALATION_PROPOSED) == []
             apex: KernelChangeApprovalAdapter = stack["apex"]
-            assert await apex.list_pending() == ()
+            # Phrouros never proposed (allowlist prevented false positive).
+            # Tektos always proposes when call_tool is invoked; filter it out.
+            pending = await apex.list_pending()
+            phrouros_records = tuple(
+                r for r in pending if r.proposing_domain == "phrouros"
+            )
+            assert phrouros_records == ()
         finally:
             await bridge.stop()
             await phrouros.stop()
 
 
-class TestTektosSimulator:
-    """Unit-level sanity for the stub (ADR-035 Q6=A)."""
+class TestTektosAgentTraceEmission:
+    """Stage 3.2 (ADR-037) — real-agent trace-emission smoke tests.
 
-    async def test_simulate_unauthorized_call_publishes_trace_event(self) -> None:
-        feed = InMemoryTraceFeedAdapter()
+    Replaces the deleted ``TestTektosSimulator`` class. Verifies the
+    trace-feed publishing contract that the Stage-2.4 exit-gate relies
+    on: :meth:`TektosAgent.call_tool` publishes a
+    :class:`TraceEvent(plugin="tektos", tool_name=...)` on the injected
+    trace feed **before** the APEX gate resolves.
+    """
+
+    async def test_call_tool_publishes_trace_event_before_apex_gate(
+        self,
+    ) -> None:
+        stack = _build_stack()
+        trace_feed = stack["trace_feed"]
+        tektos: TektosAgent = stack["tektos"]
         received: list[Any] = []
 
         async def _handler(evt):  # type: ignore[no-untyped-def]
             received.append(evt)
 
-        sub = await feed.subscribe(_handler)
+        sub = await trace_feed.subscribe(_handler)
         try:
-            sim = TektosSimulator(trace_feed=feed)
-            evt = await sim.simulate_unauthorized_call(tool_name="bad_tool")
+            await _emit_tool_call(tektos, tool_name="bad_tool")
+            assert len(received) == 1
+            evt = received[0]
             assert evt.plugin == "tektos"
             assert evt.tool_name == "bad_tool"
-            assert len(received) == 1
         finally:
-            await feed.unsubscribe(sub)
+            await trace_feed.unsubscribe(sub)
 
-    async def test_simulate_loop_publishes_count_events(self) -> None:
-        feed = InMemoryTraceFeedAdapter()
+    async def test_loop_emission_shares_trace_id(self) -> None:
+        stack = _build_stack()
+        trace_feed = stack["trace_feed"]
+        tektos: TektosAgent = stack["tektos"]
         received: list[Any] = []
 
         async def _handler(evt):  # type: ignore[no-untyped-def]
             received.append(evt)
 
-        sub = await feed.subscribe(_handler)
+        sub = await trace_feed.subscribe(_handler)
         try:
-            sim = TektosSimulator(trace_feed=feed)
-            events = await sim.simulate_loop(
+            await _emit_tool_loop(
+                tektos,
                 tool_name="looper",
                 count=5,
-                window_seconds=1.0,
                 trace_id="loop-t",
             )
-            assert len(events) == 5
-            assert all(e.trace_id == "loop-t" for e in events)
             assert len(received) == 5
+            assert all(e.trace_id == "loop-t" for e in received)
+            assert all(e.plugin == "tektos" for e in received)
         finally:
-            await feed.unsubscribe(sub)
-
-    async def test_simulate_loop_rejects_bad_args(self) -> None:
-        sim = TektosSimulator(trace_feed=InMemoryTraceFeedAdapter())
-        with pytest.raises(ValueError, match="count must be >= 1"):
-            await sim.simulate_loop(
-                tool_name="x", count=0, window_seconds=1.0
-            )
-        with pytest.raises(ValueError, match="window_seconds must be >= 0"):
-            await sim.simulate_loop(
-                tool_name="x", count=1, window_seconds=-1.0
-            )
+            await trace_feed.unsubscribe(sub)

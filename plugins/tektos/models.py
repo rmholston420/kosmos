@@ -83,3 +83,7 @@ class TektosStep:
     confidence: float
     llm_model: str | None
     llm_raw: dict[str, Any] | None = None
+    tool_name: str | None = None
+    tool_arguments: dict[str, Any] | None = None
+    tool_result: Any | None = None
+    approval_id: str | None = None
