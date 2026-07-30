@@ -301,7 +301,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-005 | OpenSpec as Primary Spec-Driven Development Engine for Tektos Spec Studio | Ratified | Tektos Phase 3 |
 | ADR-006 | Pier as Tektos Eval-on-Deploy Harness | Superseded by ADR-042 | Tektos Phase 4 |
 | ADR-007 | Events-Only Cross-Plugin Coupling | Ratified (foundational) | Stage 1 |
-| ADR-007-DeepSWE | DeepSWE as Tektos Eval-Corpus Candidate | Ratified | Tektos Phase 4 |
+| ADR-007-DeepSWE | DeepSWE as Tektos Eval-Corpus Candidate (manifest-only, 5-task subset; clause 3 deferred) | Ratified v25 | Stage 3.9 |
 | ADR-008 | Superpowers as Tektos Knowledge-Base Methodology Reference | Ratified | Tektos Phase 4 |
 | ADR-008-DozerDB | DozerDB Fork as MemoryPort Graph Store | **Ratified v25** | Stage 1 |
 | ADR-009 | llama-swap as LLMPort Primary Sidecar | **Ratified v25** | Stage 1 (contingent on benchmark) |

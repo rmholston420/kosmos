@@ -1,7 +1,9 @@
 # ADR: DeepSWE as a Tektos Eval-Corpus Candidate
 
+> **STATUS AMENDMENT (2026-07-30):** Ratified as part of the v25 ADR set and landed at Build-Sequence §3.9. The Stage 3.9 landing pins the subset to **5 tasks** (3 Python + 2 TypeScript) drawn from the upstream commit `e016041a6ccf8da29906afc9a3f5a8df940a1f78` and vendored **manifest-only** — the corpus is hydrated on-demand into a git-ignored `.eval-cache/deepswe/` and the pinned `plugins/tektos/eval/corpora/deepswe/manifest.toml` is the authoritative record. Definition-of-Done clauses 1 and 2 are satisfied by this stage; **clause 3 (context-rot cross-check) is DEFERRED** until the dedicated context-rot regression suite lands as a Kosmos-native artifact (v20.2 §3 is a pre-v25 reference and v25 has not yet cut a replacement suite). Unblock condition: land the context-rot regression suite as a separate stage, then append a follow-up STATUS AMENDMENT here recording the cross-check numbers.
+
 ## Status
-Proposed (requires Tier-2 ADR ratification; complements the Pier eval-harness ADR)
+Ratified v25 · Landed at Stage 3.9 (manifest-only, 5-task subset; clause 3 deferred)
 
 ## Context
 The Pier eval-harness ADR adopts Pier as Tektos's CI-time eval-execution engine satisfying Kosmos v20.2 Section 9's continuous eval-on-deploy gate, but does not name a task corpus. DeepSWE (`datacurve-ai/deep-swe`, released May 2026) is a long-horizon coding-agent benchmark: 113 original tasks across 91 active open-source repositories (TypeScript, Go, Python, JavaScript, Rust), using the same Harbor task format Pier consumes, with program-based verifiers and reference solutions held out from the agent. Its stated design goal is specifically to avoid the memorization problem of SWE-Bench-style public-issue corpora — DeepSWE's official leaderboard runs used Pier running mini-swe-agent on Modal, with documented average solutions spanning 668 lines across 7 files (5.5x larger than typical SWE-Bench problems).

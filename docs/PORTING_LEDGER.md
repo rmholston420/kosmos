@@ -811,12 +811,25 @@
 - **ADR:** ADR-006 (superseded) · ADR-042 (Ratified v25, authoritative)
 - **Logged:** 2026-07-30 EDT
 
-#### DeepSWE corpus subset — `PLANNED`
-- **Source:** TBD
-- **License:** verify (dataset license)
-- **Port(s):** DataPort (read-only corpus)
-- **ADR:** adr-deepswe-corpus
-- **Logged:** —
+#### DeepSWE corpus subset — `VENDORED (manifest-only, Stage 3.9)`
+- **Source:** https://github.com/datacurve-ai/deep-swe
+- **Commit / Version:** `e016041a6ccf8da29906afc9a3f5a8df940a1f78` (2026-07-22)
+- **License:** Apache-2.0 (upstream corpus repo); per-task SPDX verified below
+- **Kosmos location:** `plugins/tektos/eval/corpora/deepswe/manifest.toml` (authoritative record); on-demand hydration into git-ignored `.eval-cache/deepswe/<commit>/tasks/`
+- **Port(s):** none (Tektos-internal, envelope-first per ADR-023 — matches ADR-038 repomap + ADR-042 Pier decisions)
+- **Modifications:** none — no upstream source copied; the manifest names 5 tasks (3 Python + 2 TypeScript) chosen deterministically by task-id sort from the 113-task corpus
+- **ADR:** ADR-007-DeepSWE (Ratified v25, STATUS AMENDMENT 2026-07-30 pins the scope + defers DoD clause 3)
+- **Logged:** 2026-07-30 EDT
+
+**Pinned 5-task subset (per-task SPDX verified via GitHub API against each upstream repo):**
+
+| task_id | language | upstream repo | base commit | SPDX |
+|---|---|---|---|---|
+| `adaptix-name-mapping-aliases` | python | `reagento/adaptix` | `a691069fcadf9131e5f7a5a130a022dc678f3e1d` | Apache-2.0 |
+| `aiomonitor-task-snapshots-diff` | python | `aio-libs/aiomonitor` | `b73fea2e0682803bda7531c93cd1dfb360839175` | Apache-2.0 |
+| `bandit-incremental-cache-control` | python | `PyCQA/bandit` | `765f00d3f202f83f61d03f882f80a2d5142d81f8` | Apache-2.0 |
+| `arktype-json-schema-refs-dependencies` | typescript | `arktypeio/arktype` | `04355e8b26d1ad5264ef62314a2bc46c4de58ed8` | MIT |
+| `awilix-async-container-initialization` | typescript | `jeffijoe/awilix` | `82ac179c1de4c216c4e333093044fac643303f0c` | MIT |
 
 #### docling — `PLANNED`
 - **Source:** https://github.com/DS4SD/docling

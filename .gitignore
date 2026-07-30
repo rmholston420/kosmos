@@ -29,6 +29,10 @@ dist/
 ops/benchmarks/*.tmp
 ops/scratch/
 
+# Tektos eval caches (Stage 3.8+; Stage 3.9 DeepSWE hydration lands here)
+.eval-cache/
+plugins/tektos/eval/tasks/**/_pier_jobs/
+
 # Vendor archives (keep vendored code, drop tarballs)
 *.tar.gz
 *.zip

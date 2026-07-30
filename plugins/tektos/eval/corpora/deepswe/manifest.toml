@@ -1,0 +1,73 @@
+# DeepSWE eval corpus manifest — Stage 3.9 (ADR-007-DeepSWE)
+#
+# Load-bearing pin: every field below is referenced by the Stage 3.9
+# contract tests. Do NOT edit outside a superseding ADR or a fresh
+# STATUS AMENDMENT on ADR-007-DeepSWE.
+
+[corpus]
+name = "deepswe"
+description = "Filtered subset of the DeepSWE long-horizon coding-agent benchmark."
+upstream_repo = "https://github.com/datacurve-ai/deep-swe"
+upstream_commit = "e016041a6ccf8da29906afc9a3f5a8df940a1f78"
+upstream_license = "Apache-2.0"
+corpus_total_tasks = 113
+sample_seed = 0
+subset_size = 5
+
+# The subset is the deterministic, license-cleared shortlist we run
+# through Pier on Colossus. Q2=A per Stage 3.9 kickoff.
+#
+# Every entry MUST supply:
+#   task_id            — DeepSWE task directory name under `tasks/`
+#   language           — task.toml [metadata] language
+#   upstream_repo      — task.toml [metadata] repository_url (normalized)
+#   upstream_owner     — github owner
+#   upstream_repo_name — github repo name
+#   base_commit        — task.toml [metadata] base_commit_hash
+#   spdx_license       — GitHub-reported SPDX id for the upstream repo
+#                        (verified 2026-07-30 EDT; test asserts permissive)
+
+[[subset]]
+task_id = "adaptix-name-mapping-aliases"
+language = "python"
+upstream_repo = "https://github.com/reagento/adaptix"
+upstream_owner = "reagento"
+upstream_repo_name = "adaptix"
+base_commit = "a691069fcadf9131e5f7a5a130a022dc678f3e1d"
+spdx_license = "Apache-2.0"
+
+[[subset]]
+task_id = "aiomonitor-task-snapshots-diff"
+language = "python"
+upstream_repo = "https://github.com/aio-libs/aiomonitor"
+upstream_owner = "aio-libs"
+upstream_repo_name = "aiomonitor"
+base_commit = "b73fea2e0682803bda7531c93cd1dfb360839175"
+spdx_license = "Apache-2.0"
+
+[[subset]]
+task_id = "bandit-incremental-cache-control"
+language = "python"
+upstream_repo = "https://github.com/PyCQA/bandit"
+upstream_owner = "PyCQA"
+upstream_repo_name = "bandit"
+base_commit = "765f00d3f202f83f61d03f882f80a2d5142d81f8"
+spdx_license = "Apache-2.0"
+
+[[subset]]
+task_id = "arktype-json-schema-refs-dependencies"
+language = "typescript"
+upstream_repo = "https://github.com/arktypeio/arktype"
+upstream_owner = "arktypeio"
+upstream_repo_name = "arktype"
+base_commit = "04355e8b26d1ad5264ef62314a2bc46c4de58ed8"
+spdx_license = "MIT"
+
+[[subset]]
+task_id = "awilix-async-container-initialization"
+language = "typescript"
+upstream_repo = "https://github.com/jeffijoe/awilix"
+upstream_owner = "jeffijoe"
+upstream_repo_name = "awilix"
+base_commit = "82ac179c1de4c216c4e333093044fac643303f0c"
+spdx_license = "MIT"

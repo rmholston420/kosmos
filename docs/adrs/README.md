@@ -14,7 +14,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-005 | `ADR-005-openspec-primary.md` | OpenSpec as primary SDD engine | Ratified · amended by ADR-040 | Tektos Phase 3 |
 | ADR-006 | `ADR-006-pier-eval-harness.md` | Pier eval-on-deploy | Superseded by ADR-042 | Tektos Phase 4 |
 | ADR-007 | `ADR-007-events-only-cross-plugin-coupling.md` | Events-only cross-plugin coupling | Ratified (foundational) | Stage 1 |
-| ADR-007-DeepSWE | `ADR-007-DeepSWE-corpus.md` | DeepSWE as eval-corpus candidate | Ratified | Tektos Phase 4 |
+| ADR-007-DeepSWE | `ADR-007-DeepSWE-corpus.md` | DeepSWE as eval-corpus candidate (manifest-only, 5-task subset landed Stage 3.9; clause 3 deferred pending context-rot regression suite) | Ratified v25 | Stage 3.9 |
 | ADR-008 | `ADR-008-superpowers-kb-reference.md` | Superpowers as KB methodology reference | Ratified | Tektos Phase 4 |
 | ADR-008-DozerDB | `ADR-008-DozerDB-memory-port.md` | DozerDB fork as MemoryPort store | **Ratified v25** | Stage 1 |
 | ADR-009 | `ADR-009-llama-swap-primary.md` | llama-swap primary + router-mode fallback | **Ratified v25 (contingent)** | Stage 1 (benchmark-gated) |
