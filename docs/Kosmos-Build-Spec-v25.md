@@ -83,7 +83,7 @@ Four governing principles: Ports & Adapters everywhere; black-box modules with s
 | Port | Adapter (primary → fallback) | Contract |
 |---|---|---|
 | `LLMPort` | vLLM (nightly-wheel/CUDA 13 on Blackwell) → llama.cpp, fronted by **llama-swap** (fallback: llama.cpp router mode) | `generate()`, `generate_text()`, `chat()`, `generate_stream()`, `embed()`, `list_models()`, `pull_model()`, `delete_model()`, `is_healthy()`, `close()` — see **ADR-022** |
-| `MemoryPort` | Graphiti + Neo4j/CIDOC CRM on **DozerDB fork**, wrapped in Agent Memory Guard middleware | `write_event()`, `query_temporal()`, `link_entities()`, `quarantine_write()` |
+| `MemoryPort` | Graphiti + Neo4j/CIDOC CRM on **DozerDB fork** (ADR-008), wrapped in Agent Memory Guard v0.2.2 write-time policy filter (ADR-027) | `async write_event(subject, predicate, object, *, provenance, confidence, source_citation, pii_tier, attributes) -> MemoryEventId`, `async query_temporal(cypher_or_query, *, as_of, limit) -> list[MemoryHit]`, `async link_entities(source_id, target_id, relationship, *, provenance, confidence, attributes)`, `async quarantine_write(payload, *, reason, provenance, confidence) -> MemoryEventId`, `is_healthy() -> bool` (sync, non-throwing), `async close()` (idempotent). Port-level §7 zero-trust guard is non-bypassable; AMG runs as second policy layer. — see **ADR-027** |
 | `VectorPort` | Qdrant (primary) — pgvector fallback deferred (ADR-026) | `async upsert(collection, id, vector, payload)` (payload MUST carry `provenance` + `confidence` per §7 zero-trust; port-level enforcement), `async search(collection, query_vector, *, limit=10, filter=None) -> list[VectorHit]`, `async delete(collection, id)`, `async snapshot(collection) -> SnapshotHandle` (native Qdrant snapshot; DR-drill artifact for §11), `is_healthy() -> bool` (non-throwing), `async close()` (idempotent) |
 | `EventBusPort` | Valkey/Redis Streams | `publish(envelope)`, `subscribe()`, `unsubscribe()`, `read_recent()`, `is_healthy()`, `close()` — envelope-first; consumer-group `ack()` deferred to ADR-024 — see **ADR-023** |
 | `SecretsPort` | age-encrypted file (primary) · hvac/Vault (deferred) | `get_secret()`, `put_secret()`, `rotate()`, `is_healthy()`, `close()` — age-file primary per **ADR-024**; `lease()` deferred until a future ADR triggered by Tektos per-task scoping (§18.6) |
@@ -322,6 +322,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-024 | SecretsPort adopts age-encrypted file backend (Vault deferred) | **Ratified v25** | Stage 1.5 |
 | ADR-025 | ObservabilityPort adopts OTel+Prometheus+structlog stack (Langfuse deferred) | **Ratified v25** | Stage 1.6 |
 | ADR-026 | VectorPort adopts Qdrant backend; pgvector fallback deferred; port-level §7 zero-trust enforcement | **Ratified v25** | Stage 1.7 |
+| ADR-027 | MemoryPort full surface (write_event/query_temporal/link_entities/quarantine_write); DozerDB (ADR-008) + Graphiti + Agent Memory Guard v0.2.2 all vendored in Stage 1.8; port-level §7 zero-trust guard is non-bypassable; AMG runs as second policy layer | **Ratified v25** | Stage 1.8 |
 
 ### 17.1 UI Parity Rule (ADR-014, in-line summary)
 

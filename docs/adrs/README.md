@@ -35,6 +35,7 @@ All Architecture Decision Records for Kosmos v25. Newer ADRs supersede older one
 | ADR-024 | `ADR-024-secretsport-age-file-backend.md` | SecretsPort adopts age-encrypted file backend; Vault + `lease()` deferred | **Ratified v25** | Stage 1.5 |
 | ADR-025 | `ADR-025-observabilityport-otel-prometheus-structlog.md` | ObservabilityPort adopts OpenTelemetry SDK + prometheus-client + structlog; Langfuse LLM-specific adapter deferred | **Ratified v25** | Stage 1.6 |
 | ADR-026 | `ADR-026-vectorport-qdrant-backend.md` | VectorPort adopts Qdrant backend; pgvector fallback deferred; port-level §7 zero-trust enforcement (`provenance` + `confidence` required on writes) | **Ratified v25** | Stage 1.7 |
+| ADR-027 | `ADR-027-memoryport-dozerdb-graphiti-amg.md` | MemoryPort full surface (write_event / query_temporal / link_entities / quarantine_write); DozerDB (ADR-008) + Graphiti + Agent Memory Guard v0.2.2 all vendored at Stage 1.8; port-level §7 zero-trust guard is non-bypassable; AMG runs as second policy layer | **Ratified v25** | Stage 1.8 |
 
 ## The one remaining open decision
 

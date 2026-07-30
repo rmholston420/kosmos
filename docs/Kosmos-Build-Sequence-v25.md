@@ -92,14 +92,21 @@ Write pure Python `Protocol` interfaces (no implementations) at `ports/`:
 - **If llama-swap fails SLO** → switch to router-mode fallback, log decision in ADR-009 amendment, append to `BUILD_LOG.md`.
 - **DoD:** SLO measured, recorded in `ops/benchmarks/model-swap-2026-XX-XX.md`; ADR-009 status set to `LOCKED` or `AMENDED`.
 
-### 1.8 MemoryPort adapter — DozerDB (ADR-008)
-- **Port:** DozerDB (community Neo4j fork with enterprise features)
+### 1.8 MemoryPort formalized — DozerDB + Graphiti + Agent Memory Guard (ADR-008 + ADR-027)
+- **Port:** MemoryPort (full surface: write_event / query_temporal / link_entities / quarantine_write + is_healthy + close)
+- **Backend:** DozerDB (community Neo4j fork with enterprise features, ADR-008); Graphiti temporal index atop the same DozerDB via `neo4j` driver (Apache-2.0); Agent Memory Guard v0.2.2 write-time policy filter (OWASP)
 - **Action:**
-  1. Log DozerDB in `PORTING_LEDGER.md` — commit SHA + license + link
-  2. Deploy via Docker Compose
-  3. Wrap behind `MemoryPort` with provenance/confidence enforcement (reject writes missing either)
-  4. Vendor Agent Memory Guard v0.2.2 (or newer if released — **check release page first**) as write-time policy filter
-- **DoD:** `pytest -k memory_provenance` — all writes without provenance rejected; all reads return provenance chain.
+  1. Log DozerDB + `neo4j` driver + graphiti-core + agent-memory-guard v0.2.2 + Rigpa donor pattern in `PORTING_LEDGER.md`
+  2. Declare `MemoryPort` Protocol + typed value objects (`MemoryEventId`, `MemoryHit`) + non-bypassable port-level guard (`validate_zero_trust_write`) in `ports/memory.py`
+  3. Ship `DozerDbMemoryAdapter` + three injectable Protocol seams (`GraphBackend`, `AmgPolicy`, `TemporalIndex`) with in-memory test doubles for each
+  4. Write-time enforcement order: port-level guard → AMG policy verdict → graph transaction (CIDOC-CRM triple decomposition) → temporal index registration
+  5. Deploy DozerDB via Docker Compose (out-of-scope for Stage 1.8 code; lands with Compose ops-deploy stage per spec §21)
+- **DoD:**
+  - `MemoryPort` isinstance check passes on `DozerDbMemoryAdapter`
+  - Port-level guard rejects missing/invalid `provenance` or `confidence` (100% negative-case matrix)
+  - AMG `block` → raises `MemoryWriteBlocked`; `quarantine` → routes to quarantine lane (not indexed in temporal); `redact` → uses redacted payload; `allow` → normal write
+  - `is_healthy()` sync + non-throwing; `close()` idempotent + swallows backend close errors
+  - All four verbs green under contract tests using `InMemoryGraphBackend` + `NoOpAmgPolicy` + `InMemoryTemporalIndex`
 
 ### 1.9 Memory-bridge redundancy comparison (ADR-013)
 - Compare `Rigpa-LMS/memory/bridge.py` against Gnosis schema. Pick the survivor.
@@ -215,9 +222,10 @@ Reference: Spec §18. This is the largest single-plugin build.
 - Delete `plugins/knowsys/`; migrate any Knowsys-only functionality into Gnosis modules
 - **DoD:** No import of `knowsys` anywhere; ADR-016 status = `LOCKED`.
 
-### 4.2 Vendor Graphiti (temporal knowledge graph)
+### 4.2 Graphiti temporal-index tuning + benchmarks
 - **Ports:** MemoryPort, VectorPort
-- **Action:** Graphiti sits atop DozerDB via MemoryPort adapter
+- **Note:** graphiti-core is already **VENDORED at Stage 1.8** (ADR-027 Q1=A). Stage 4.2 reduces to tuning + `PORT_CONTRACTS.md` metrics: schema drift, edge-type churn, temporal-episode latency, embedding-model selection for Graphiti's built-in NER.
+- **Action:** Landed at Stage 1.8; here we run Graphiti-specific tuning against the live DozerDB Compose service
 - **DoD:** Ingest a corpus; time-slice query returns correct historical state.
 
 ### 4.3 Agent Memory Guard latest release check
