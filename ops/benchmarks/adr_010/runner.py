@@ -22,6 +22,12 @@ from pathlib import Path
 
 from .harness.arex import run_arex_trial
 from .harness.odr import run_odr_trial
+from .harness.rubric_critique import build_rubric_lines_from_facts
+from .harness.self_consistency import (
+    compose_consensus_report,
+    summarize_vote,
+    tally_claims,
+)
 from .metrics import TrialMetrics
 from .policy import GPUMonitor, wait_for_cooldown
 
@@ -88,14 +94,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cooldown-min-seconds",
         type=float,
-        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "30")),
+        default=float(os.environ.get("ADR010_COOLDOWN_MIN_SECONDS", "15")),
         help=(
             "minimum cooldown seconds, applied both pre-flight and between "
             "trials. Progression: 30 -> 60 (post-88C incident) -> 45 -> 30 "
-            "(Stage 6.3.3b: three consecutive 3-trial runs never crossed "
-            "71C peak with the 400W cap; observed trial-start temps "
-            "34-44C at 45s wait, well below the 52C yellow-line and far "
-            "below the 85C watchdog. Target C held at 60.)"
+            "-> 15 (Stage 6.3.4: Stage 6.3.3 3-trial run with 30s waits "
+            "peaked at 73C and trial-start temps were 36/37/42C \u2014 12C "
+            "below the 85C watchdog and 21C below the 88C driver-crash line. "
+            "Target C held at 60.)"
         ),
     )
     parser.add_argument(
@@ -143,6 +149,48 @@ def parse_args() -> argparse.Namespace:
             "disable Stage 6.3.3 URL-verification shim (shim 3). Not "
             "recommended — the shim exists specifically because the 32B "
             "model was observed fabricating repo URLs and license IDs."
+        ),
+    )
+    # ---- Stage 6.3.4 additive shims ----
+    parser.add_argument(
+        "--no-license-grounding",
+        action="store_true",
+        help="disable shim 4 (fetches LICENSE files for cited GitHub repos)",
+    )
+    parser.add_argument(
+        "--no-rubric-critique",
+        action="store_true",
+        help=(
+            "disable shim 6 (asks the model to score its own report against "
+            "the fixture rubric and rewrite failures). Rubric extracted from "
+            "fixture ground_truth.canonical_facts."
+        ),
+    )
+    parser.add_argument(
+        "--no-cove",
+        action="store_true",
+        help=(
+            "disable shim 7 (chain-of-verification: per-claim verification "
+            "sub-questions + rewrite). Up to 6 extra ainvoke rounds per trial."
+        ),
+    )
+    parser.add_argument(
+        "--no-claim-support-gate",
+        action="store_true",
+        help=(
+            "disable shim 8 (marks license/identity claims whose subject "
+            "doesn't appear in retrieval observations as [unsupported])"
+        ),
+    )
+    parser.add_argument(
+        "--n-consistency",
+        type=int,
+        default=int(os.environ.get("ADR010_N_CONSISTENCY", "1")),
+        help=(
+            "shim 5: number of independent ODR runs per trial to vote across. "
+            "Default 1 (off). Set >= 2 to enable self-consistency voting; "
+            "the trial's final_answer becomes the consensus report and each "
+            "per-run report is preserved in trajectory. Cost scales linearly."
         ),
     )
     parser.add_argument(
@@ -196,11 +244,83 @@ def _collect_fact_anchor_urls(fixture: dict) -> list[str]:
     return urls
 
 
+def _combine_self_consistency(
+    trial_id: str,
+    contender: str,
+    question_id: str,
+    per_run: list[TrialMetrics],
+) -> TrialMetrics:
+    """Shim 5: fold N per-run TrialMetrics into a single trial artifact.
+
+    - For N=1 (default), returns the single run unchanged aside from
+      relabeling its ``trial_id``.
+    - For N>=2, tallies claim-level agreement across each run's
+      ``final_answer`` via :mod:`self_consistency`, replaces the trial's
+      ``final_answer`` with the consensus report, and preserves every
+      per-run trajectory plus the vote summary under
+      ``trajectory[-1]["self_consistency"]``.
+    - ``source_diversity`` becomes the max across runs; ``latency_seconds``
+      the sum; ``gpu_utilization_peak_pct`` and ``vram_peak_gb`` the max.
+    - If any run recorded an ``error``, that error is preserved on the
+      combined artifact so the blind rater can spot it.
+    """
+    if not per_run:
+        return TrialMetrics(
+            contender=contender,
+            trial_id=trial_id,
+            question_id=question_id,
+            error="self_consistency: zero completed runs",
+        )
+    if len(per_run) == 1:
+        m = per_run[0]
+        m.trial_id = trial_id
+        return m
+
+    reports = [m.final_answer or "" for m in per_run]
+    tally = tally_claims(reports)
+    consensus = compose_consensus_report(tally)
+    vote = summarize_vote(tally, per_run_final_answers=reports)
+
+    combined = TrialMetrics(
+        contender=contender,
+        trial_id=trial_id,
+        question_id=question_id,
+        source_diversity=max(m.source_diversity for m in per_run),
+        latency_seconds=sum(m.latency_seconds for m in per_run),
+        gpu_utilization_peak_pct=max(
+            m.gpu_utilization_peak_pct for m in per_run
+        ),
+        vram_peak_gb=max(m.vram_peak_gb for m in per_run),
+        final_answer=consensus,
+        final_evidences=list(per_run[0].final_evidences),
+        final_confidence=per_run[0].final_confidence,
+        error=next((m.error for m in per_run if m.error), None),
+    )
+    for m in per_run:
+        combined.trajectory.append(
+            {
+                "self_consistency_sub_run": {
+                    "trial_id": m.trial_id,
+                    "latency_seconds": m.latency_seconds,
+                    "source_diversity": m.source_diversity,
+                    "final_answer": m.final_answer,
+                    "final_evidences": m.final_evidences,
+                    "final_confidence": m.final_confidence,
+                    "error": m.error,
+                    "trajectory": m.trajectory,
+                }
+            }
+        )
+    combined.trajectory.append({"self_consistency": vote})
+    return combined
+
+
 async def run_odr(
     args: argparse.Namespace,
     question_id: str,
     question: str,
     fact_anchor_urls: list[str] | None = None,
+    rubric_lines: list[str] | None = None,
 ) -> None:
     # ODR wires configurable_fields=("model","max_tokens","api_key") in
     # deep_researcher.py, so our research_model_config.base_url is dropped.
@@ -218,17 +338,41 @@ async def run_odr(
         trial_id = f"trial_{i + 1:02d}_{uuid.uuid4().hex[:6]}"
         monitor = GPUMonitor(thermal_abort_at_c=args.thermal_abort_c)
         monitor.start()
+        n_runs = max(1, int(args.n_consistency))
+        per_run_metrics: list[TrialMetrics] = []
         try:
-            metrics = await run_odr_trial(
-                question=question,
-                question_id=question_id,
+            for run_ix in range(n_runs):
+                sub_id = (
+                    trial_id
+                    if n_runs == 1
+                    else f"{trial_id}_r{run_ix + 1:02d}"
+                )
+                m = await run_odr_trial(
+                    question=question,
+                    question_id=question_id,
+                    trial_id=sub_id,
+                    ollama_base_url=args.ollama_base_url,
+                    ollama_model=args.ollama_model,
+                    mcp_server_url=args.mcp_url,
+                    thermal_event=monitor.thermal_event,
+                    fact_anchor_urls=fact_anchor_urls,
+                    enable_fact_check=not args.no_fact_check,
+                    enable_license_grounding=not args.no_license_grounding,
+                    enable_rubric_critique=(
+                        not args.no_rubric_critique and bool(rubric_lines)
+                    ),
+                    rubric_lines=rubric_lines,
+                    enable_cove=not args.no_cove,
+                    enable_claim_support_gate=not args.no_claim_support_gate,
+                )
+                per_run_metrics.append(m)
+                if monitor.thermal_exceeded():
+                    break
+            metrics = _combine_self_consistency(
                 trial_id=trial_id,
-                ollama_base_url=args.ollama_base_url,
-                ollama_model=args.ollama_model,
-                mcp_server_url=args.mcp_url,
-                thermal_event=monitor.thermal_event,
-                fact_anchor_urls=fact_anchor_urls,
-                enable_fact_check=not args.no_fact_check,
+                contender="odr",
+                question_id=question_id,
+                per_run=per_run_metrics,
             )
         finally:
             monitor.stop()
@@ -403,10 +547,29 @@ def main() -> int:
             len(fact_anchor_urls),
         )
 
+    canonical_facts = (fixture.get("ground_truth") or {}).get(
+        "canonical_facts", []
+    ) or []
+    rubric_lines = build_rubric_lines_from_facts(canonical_facts)
+    logger.info(
+        "Stage 6.3.4 shims: license_grounding=%s rubric_critique=%s cove=%s "
+        "claim_support_gate=%s n_consistency=%d rubric_points=%d",
+        not args.no_license_grounding,
+        not args.no_rubric_critique and bool(rubric_lines),
+        not args.no_cove,
+        not args.no_claim_support_gate,
+        args.n_consistency,
+        len(rubric_lines),
+    )
+
     if args.contender == "arex":
         run_arex(args, question_id, question)
     else:
-        asyncio.run(run_odr(args, question_id, question, fact_anchor_urls))
+        asyncio.run(
+            run_odr(
+                args, question_id, question, fact_anchor_urls, rubric_lines
+            )
+        )
     logger.info("done. artifacts at %s/%s/", _ARTIFACT_ROOT, args.contender)
     return 0
 

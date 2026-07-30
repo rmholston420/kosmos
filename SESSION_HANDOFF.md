@@ -1,46 +1,46 @@
-# Kosmos Session Handoff — 2026-07-30 13:48 EDT
+# Kosmos Session Handoff — 2026-07-30 14:06 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 6.3.3b · ODR substrate URL-extractor hotfix + cooldown 45→30s
-- **Plugin / kernel component:** Zetesis inner-loop ODR substrate (`ops/benchmarks/adr_010/`)
-- **Port(s) in progress:** none formal — operational tuning inside ADR-010 LOCKED band. Vendor tree pristine per ADR-007 substrate lock.
+
+- **Stage / phase:** Stage 6.3.4 · Zetesis inner-loop ODR substrate
+- **Plugin / kernel component:** ADR-010 head-to-head eval — ODR harness (`ops/benchmarks/adr_010/`)
+- **Port(s) in progress:** none formal; operational tuning inside ADR-010 LOCKED band.
 
 ## Completed this session
-- Ran first Stage 6.3.3 3-trial pass on Colossus. Trials 2 & 3 clean (4–5 anchor URLs each, all 2xx, no shim-3 retry). Trial 1 poisoned by Markdown-autolink `<...>` citations that carried a trailing `%3E` (encoded `>`) into the verifier.
-- Diagnosed the two extractor bugs (regex allowed `>` in the URL body; canonicalizer did not strip `%3E`/`>`/leading `<`).
-- Landed **Stage 6.3.3b**:
-  - `harness/url_verify.py`: new `extract_urls(text)` single source of truth; `_URL_EXTRACT_RE = r"https?://[^\s)>]+"`; `_canonicalize` strips leading `<` and trailing `%3E`/`%3e`/`>` in addition to previous punctuation.
-  - `harness/odr.py`: all four inline regex extractions replaced with `extract_urls(...)`.
-  - `runner.py`: `--cooldown-min-seconds` default 45 → **30** (target C held at 60). Rationale locked in help text.
-  - `tests/test_url_verify.py`: +6 regression tests for the bracket suffix + leading `<` + dedup + extractor bracket-free guarantee.
-- **Test tiers:** `ops/benchmarks/adr_010/tests/` = **76 passed** (was 70: +6). Whole-repo = **1062 passed / 19 skipped** (was 1056 / 19: +6 exact, zero regressions).
-- Appended BUILD_LOG + DEBUG_LOG entries at 2026-07-30 13:48 EDT.
+
+- Stage 6.3.4 additive shims landed:
+  - Shim 4 (LICENSE grounding) — `harness/license_grounding.py`
+  - Shim 5 (self-consistency, opt-in via `--n-consistency N`) — `harness/self_consistency.py` + `runner._combine_self_consistency()`
+  - Shim 6 (rubric self-critique) — `harness/rubric_critique.py`
+  - Shim 7 (chain-of-verification) — `harness/cove.py`
+  - Shim 8 (claim-support gate) — `harness/claim_support.py`
+- All wired through `harness/odr.py` (`run_odr_trial` new kwargs: `enable_license_grounding`, `enable_rubric_critique`, `rubric_lines`, `enable_cove`, `enable_claim_support_gate`) and `runner.py` (new `--no-license-grounding`, `--no-rubric-critique`, `--no-cove`, `--no-claim-support-gate`, `--n-consistency N` flags; shims 4/6/7/8 default ON, shim 5 default 1 = off).
+- Rubric extracted at startup from `fixture.ground_truth.canonical_facts` and passed into `run_odr_trial` as `rubric_lines`.
+- Trajectory schema gains `{"shim_events": [...]}` with per-shim event shapes documented in the shim modules.
+- Cooldown min-seconds default 30 → **15** (Stage 6.3.3 3-trial run peaked 73 °C, trial-start 36/37/42 °C — 12 °C below the 85 °C watchdog).
+- One regex bug fixed inline in `cove.py` (object capture truncated `Apache-2.0` → `Apache-2`); DEBUG_LOG entry appended.
+- `ops/benchmarks/adr_010/tests/` = **128 passed** locally (was 76: +52).
 
 ## Remaining before current Definition of Done
-- Commit + push Stage 6.3.3b hotfix.
-- Pull to Colossus, re-run:
-  ```bash
-  cd ~/dev/kosmos && git pull
-  .venv/bin/python -m pytest ops/benchmarks/adr_010/tests/    # expect 76 green
-  .venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr
-  ```
-- Blind-rate the 3 trials against F1–F6 rubric; write `/tmp/rating.md`.
-- If mean rated ≥4/6 AND every trial has empty `final_unverified_urls`: close Stage 6.3.3, tag `stage-6-3-complete`, move to Stage 6.4 (substrate promotion out of `ops/benchmarks/` into `adapters/zetesis/inner_loop/`).
-- If mean rated <4/6 or persistent unverified URLs remain: fire option 4 — author `ADR-010 CONTINGENCY-FIRED` amendment authorizing model uplift (`qwen2.5:32b-instruct-q5_K_M` first; then `qwen2.5:72b-instruct-q4_K_M` if q5 still fails).
+
+- **On Colossus**, after `git pull`:
+  1. `.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/` — expect **128 green**
+  2. `.venv/bin/python -m pytest` (whole repo) — expect **1114 passed / 19 skipped**
+  3. `.venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr`
+     - Startup line should say: `Stage 6.3.4 shims: license_grounding=True rubric_critique=True cove=True claim_support_gate=True n_consistency=1 rubric_points=6`
+     - New closing criterion: mean rated correctness ≥5/6 across 3 trials, `final_unverified_urls` empty on every trial, no `[unsupported]` markers survive to final report for any of the 6 canonical facts.
+  4. If threshold missed: try `--n-consistency 3` (opt-in shim 5). If still missed: escalate to Stage 6.3.5 quantization/model uplift ADR.
 
 ## Open questions / awaiting user answer
-- None. All Stage 6.3.3b choices previously locked by operator directives.
+
+- none
 
 ## Exact next action
+
+On Colossus:
+
 ```bash
-cd /home/user/workspace/kosmos-scan
-git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
-    commit -am "Stage 6.3.3b: fix URL extractor bracket-suffix bug + cooldown 45->30s"
-git push origin main
-```
-Then on Colossus:
-```bash
-cd ~/dev/kosmos && git pull
-.venv/bin/python -m pytest ops/benchmarks/adr_010/tests/
-.venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr
+cd ~/dev/kosmos && git pull \
+  && .venv/bin/python -m pytest ops/benchmarks/adr_010/tests/ \
+  && .venv/bin/python -m ops.benchmarks.adr_010.runner --contender odr
 ```

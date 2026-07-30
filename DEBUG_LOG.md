@@ -150,3 +150,14 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied (Stage 6.3.3b):** New single-source `extract_urls(text)` in `harness/url_verify.py`. Uses regex `https?://[^\s)>]+` so a literal trailing `>` cannot enter the URL. `_canonicalize` now strips a single leading `<` (handles the case where the framework did NOT URL-encode) and strips trailing `%3E`, `%3e`, `>`, in addition to the previous `),.;\]\"'` runs. Every call site in `harness/odr.py` routes through `extract_urls`. Regression tests locked in `tests/test_url_verify.py` (6 cases).
 - **Files changed:** `ops/benchmarks/adr_010/harness/url_verify.py`, `ops/benchmarks/adr_010/harness/odr.py`, `ops/benchmarks/adr_010/tests/test_url_verify.py`.
 - **Related BUILD_LOG entry:** 2026-07-30 13:48 EDT (Stage 6.3.3b).
+
+
+## 2026-07-30 14:06 EDT — cove.py license claim regex: object truncated at first '.0'
+
+- **Symptom:** During shim-7 unit-test authoring, `extract_license_claims("DozerDB is licensed under Apache-2.0")` returned `[{"kind": "license", "subject": "DozerDB", "object": "Apache-2"}]` instead of `Apache-2.0`. Test `test_cove_extracts_license_apache_family` failed on the object suffix.
+- **Affected stage / plugin / port:** Stage 6.3.4 · Zetesis ODR shim 7 (`ops/benchmarks/adr_010/harness/cove.py`).
+- **Root cause:** Object-capture group `[A-Za-z][\w.\-+]{0,20}` was followed by the sentence terminator `\.(?:\s|$)`. Python regex is greedy left-to-right but the object class allowed `.` — so `\.0` at the end of the SPDX id was being reinterpreted as a sentence-terminating period, and the `0` was consumed by the trailing `\s|$` context. In effect: object=`Apache-2`, terminator=`.0<end>`.
+- **Fix applied:** Widened object capture to `[A-Za-z][\w.\-+]{0,40}(?:\s+[A-Za-z][\w.\-+]{0,20}){0,4}` and swapped the terminator to a lookahead `(?=[\s,;)]|\.\s|\.$|$)` so the pattern doesn't have to *consume* the sentence-final period. SPDX ids like `Apache-2.0`, `GPL-3.0-or-later`, `BSD-2-Clause` now round-trip.
+- **Files changed:**
+  - `ops/benchmarks/adr_010/harness/cove.py` — `_LICENSE_CLAIM_RE` object group + trailing anchor.
+- **Related BUILD_LOG entry:** 2026-07-30 14:06 EDT (Stage 6.3.4).

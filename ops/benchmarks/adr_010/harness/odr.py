@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..metrics import TrialMetrics
+from . import claim_support, cove, license_grounding, rubric_critique
 from .prompts import (
     KOSMOS_MCP_PROMPT,
     build_anchored_user_turn,
@@ -126,6 +127,11 @@ async def run_odr_trial(
     thermal_poll_seconds: float = 1.0,
     fact_anchor_urls: list[str] | None = None,
     enable_fact_check: bool = True,
+    enable_license_grounding: bool = True,
+    enable_rubric_critique: bool = True,
+    rubric_lines: list[str] | None = None,
+    enable_cove: bool = True,
+    enable_claim_support_gate: bool = True,
 ) -> TrialMetrics:
     """Run a single ODR trial. Async because ODR is LangGraph async."""
     try:
@@ -419,6 +425,252 @@ async def run_odr_trial(
                             }
                         )
 
+    # ---- Shims 4/6/7/8 (Stage 6.3.4): additive post-fact-check passes ----
+    # These shims only run once shim-3 has produced (or preserved) a
+    # result, and are skipped after thermal abort. They mutate the
+    # in-memory `final_report_override`; the finalize block below reads
+    # from it if set. Each shim records its outcome in the trajectory
+    # regardless of whether it actually changed the text.
+    final_report_override: str | None = None
+    shim_events: list[dict] = []
+
+    if result is not None and not thermal_aborted:
+        current_report = str(result.get("final_report", ""))
+        current_notes = result.get("raw_notes") or []
+        current_notes_text = "\n".join(
+            str(n) for n in current_notes if n is not None
+        )
+
+        # ---- Shim 4: LICENSE-file grounding ----
+        if enable_license_grounding and current_report:
+            try:
+                cited_urls_now = extract_urls(current_report)
+                license_facts = await license_grounding.ground_licenses(
+                    cited_urls_now
+                )
+                directive = license_grounding.build_license_correction_directive(
+                    license_facts
+                )
+                shim_events.append(
+                    {
+                        "shim": "license_grounding",
+                        "facts": [
+                            {
+                                "owner": f.owner,
+                                "repo": f.repo,
+                                "ok": f.ok,
+                                "license_family": f.license_family,
+                                "source_url": f.source_url,
+                            }
+                            for f in license_facts
+                        ],
+                        "directive_emitted": bool(directive),
+                    }
+                )
+                if directive:
+                    correction_turn = anchored_question + "\n\n" + directive
+                    try:
+                        retry_result = await _invoke_once(correction_turn)
+                    except ThermalAbort as exc:
+                        shim_events[-1]["retry_outcome"] = "thermal_abort"
+                        shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                        thermal_aborted = True
+                    except Exception as exc:  # noqa: BLE001
+                        shim_events[-1]["retry_outcome"] = "retry_failed"
+                        shim_events[-1]["error"] = f"{type(exc).__name__}: {exc}"
+                    else:
+                        shim_events[-1]["retry_outcome"] = "retry_ok"
+                        result = retry_result
+                        current_report = str(result.get("final_report", ""))
+                        current_notes = result.get("raw_notes") or []
+                        current_notes_text = "\n".join(
+                            str(n) for n in current_notes if n is not None
+                        )
+            except Exception as exc:  # noqa: BLE001
+                shim_events.append(
+                    {
+                        "shim": "license_grounding",
+                        "outcome": "error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+
+        # ---- Shim 6: rubric self-critique ----
+        if (
+            enable_rubric_critique
+            and rubric_lines
+            and current_report
+            and not thermal_aborted
+        ):
+            critique_turn = rubric_critique.build_rubric_critique_turn(
+                current_report, rubric_lines
+            )
+            try:
+                critique_result = await _invoke_once(critique_turn)
+            except ThermalAbort as exc:
+                shim_events.append(
+                    {
+                        "shim": "rubric_critique",
+                        "outcome": "thermal_abort",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                thermal_aborted = True
+            except Exception as exc:  # noqa: BLE001
+                shim_events.append(
+                    {
+                        "shim": "rubric_critique",
+                        "outcome": "error",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+            else:
+                critique_text = str(critique_result.get("final_report", ""))
+                rewritten = rubric_critique.extract_rewritten_report(
+                    critique_text
+                )
+                if rewritten:
+                    current_report = rewritten
+                    shim_events.append(
+                        {
+                            "shim": "rubric_critique",
+                            "outcome": "rewrite_ok",
+                            "rubric_points": len(rubric_lines),
+                        }
+                    )
+                else:
+                    shim_events.append(
+                        {
+                            "shim": "rubric_critique",
+                            "outcome": "no_fenced_output",
+                        }
+                    )
+
+        # ---- Shim 7: chain-of-verification ----
+        if enable_cove and current_report and not thermal_aborted:
+            claims = cove.extract_claims(current_report, max_claims=6)
+            if len(claims) >= 2:
+                # Answer each sub-question via a single ainvoke.
+                verified: list[tuple[cove.CoveClaim, str]] = []
+                cove_answers: list[dict] = []
+                for claim in claims:
+                    subq = cove.build_sub_question(claim)
+                    try:
+                        subq_result = await _invoke_once(subq)
+                    except ThermalAbort as exc:
+                        shim_events.append(
+                            {
+                                "shim": "cove",
+                                "outcome": "thermal_abort",
+                                "error": f"{type(exc).__name__}: {exc}",
+                            }
+                        )
+                        thermal_aborted = True
+                        break
+                    except Exception as exc:  # noqa: BLE001
+                        cove_answers.append(
+                            {
+                                "claim": claim.source_sentence,
+                                "outcome": "error",
+                                "error": f"{type(exc).__name__}: {exc}",
+                            }
+                        )
+                        verified.append((claim, ""))
+                        continue
+                    answer = str(subq_result.get("final_report", ""))
+                    verified.append((claim, answer))
+                    cove_answers.append(
+                        {
+                            "claim": claim.source_sentence,
+                            "outcome": "answered",
+                            "answer_length": len(answer),
+                        }
+                    )
+                if not thermal_aborted and verified:
+                    rewrite_turn = cove.build_cove_rewrite_turn(
+                        current_report, verified
+                    )
+                    try:
+                        rewrite_result = await _invoke_once(rewrite_turn)
+                    except ThermalAbort as exc:
+                        shim_events.append(
+                            {
+                                "shim": "cove",
+                                "outcome": "thermal_abort_rewrite",
+                                "error": f"{type(exc).__name__}: {exc}",
+                                "answers": cove_answers,
+                            }
+                        )
+                        thermal_aborted = True
+                    except Exception as exc:  # noqa: BLE001
+                        shim_events.append(
+                            {
+                                "shim": "cove",
+                                "outcome": "rewrite_error",
+                                "error": f"{type(exc).__name__}: {exc}",
+                                "answers": cove_answers,
+                            }
+                        )
+                    else:
+                        rewrite_text = str(
+                            rewrite_result.get("final_report", "")
+                        )
+                        rewritten = cove.extract_rewritten_report(rewrite_text)
+                        if rewritten:
+                            current_report = rewritten
+                            shim_events.append(
+                                {
+                                    "shim": "cove",
+                                    "outcome": "rewrite_ok",
+                                    "claims_verified": len(verified),
+                                    "answers": cove_answers,
+                                }
+                            )
+                        else:
+                            shim_events.append(
+                                {
+                                    "shim": "cove",
+                                    "outcome": "no_fenced_output",
+                                    "claims_verified": len(verified),
+                                    "answers": cove_answers,
+                                }
+                            )
+            else:
+                shim_events.append(
+                    {
+                        "shim": "cove",
+                        "outcome": "insufficient_claims",
+                        "claims_found": len(claims),
+                    }
+                )
+
+        # ---- Shim 8: claim-support gate (pure post-processing) ----
+        if enable_claim_support_gate and current_report:
+            notes_urls = extract_urls(current_notes_text)
+            unsupported = claim_support.find_unsupported_claims(
+                current_report, notes_urls, current_notes_text
+            )
+            if unsupported:
+                current_report = claim_support.apply_unsupported_marks(
+                    current_report, unsupported
+                )
+            shim_events.append(
+                {
+                    "shim": "claim_support",
+                    "unsupported_count": len(unsupported),
+                    "unsupported": [
+                        {
+                            "kind": u.claim.kind,
+                            "subject": u.claim.subject,
+                            "object": u.claim.object,
+                        }
+                        for u in unsupported
+                    ],
+                }
+            )
+
+        final_report_override = current_report
+
     # ---- Finalize metrics ----
     try:
         if result is None:
@@ -426,7 +678,10 @@ async def run_odr_trial(
             assert last_exc is not None
             raise last_exc
 
-        final_report = str(result.get("final_report", ""))
+        if final_report_override is not None:
+            final_report = final_report_override
+        else:
+            final_report = str(result.get("final_report", ""))
 
         # Annotate persistent unverified URLs in the FINAL report body
         # so the blind rater sees them inline. Recomputes verification
@@ -464,6 +719,8 @@ async def run_odr_trial(
         metrics.trajectory.append({"raw_notes_count": len(raw_notes)})
         if fact_check_events:
             metrics.trajectory.append({"fact_check": fact_check_events})
+        if shim_events:
+            metrics.trajectory.append({"shim_events": shim_events})
         if annotation_urls:
             metrics.trajectory.append(
                 {"final_unverified_urls": annotation_urls}
