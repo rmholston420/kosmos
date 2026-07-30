@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from ..metrics import TrialMetrics
+from .prompts import KOSMOS_MCP_PROMPT, build_anchored_user_turn
 from .search_backend import unique_domain_count
 
 _ROOT = Path(__file__).resolve().parents[4]
@@ -65,11 +66,10 @@ def build_odr_config(
                 "tools": ["search", "visit"],
                 "auth_required": False,
             },
-            "mcp_prompt": (
-                "You have two tools: `search(query, top_k=10)` returns "
-                "web search results, and `visit(url, goal)` fetches a "
-                "URL's text content. Use them to research thoroughly."
-            ),
+            # Stage 6.3.1 prompt anchoring: tool-usage discipline injected
+            # via ODR's officially-supported mcp_prompt hook. See
+            # harness/prompts.py for the full contract.
+            "mcp_prompt": KOSMOS_MCP_PROMPT,
             # Model slots — all pointed at Ollama via openai-compat.
             "research_model": prefixed_model,
             "research_model_config": {
@@ -129,11 +129,16 @@ async def run_odr_trial(
     )
     config["configurable"]["thread_id"] = str(uuid.uuid4())
 
+    # Stage 6.3.1 prompt anchoring: wrap the raw fixture question in the
+    # answer-agnostic structural scaffold (Positions A-E). See
+    # harness/prompts.py for the full contract.
+    anchored_question = build_anchored_user_turn(question)
+
     cited_urls: list[str] = []
     start = time.monotonic()
     try:
         result = await deep_researcher.ainvoke(
-            {"messages": [{"role": "user", "content": question}]},
+            {"messages": [{"role": "user", "content": anchored_question}]},
             config=config,
         )
         # ODR returns a compiled report in `final_report`; extract cited URLs
