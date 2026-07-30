@@ -517,6 +517,50 @@
 
 ## Governance (Praxis / Phrouros)
 
+### Praxis Constitution Loader
+
+#### Rigpa-LMS `signing.py` (Ed25519 + JCS primitives) — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (file: `backend/src/rigpa/domains/governance/constitution/signing.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-constitution/signing.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `plugins/praxis/constitution/signing.py`
+- **Port(s):** Praxis constitution boot-verification subsystem
+- **Modifications:** swapped donor `jcs` (MIT) for Kosmos-native `rfc8785` (Apache-2.0, already a DataPort §1.10 dependency) to avoid dual RFC-8785 implementations; preserved `canonicalize`/`sign`/`verify`/`load_public_key`/`load_private_key` signatures verbatim; type-annotations retained; behavior identical (`verify` returns `bool`, never raises on signature failure).
+- **ADR:** ADR-032
+- **Logged:** 2026-07-29 23:15 EDT
+
+#### Rigpa-LMS `verifier.py` (ConstitutionVerifier facade) — `PATTERN-VENDORED`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (file: `backend/src/rigpa/domains/governance/constitution/verifier.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29 (cached at `/tmp/donor-constitution/verifier.py`)
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** `plugins/praxis/constitution/verifier.py`
+- **Port(s):** Praxis constitution boot-verification subsystem
+- **Modifications:** default pubkey path relocated from Rigpa's `Path(__file__).with_name("pubkey.pem")` (co-located with verifier module) to Kosmos's `governance/constitution/pubkey.pem` (separate governance artifact tree); replaced donor `SignatureDecodeError(ValueError)` and bare `RuntimeError` raises with the Kosmos `ConstitutionError` hierarchy (`ConstitutionNotFoundError` for missing pubkey, `ConstitutionMalformedError` for unparseable PEM, boolean `False` return for signature-mismatch — matching donor's non-raising `verify()` semantics). No new runtime dependency.
+- **ADR:** ADR-032
+- **Logged:** 2026-07-29 23:15 EDT
+
+#### Rigpa-LMS `amend_service.py` / `cli.py` / `service.py` / `models.py` / `schemas.py` — `PATTERN-VENDORED (reference only, deferred to Synedrion)`
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (files: `backend/src/rigpa/domains/governance/constitution/{amend_service,cli,service,models,schemas}.py`)
+- **Commit / Version:** inspected at HEAD 2026-07-29
+- **License:** internal donor (rmholston420); Kosmos vendors pattern only, not source.
+- **Kosmos location:** none at Stage 2.1; deferred to Synedrion (Phase 6.3) per spec §278.
+- **Port(s):** Praxis constitution boot-verification subsystem (future amendment surface only)
+- **Modifications:** Kosmos does not ship the amendment workflow (donor `amend_service.py`: 157 lines proposing/signing/ratifying `ConstitutionAmendment` rows), CLI (donor `cli.py`: 164 lines), read HTTP surface (donor `service.py`: 74 lines list/diff/get_current), SQLAlchemy schema (donor `models.py`: 83 lines `ConstitutionVersion` + `ConstitutionAmendment` tables), or Pydantic serialization (donor `schemas.py`: 77 lines) at Stage 2.1. Spec §278 ties amendment CLI/UI landing to Synedrion (Phase 6.3). When Synedrion lands, it will re-vendor these five files and MUST cite this ledger entry.
+- **ADR:** ADR-032 (deferred surface); future Synedrion ADR will supersede this entry.
+- **Logged:** 2026-07-29 23:15 EDT
+
+#### `rfc8785`, `cryptography`, `PyYAML` — `VENDORED (reused existing Kosmos deps)`
+- **Source:** https://github.com/di/rfc8785.py, https://github.com/pyca/cryptography, https://github.com/yaml/pyyaml
+- **Commit / Version:** `rfc8785>=0.1.4` (Apache-2.0), `cryptography>=49` (Apache-2.0 OR BSD-3), `PyYAML>=6.0` (MIT) — all three already declared in `pyproject.toml` from Stage 1.10 (DataPort) and Stage 1.5 (SecretsPort spike).
+- **License:** Apache-2.0 / Apache-2.0 OR BSD-3 / MIT
+- **Kosmos location:** `plugins/praxis/constitution/{signing.py,loader.py}`
+- **Port(s):** Praxis constitution boot-verification subsystem
+- **Modifications:** used unmodified. `rfc8785.dumps()` for JCS canonicalization (RFC 8785); `cryptography.hazmat.primitives.asymmetric.ed25519` for Ed25519 sign/verify; `yaml.safe_load` for YAML parse. Zero new runtime dependencies added at Stage 2.1.
+- **ADR:** ADR-032
+- **Logged:** 2026-07-29 23:15 EDT
+
+---
+
 #### agent-governance-toolkit — `PLANNED`
 - **Source:** TBD (log at vendoring)
 - **License:** verify permissive

@@ -1,0 +1,11 @@
+version_number: 1
+parent_version_number: null
+ratified_at: '2026-07-30T00:00:00Z'
+ratified_by: genesis
+title: Kosmos Constitution Genesis
+summary: Initial genesis constitution artifact. Ratified at Kosmos Stage 2.1 as the
+  boot-time integrity anchor. Amendment workflow deferred to Synedrion (Phase 6.3,
+  ADR-032).
+gutoe_axiom_refs: []
+policies: {}
+cedar_policies: []

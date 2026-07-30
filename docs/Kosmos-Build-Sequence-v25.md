@@ -146,10 +146,10 @@ Write pure Python `Protocol` interfaces (no implementations) at `ports/`:
 
 ## Stage 2 — Praxis + Phrouros (Governance) (Week 2)
 
-### 2.1 Praxis constitution loader
-- **Ports:** DataPort, SecretsPort
-- **Action:** Load JSON-LD constitution signed with Ed25519. Verify signature on every boot.
-- **DoD:** Tampered constitution → boot refused.
+### 2.1 Praxis constitution loader (landed 2026-07-29 23:15 EDT per ADR-032)
+- **Ports:** FrontendContractPort (kernel-side plugin registration); `DataPort` and `SecretsPort` remain in the aspirational Stage-2.1 scope but are not required for the DoD — the boot-time load-and-verify path reads directly from `governance/constitution/versions/vNNNN.{yaml,json,sig}` and `governance/constitution/pubkey.pem` on the filesystem; DataPort integration will land when the amendment workflow lands at Synedrion (Phase 6.3) per spec §278; SecretsPort integration will land when Restricted-tier private-key material is externalized (currently the genesis privkey lives ephemerally under gitignored `.secrets/genesis/privkey.pem`).
+- **Action:** Boot-time load-and-verify of the ratified `vNNNN.{yaml,json,sig}` constitution triplet, Ed25519 JWS over JCS canonical JSON (RFC 8785), against the co-located `pubkey.pem`. Three-tier invariant chain: (1) all three artifacts + pubkey exist, (2) on-disk JSON is the JCS canonicalization of parsed on-disk YAML, (3) Ed25519 signature verifies against pubkey over the canonical JSON. Any failure raises a `ConstitutionError` subclass from `ConstitutionLoader.__init__` — that raise IS the boot-refusal signal. Praxis plugin (`plugins.praxis.plugin.PraxisPlugin`) runs verification **before** any FrontendContractPort call, so tamper leaves the kernel with no partially-registered plugin. Per ADR-032 Q1=B: verifier + loader + standalone `signing.py` helper ship at 2.1; amend service, CLI, HTTP surface, SQLAlchemy models, Pydantic schemas all deferred to Synedrion (Phase 6.3) per spec §278. Per ADR-032 Q2=A: Praxis registers a `PluginDescriptor` with `panels=(Panel(id="praxis.governance", slot=GOVERNANCE, priority=100, lazy_module="praxis/panels/GovernancePanel", plugin_name="praxis"),)` and `ui_parity_status=IN_PROGRESS` — no §17.1 amendment; IN_PROGRESS handles the case natively; Stage 3.5 Next.js shell resolves the lazy_module reference and promotes to COMPLIANT.
+- **DoD:** Tampered constitution → boot refused. Test `test_tampered_constitution_refuses_boot_build_sequence_2_1_dod` in `plugins/praxis/tests/test_constitution_loader.py` literally satisfies this by editing the on-disk YAML post-ratification and asserting `ConstitutionLoader(constitution_dir=..., verify_on_init=True)` raises `ConstitutionTamperError`. **PASS** (40 Praxis contract tests green; full suite 432/432).
 
 ### 2.2 APEX Change Approval Tier engine
 - **Ports:** EventBusPort, NotificationPort

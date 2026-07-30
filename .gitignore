@@ -35,3 +35,6 @@ ops/scratch/
 
 # Perplexity Computer local skill copies (kept via .perplexity/)
 skills/user/
+
+# Kosmos secrets — private keys, sealed secrets material
+.secrets/
