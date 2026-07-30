@@ -219,12 +219,66 @@
 
 ### Observability
 
-#### Langfuse — `PLANNED`
-- **Source:** https://github.com/langfuse/langfuse
-- **License:** MIT (core)
-- **Kosmos location:** Compose; `adapters/observability/langfuse/`
-- **Port(s):** ObservabilityPort
-- **Logged:** —
+#### opentelemetry-sdk — `VENDORED` (Stage 1.6)
+- **Source:** https://github.com/open-telemetry/opentelemetry-python
+- **Commit / Version:** dependency — pinned via pyproject `opentelemetry-sdk>=1.27`
+- **License:** Apache-2.0
+- **Kosmos location:** `adapters/observability/otel_stack/adapter.py` (used inside the future `RealOtelBackend` only)
+- **Port(s):** `ObservabilityPort` (ADR-025)
+- **Modifications:**
+  - Imported lazily behind `OtelBackend` Protocol so contract tests using `StubOtelBackend` do not require the wheel installed
+  - Only `TracerProvider`, `MeterProvider`, span/`start_as_current_span`, counter/histogram, and resource attributes are used
+- **ADR:** ADR-025
+- **Logged:** 2026-07-29 21:52 EDT
+
+#### opentelemetry-exporter-otlp-proto-grpc — `VENDORED` (Stage 1.6)
+- **Source:** https://github.com/open-telemetry/opentelemetry-python (contrib exporters)
+- **Commit / Version:** dependency — pinned via pyproject `opentelemetry-exporter-otlp-proto-grpc>=1.27`
+- **License:** Apache-2.0
+- **Kosmos location:** `adapters/observability/otel_stack/adapter.py` (`RealOtelBackend` OTLP wiring, added when LGTM stack lands)
+- **Port(s):** `ObservabilityPort`
+- **Modifications:** Endpoint defaults to `http://127.0.0.1:4317` (Colossus-local LGTM collector); OTLP failures degrade to no-op so a downed collector never crashes plugins
+- **ADR:** ADR-025
+- **Logged:** 2026-07-29 21:52 EDT
+
+#### prometheus-client — `VENDORED` (Stage 1.6)
+- **Source:** https://github.com/prometheus/client_python
+- **Commit / Version:** dependency — pinned via pyproject `prometheus-client>=0.20`
+- **License:** Apache-2.0
+- **Kosmos location:** `adapters/observability/otel_stack/adapter.py` (Prometheus scrape endpoint at `:9090/metrics` for Grafana)
+- **Port(s):** `ObservabilityPort`
+- **Modifications:** Used only for the scrape-endpoint HTTP server; OTel meter is the primary write path (Prometheus is the read path for Grafana Alloy)
+- **ADR:** ADR-025
+- **Logged:** 2026-07-29 21:52 EDT
+
+#### structlog — `VENDORED` (Stage 1.6)
+- **Source:** https://github.com/hynek/structlog
+- **Commit / Version:** dependency — pinned via pyproject `structlog>=24.1` (already present since Stage 0.1; now formalized against `ObservabilityPort`)
+- **License:** Apache-2.0 / MIT (dual)
+- **Kosmos location:** `adapters/observability/otel_stack/adapter.py` (bind_context/clear_context routed through `structlog.contextvars`)
+- **Port(s):** `ObservabilityPort`
+- **Modifications:**
+  - Only `structlog.contextvars.bind_contextvars` and `clear_contextvars` are used from structlog directly; log formatting is delegated to the caller's processor chain
+  - Mandatory correlation keys per Kosmos custom instructions (`plugin, request_id, user_id, trace_id, event`) are the contract; not enforced at runtime yet
+- **ADR:** ADR-025
+- **Logged:** 2026-07-29 21:52 EDT
+
+#### Rigpa-LMS observability seam pattern — `VENDORED` (Stage 1.6)
+- **Source:** https://github.com/rmholston420/Rigpa-LMS (user's own repo; permissively-licensed donor)
+  - `backend/src/rigpa/observability/__init__.py`, `config.py`, `tracing.py`, `metrics.py`, `logging.py`
+  - Rigpa ADR-044 (LGTM stack), ADR-013a (OTel adoption)
+- **Commit / Version:** inspected at donor `main` on 2026-07-29 (cached at `/tmp/donor-obs/`)
+- **License:** user's own code; treated as permissive donor
+- **Kosmos location:** `ports/observability.py`, `adapters/observability/otel_stack/adapter.py`
+- **Modifications:**
+  - Rigpa layered OTel/Prometheus/structlog behind an `ObservabilityConfig` init; Kosmos formalizes the four verbs (`trace / score / log_cost / bind_context`) as a `Protocol` so plugins depend on the port not the vendors
+  - `trace()` returns a `NoOpSpan` if the backend fails to open a span, so calling code never has to guard `with obs.trace(...):` — Rigpa's version implicitly assumed the backend was up
+  - `log_cost()` writes both counters *and* attaches attributes to the currently active span (Rigpa only wrote counters), so trace views show spend inline with the request
+  - `AgeBackend`-style Protocol seam (`OtelBackend`) mirrors the Stage 1.5 `PyrageBackend` split so tests never need any OTel wheel installed
+  - `is_healthy` is non-throwing (ADR-023 rule 5); `close()` is idempotent — both stronger than Rigpa's originals
+  - Langfuse (spec §4.1 aspirational) is deferred to a future second adapter for LLM-specific prompt/response/eval-score UX; ADR-025 sizes the trigger
+- **ADR:** ADR-025
+- **Logged:** 2026-07-29 21:52 EDT
 
 ---
 

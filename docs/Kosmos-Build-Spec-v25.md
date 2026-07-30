@@ -87,7 +87,7 @@ Four governing principles: Ports & Adapters everywhere; black-box modules with s
 | `VectorPort` | Qdrant | `upsert()`, `search()`, `delete()`, `snapshot()` |
 | `EventBusPort` | Valkey/Redis Streams | `publish(envelope)`, `subscribe()`, `unsubscribe()`, `read_recent()`, `is_healthy()`, `close()` — envelope-first; consumer-group `ack()` deferred to ADR-024 — see **ADR-023** |
 | `SecretsPort` | age-encrypted file (primary) · hvac/Vault (deferred) | `get_secret()`, `put_secret()`, `rotate()`, `is_healthy()`, `close()` — age-file primary per **ADR-024**; `lease()` deferred until a future ADR triggered by Tektos per-task scoping (§18.6) |
-| `ObservabilityPort` | Langfuse + OpenTelemetry | `trace()`, `score()`, `log_cost()` |
+| `ObservabilityPort` | OpenTelemetry SDK + `prometheus-client` + `structlog` (LGTM-compatible) — Langfuse deferred (ADR-025) | `trace(name, *, attributes) -> Span` (sync context manager, records exceptions, re-raises), `score(name, value, *, attributes)`, `log_cost(*, model, prompt_tokens, completion_tokens, usd, attributes)`, `bind_context(**keys)` / `clear_context()` (contextvars-backed), `get_tracer(name)` / `get_meter(name)` escape hatches, `is_healthy() -> bool` (non-throwing), `async close()` (idempotent) |
 | `FrontendContractPort` | Next.js + React 19 + Radix + shadcn/ui + Tailwind + Zustand + TanStack Query | route registration, component lazy-load, state namespace; gated by `ui_parity_status` per UI Parity Rule |
 | `ResourcePort` | APEX `ResourceProtocol` | `can_allocate()`, `allocate()`, `replenish()`, `priority_queue_position()` |
 | `DataPort` | JSON-LD canonical export | `export_canonical()`, `check_format_health()`, `migrate_schema()` |
@@ -320,6 +320,7 @@ All ADRs live in `adrs/`. The table below is the running index; full-text lives 
 | ADR-022 | LLMPort Surface Expansion (spec §4.1 tightening) | **Ratified v25** | Stage 1.2 |
 | ADR-023 | EventBusPort Envelope-First MVP (spec §4.1 tightening) | **Ratified v25** | Stage 1.4 |
 | ADR-024 | SecretsPort adopts age-encrypted file backend (Vault deferred) | **Ratified v25** | Stage 1.5 |
+| ADR-025 | ObservabilityPort adopts OTel+Prometheus+structlog stack (Langfuse deferred) | **Ratified v25** | Stage 1.6 |
 
 ### 17.1 UI Parity Rule (ADR-014, in-line summary)
 

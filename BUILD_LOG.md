@@ -204,3 +204,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** SecretsPort live path (`PyrageBackend`) now correctly loads `age-keygen`-formatted identity files
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met — 81/81 tests pass (77 + 4 new regression tests)
+
+---
+
+## 2026-07-29 21:52 EDT — Stage 1.6: ObservabilityPort formalized with OTel+Prometheus+structlog stack adapter
+
+- **Stage / plugin / port:** Stage 1.6 · ObservabilityPort
+- **What changed:** Codified ADR-025 by shipping `ports/observability.py` (`ObservabilityPort` Protocol + `Span` Protocol) and `adapters/observability/otel_stack/` (`OtelStackObservabilityAdapter` + `OtelBackend` Protocol seam + `StubOtelBackend` in-memory backend + `NoOpSpan` safe fallback). Port surface: `trace(name, *, attributes) -> Span` (sync context manager, records exceptions and re-raises), `score(name, value, *, attributes)` (histogram), `log_cost(*, model, prompt_tokens, completion_tokens, usd, attributes)` (three counters + active-span attribution), `bind_context(**keys)` / `clear_context()` (contextvars-backed), `get_tracer(name)` / `get_meter(name)` (direct-access escape hatches for plugins needing full OTel surface), `is_healthy() -> bool` (non-throwing per ADR-023 rule 5), `async close()` (idempotent flush of both providers). Third-party libs (`opentelemetry-*`, `prometheus_client`, `structlog`) imported lazily behind `OtelBackend` so contract tests do not need any real observability wheel installed — mirrors Stage 1.5 `PyrageBackend` / `InMemoryAgeBackend` split. All eight design invariants from ADR-025 enforced in code. 20 new contract tests covering Protocol conformance, `trace` open/exception path, `score` histogram reuse, `log_cost` three-counter + span-attribution behavior, `bind_context` / `clear_context`, non-throwing `is_healthy`, idempotent `close`, `NoOpSpan` fallback, and get_tracer / get_meter escape hatches. Fan-out to spec §4.1 ObservabilityPort row (rewritten to match locked-in surface), spec §17 (ADR-025 row appended), `docs/adrs/README.md` (ADR-024 backfilled + ADR-025 row added — index was one entry behind), `docs/PORTING_LEDGER.md §Observability` (Langfuse `PLANNED` stub replaced with 5 VENDORED entries: opentelemetry-sdk, opentelemetry-exporter-otlp-proto-grpc, prometheus-client, structlog, Rigpa-LMS observability seam pattern), `pyproject.toml` (`opentelemetry-sdk>=1.27`, `opentelemetry-exporter-otlp-proto-grpc>=1.27`, `prometheus-client>=0.20` declared as runtime deps; `structlog` already present is now formalized against this port; new packages registered).
+- **Files touched:**
+  - `ports/observability.py` (new, 172 lines)
+  - `adapters/observability/__init__.py` (new)
+  - `adapters/observability/otel_stack/__init__.py` (new)
+  - `adapters/observability/otel_stack/adapter.py` (new, 396 lines: `OtelStackObservabilityAdapter` + `OtelBackend` + `StubOtelBackend` + `NoOpSpan`)
+  - `adapters/observability/otel_stack/test_contract.py` (new, 20 tests)
+  - `docs/Kosmos-Build-Spec-v25.md` (§4.1 ObservabilityPort row + §17 ADR-025 row)
+  - `docs/adrs/README.md` (backfill ADR-024 row + add ADR-025 row)
+  - `docs/PORTING_LEDGER.md` (§Observability, 5 VENDORED entries replacing Langfuse PLANNED)
+  - `pyproject.toml` (3 new runtime deps + 2 new packages)
+- **Ports / adapters affected:** `ObservabilityPort` declared and satisfied by `OtelStackObservabilityAdapter`; downstream LLMPort cost-accountability wiring path now available for Tektos in Stage 3
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER §Observability — 5 VENDORED entries (opentelemetry-sdk + opentelemetry-exporter-otlp-proto-grpc + prometheus-client + structlog + Rigpa observability seam pattern)
+- **Stop-condition status:** met — 101/101 tests pass across `adapters/` (Ollama 12 + llama-swap 15 + SearXNG 8 + EventBus 19 + Secrets 27 + Observability 20); Protocol conformance verified via `isinstance(adapter, ObservabilityPort)`, `isinstance(backend, OtelBackend)`, and `isinstance(NoOpSpan(), Span)`
