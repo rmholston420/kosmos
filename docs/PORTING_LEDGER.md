@@ -797,7 +797,9 @@
 - **Source:** TBD
 - **License:** verify
 - **Port(s):** FrontendContractPort
-- **Logged:** —
+- **ADR:** ADR-005 · ADR-041
+- **Note:** ADR-041 Q10=Option X defer — Stage 3.7 plan renderer landed pure-Python over the Stage 3.6 `Plan` dataclass (`plugins/tektos/renderer/`); Spec Kit vendor selection deferred until a later stage first requires it. ADR-005 "named alternative mode" position preserved verbatim.
+- **Logged:** 2026-07-30 EDT
 
 #### Pier eval harness — `PLANNED`
 - **Source:** TBD

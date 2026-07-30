@@ -8,7 +8,21 @@
 > Playwright MCP server — the trace-emission contract Phrouros relies
 > on is unchanged. See ADR-037 for details.
 
-**Status:** Ratified v25 · Q5=B trigger fired at Stage 3.2 (see ADR-037)
+> **STATUS AMENDMENT (2026-07-30):** The Q4=B `PluginDescriptor`
+> deferral trigger has fired at Stage 3.7 landing. `plugins/tektos/
+> plugin.py` now exposes `TektosPlugin` +
+> `build_tektos_descriptor()`; the descriptor registers exactly one
+> `Panel` — `tektos.plan_approvals` on slot `APPROVALS_QUEUE`,
+> priority 90, `lazy_module="tektos/panels/PlanApprovalPanel"` —
+> below Praxis's `praxis.approvals` panel at priority 100. Every
+> rendered plan card proposes through `ApprovalGatewayPort` at
+> `ChangeApprovalTier.HUMAN_REVIEW` (fail-closed) and writes a
+> `tektos.plan.card_rendered` MemoryPort event with provenance
+> `"tektos_plan_renderer"`. `ui_parity_status=IN_PROGRESS`;
+> COMPLIANT lands at Stage 3.11. See ADR-041 for the full renderer
+> + descriptor decision set.
+
+**Status:** Ratified v25 · Q5=B trigger fired at Stage 3.2 (see ADR-037) · Q4=B trigger fired at Stage 3.7 (see ADR-041)
 **Lock-in phase:** Stage 3.1
 **Supersedes:** —
 

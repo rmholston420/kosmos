@@ -1,29 +1,25 @@
-# Kosmos Session Handoff — 2026-07-30 02:44 EDT
+# Kosmos Session Handoff — 2026-07-30 03:08 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 3.7 (next work — Phase 3 spec-kit plan renderer)
-- **Plugin / kernel component:** Tektos · spec-kit plan renderer
-- **Port(s) in progress:** `FrontendContractPort` (planned per `PORTING_LEDGER.md` `spec-kit — PLANNED` row; introduces first Tektos UI parity component per ADR-014 UI Parity Rule)
+- **Stage / phase:** Stage 3.8 (next) — Pier eval harness
+- **Plugin / kernel component:** plugins/tektos (Pier eval harness — no plugin yet; port surface TBD)
+- **Port(s) in progress:** none yet (Stage 3.7 introduced no new port surface; Stage 3.8 port surface TBD via forthcoming ADR-pier-eval-harness)
 
 ## Completed this session
-- Stage 3.6 LANDED — OpenSpec parser pattern-vendored end-to-end.
-  - Code: `plugins/tektos/openspec/{__init__,policy,models,parser,plan}.py` (stdlib-only, fence-mask-aware, ~430 LOC parser + ~90 LOC Plan producer).
-  - Fixture: `plugins/tektos/tests/fixtures/openspec/add-dark-mode/{proposal.md, design.md, tasks.md, specs/ui/spec.md}` patterned after upstream OPSX walkthrough (real ADDED/MODIFIED/REMOVED deltas, metadata skipping, fenced-example filtering).
-  - Tests: `plugins/tektos/tests/test_openspec.py` — 30 new tests all green, including DoD literal `test_produce_plan_on_add_dark_mode_fixture_writes_queryable_events_build_sequence_3_6_dod`, ADR-007 AST guard, and ADR-008 zero-trust passthrough. Full repo: **705 passed + 4 env-gated skips**. `make stage1-gate` PASS.
-- **ADR-040** authored at `docs/adrs/ADR-040-tektos-openspec-parser-vendoring.md` (Ratified v25).
-- **ADR-005** amended in place with `> **STATUS AMENDMENT (2026-07-30):**` block (original decision text preserved); status line now `Ratified · amended by ADR-040`.
-- Fan-out complete: ADR index (`docs/adrs/README.md`), Spec §17 new ADR-040 row (`docs/Kosmos-Build-Spec-v25.md`), PORTING_LEDGER OpenSpec entry `PLANNED` → `PATTERN-VENDORED` with upstream `Fission-AI/OpenSpec@2b3d368539132be6311e55db58899abbf5306b81` (MIT), Build-Sequence §3.6 rewritten as LANDED block with DoD anchor and cross-refs to ADR-005/ADR-040/ledger.
-- BUILD_LOG appended with 2026-07-30 02:44 EDT Stage-3.6-LANDED entry.
-- Repo tagged `stage-3-6-complete`; commit pushed to `origin/main`.
+- Stage 3.7 LANDED — Tektos plan renderer + first `PluginDescriptor` (ADR-041 · Ratified v25). See BUILD_LOG entry `2026-07-30 03:08 EDT`.
+  - Renderer subsystem `plugins/tektos/renderer/{__init__,policy,models,project}.py` (Q1=B pure-Python, no upstream vendored)
+  - First Tektos `PluginDescriptor` at `plugins/tektos/plugin.py` (`TektosPlugin` + `build_tektos_descriptor()`) — fires ADR-036 Q4=B trigger (STATUS AMENDMENT appended)
+  - `Panel(id="tektos.plan_approvals", slot=APPROVALS_QUEUE, priority=90, lazy_module="tektos/panels/PlanApprovalPanel")` — sits below Praxis `praxis.approvals` (priority 100) per ADR-033 §Q1=C
+  - Every card proposes through `ApprovalGatewayPort.propose(...)` at fail-closed `ChangeApprovalTier.HUMAN_REVIEW` (ADR-037 default); every card emits `tektos.plan.card_rendered` MemoryPort event with `provenance="tektos_plan_renderer"` + confidence `clamp(plan.mean_completeness, 0.05, 1.0)`
+  - 28 new tests in `plugins/tektos/tests/test_plan_renderer.py`; full-repo pytest **733 passed + 4 env-gated skips**; `make stage1-gate` **PASS**
+  - Fan-out: ADR-041 authored; ADR-036 STATUS AMENDMENT; `docs/adrs/README.md` row appended; Spec §17 row inserted; Build-Sequence §3.7 rewritten as LANDED block; `docs/PORTING_LEDGER.md` `spec-kit` row ADR pointer updated to `ADR-005 · ADR-041` (row stays `PLANNED` per Q10 Option X defer)
 
 ## Remaining before current Definition of Done
-Stage 3.7 spec-kit plan renderer — DoD literal from `docs/Kosmos-Build-Sequence-v25.md:247`: "Plans render as user-approvable UI cards." Upcoming decisions to lock at 3.7 kickoff:
-- **spec-kit port surface.** `PORTING_LEDGER.md` currently lists `spec-kit — PLANNED · Source: TBD · Port(s): FrontendContractPort · Logged: —` — need concrete upstream commit + license + surface locking (author new ADR or ratify existing `ADR-014` UI Parity Rule direction with a concrete Q-round).
-- **UI surface.** First Tektos-facing UI parity component per ADR-014; must register a `PluginDescriptor` with `panels=(...)` and satisfy `ui_parity_status` — spec §17.1 grandfathering fired only for Stage 3.1 (`ADR-036 Q4=B`), so 3.7 must ship a real panel.
-- **Consumer of the OpenSpec `Plan`.** `produce_plan()` currently emits `Plan` objects into MemoryPort only; 3.7 needs to render those `Plan.rendered_summary` values (or a richer projection) as approval cards routed through `ApprovalGatewayPort` (ADR-033/037) at the appropriate tier.
+- Stage 3.7 DoD met. Nothing remaining for 3.7.
+- Session tail still owes: `git add -A && commit && tag stage-3-7-complete && push` + shared-asset refresh (Kosmos v25 Bundle zip, ADRs Bundle md, project files mirror + `pplx project files submit`) + `share_file` under existing asset names.
 
 ## Open questions / awaiting user answer
-- none.
+- Stage 3.8 Pier eval harness — DoD literal "Every Tektos PR runs through Pier before user review." No ADR-pier-eval-harness authored yet; port surface + upstream vendor status + eval-harness scope require a Q-lock round at Stage 3.8 kickoff.
 
 ## Exact next action
-- Read `docs/Kosmos-Build-Sequence-v25.md` §3.7 (`sed -n '246,260p' docs/Kosmos-Build-Sequence-v25.md`) + `PORTING_LEDGER.md` `spec-kit` block, then open the Stage 3.7 Q-decision round (upstream selection + port-surface commit + UI panel scope + `Plan`-to-card projection + APEX tier gating for approval cards + ADR authoring vs amendment).
+- Commit + tag + push Stage 3.7 (git commands captured in BUILD_LOG entry above), then refresh shared assets, then start Stage 3.8 with the standard Q-lock kickoff.

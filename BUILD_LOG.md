@@ -770,3 +770,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Tektos-internal only per ADR-040 Q2. No new `ports/*.py`. `DataPort` (ADR-028 JSON-LD export) intentionally not reused (semantically wrong for spec-doc reading).
 - **PORTING_LEDGER / ADR updated:** ADR-040 authored; ADR-005 amended; PORTING_LEDGER `OpenSpec` entry moved from `PLANNED` to `PATTERN-VENDORED` with upstream commit + SPDX + modifications.
 - **Stop-condition status:** met — Stage 3.6 DoD literal `pytest plugins/tektos/tests/test_openspec.py::test_produce_plan_on_add_dark_mode_fixture_writes_queryable_events_build_sequence_3_6_dod` green; 30 new tests all green; full-repo `pytest`: 705 passed + 4 env-gated skips; `make stage1-gate`: PASS. ADR-007 (AST guard test) + ADR-008 (zero-trust passthrough test) + ADR-023 (envelope-first, no new port) + ADR-028 (`DataPort` untouched) all verified in-tree. Phase 3 advances Stage 3.6 → Stage 3.7 (spec-kit plan renderer).
+
+## 2026-07-30 03:08 EDT — Stage 3.7 LANDED · Tektos plan renderer + first PluginDescriptor (ADR-041)
+
+- **Stage / plugin / port:** Stage 3.7 · plugins/tektos/renderer + plugins/tektos/plugin · reuses FrontendContractPort (ADR-031) + ApprovalGatewayPort (ADR-033/037) + MemoryPort (ADR-008)
+- **What changed:** Landed pure-Python plan renderer (Q1=B, no upstream vendored) + first Tektos `PluginDescriptor` (Q7=A) mirroring `plugins/phrouros/plugin.py` bootstrap shape. Every `PlanCard` proposes through `ApprovalGatewayPort.propose(...)` at fail-closed `ChangeApprovalTier.HUMAN_REVIEW` (Q4=A, ADR-037 default), emits a `tektos.plan.card_rendered` MemoryPort event with `provenance="tektos_plan_renderer"` + confidence `clamp(plan.mean_completeness, 0.05, 1.0)` (Q6=A), and registers `Panel(id="tektos.plan_approvals", slot=APPROVALS_QUEUE, priority=90, lazy_module="tektos/panels/PlanApprovalPanel")` (Q3=A) that sits BELOW Praxis `praxis.approvals` at priority 100 per ADR-033 §Q1=C. Fires ADR-036 Q4=B `PluginDescriptor` deferral trigger (STATUS AMENDMENT appended). Q10=Option X defers ADR-005 Spec-Kit fate — `PORTING_LEDGER.md` `spec-kit` row stays `PLANNED · Source: TBD` with ADR pointer updated to `ADR-005 · ADR-041`. `ui_parity_status=IN_PROGRESS` at 3.7 → COMPLIANT at Stage 3.11.
+- **Files touched:**
+  - `plugins/tektos/renderer/__init__.py` (new)
+  - `plugins/tektos/renderer/policy.py` (new — locked constants)
+  - `plugins/tektos/renderer/models.py` (new — `PlanCard` frozen dataclass + `clamp_card_confidence`)
+  - `plugins/tektos/renderer/project.py` (new — `project_plan_to_card` + `render_and_gate_plan_card`)
+  - `plugins/tektos/plugin.py` (new — `TektosPlugin` + `build_tektos_descriptor()`)
+  - `plugins/tektos/tests/test_plan_renderer.py` (new — 28 tests)
+  - `docs/adrs/ADR-041-tektos-plan-renderer-and-first-plugin-descriptor.md` (new)
+  - `docs/adrs/ADR-036-tektos-openhands-sdk-vendoring.md` (STATUS AMENDMENT for Q4=B trigger firing)
+  - `docs/adrs/README.md` (ADR-041 row appended)
+  - `docs/Kosmos-Build-Spec-v25.md` (§17 ADR-041 row inserted)
+  - `docs/Kosmos-Build-Sequence-v25.md` (§3.7 rewritten as LANDED block)
+  - `docs/PORTING_LEDGER.md` (`spec-kit` row ADR pointer + defer note)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten to point at Stage 3.8)
+- **Ports / adapters affected:** none. Envelope-first per ADR-023 / ADR-038 / ADR-040 defer pattern. `FrontendContractPort` (ADR-031) `Panel`/`PluginDescriptor` schemas unchanged. `ApprovalGatewayPort` (ADR-033) tier + narrow gateway shape unchanged. `MemoryPort` (ADR-008) zero-trust guard passthrough verified.
+- **PORTING_LEDGER / ADR updated:** ADR-041 authored (Ratified v25); ADR-036 STATUS AMENDMENT appended for Q4=B trigger firing; ADR index (`docs/adrs/README.md`) + Spec §17 + Build-Sequence §3.7 all reference ADR-041; `PORTING_LEDGER.md` `spec-kit` row ADR pointer updated to `ADR-005 · ADR-041` with defer note (row stays `PLANNED` per Q10 Option X).
+- **Stop-condition status:** met — Stage 3.7 DoD literal `pytest plugins/tektos/tests/test_plan_renderer.py::test_produce_plan_renders_as_approvable_card_via_frontend_contract_port_build_sequence_3_7_dod` green; 28 new tests all green; full-repo `pytest`: 733 passed + 4 env-gated skips; `make stage1-gate`: PASS. ADR-007 (AST guard `test_renderer_and_plugin_import_no_other_plugins_adr_007`) + ADR-008 (zero-trust passthrough via `_RejectingMemoryPort`) + ADR-023 (envelope-first, no new port) + ADR-031 (Panel/PluginDescriptor shapes unchanged) + ADR-033 (Tektos priority 90 < Praxis priority 100 asserted) + ADR-036 Q4=B trigger fired via STATUS AMENDMENT + ADR-037 (HUMAN_REVIEW fail-closed default) + ADR-040 (Stage 3.6 `Plan` producer consumed unchanged) all verified in-tree. Phase 3 advances Stage 3.7 → Stage 3.8 (Pier eval harness).
