@@ -1206,3 +1206,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. ADR-007 (events-only cross-plugin coupling) preserved. ADR-008 (zero-trust MemoryPort writes) preserved. Vendor tree at `vendor/adr_010/open_deep_research/` unchanged. No new ADR (fixup, not a decision).
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** conftest.py resolves blocker 1 (workspace verified — 33 fast tests + 1019 whole-repo tests all green after `.venv/bin/pytest`). Blocker 2 (Python-3.14 ODR install) resolved by shipping an explicit Colossus command list; user executes it below. Stage 6.3.1 benchmark run is still pending — this entry closes the environmental sub-slice only.
+
+## 2026-07-30 12:15 EDT — Stage 6.3.1 · runtime shortlist correction (tavily-python)
+
+- **Stage / plugin / port:** Stage 6.3.1 · Zetesis inner-loop ODR substrate tuning (environmental fixups pre-benchmark run).
+- **What changed:** First runtime shortlist under-installed. `open_deep_research/utils.py` line 30 does `from tavily import AsyncTavilyClient` unconditionally at module load. The previous shortlist was walked only from `deep_researcher.py`'s direct imports; the transitive load via `utils.py` was missed. Full third-party import surface across `vendor/adr_010/open_deep_research/src/open_deep_research/*.py` is now confirmed as: aiohttp, langchain, langchain-core, langchain-mcp-adapters, langgraph, mcp, pydantic, tavily. Everything except `tavily` was already resolved. Adding `tavily-python` closes the gap.
+- **Files touched:** none in the repo (environmental — Colossus `.venv` install only).
+- **Ports / adapters affected:** none. Vendor tree stays pristine (no edits to `utils.py`, `pyproject.toml`, or `deep_researcher.py`). No monkey-patching. Only the officially-supported extension surface (`mcp_prompt` + user-turn wrap) is used, exactly as landed in Stage 6.3.1 authoring commit `4db2104`.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** IN PROGRESS. The install command below closes environmental blocker 2 in full — once `python -c "from open_deep_research.deep_researcher import deep_researcher"` returns clean, the 3-trial benchmark run can execute against the anchored prompts.
