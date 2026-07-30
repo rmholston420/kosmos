@@ -1549,3 +1549,20 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (harness-internal)
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress; hermetic tests green (ADR-010 186 passed, whole-repo 1172 passed + 19 skipped). Colossus 3-trial re-run pending.
+
+## 2026-07-30 18:10 EDT — Stage 6.3.6a review-driven amendment
+
+- **Stage / plugin / port:** ADR-010 ODR harness · shim 3 (fact-check enforcement) + shim 8 (claim-support grounded gate)
+- **What changed (post-6.3.6 review fixes before Colossus rerun):**
+  - **Grounded-subjects semantics tightened.** `_subject_is_grounded` was matching on any single-token overlap (`tokens & g_tokens`). A grounded subject like `"Neo4j Enterprise"` (tokens `{"neo4j", "enterprise"}`) would falsely exempt any future claim subject sharing the bare `"enterprise"` token (e.g. `"Enterprise Java"`). Rewritten to strict subset: claim-subject tokens must be a subset of some grounded subject's token set. Distinctive-proper-noun claims (`"DozerDB"` ⊆ `"DozerDB/dozerdb-plugin"`) still ground; generic-token overlaps no longer do.
+  - **Enforcement strip made positional.** The prior blanket `retry_report.replace("[unverified]", "")` could remove legitimate markers on NEW bad URLs the retry writer introduced. Replaced with `URL [unverified]` and `URL[unverified]` positional replacements per stripped URL — the marker only comes off when the URL it belongs to is also being stripped.
+  - **Enforcement net extended to new-bad URLs.** Added a second strip pass over `unverified_after` (the retry re-verify results) that removes any bad URL not already handled by the first pass, plus its trailing marker. Records event as `pass="retry_enforce_strip_new"`. Prevents `annotate_unverified` at finalize from tagging new hallucinated URLs and violating the DoD `final_unverified_urls == []` gate.
+  - Test updates: `test_grounded_subject_token_match_case_insensitive` refactored to the subset rule; new `test_grounded_subject_subset_rule_rejects_partial_overlap` asserts `"Enterprise Java"` still flagged when grounded set is `"Neo4j Enterprise"`; replaced `test_bad_urls_persist_after_retry_get_annotated` with `test_new_bad_url_in_retry_body_is_stripped` (asserting new-URL strip + empty `final_unverified_urls`).
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/claim_support.py` (subset-rule `_subject_is_grounded`)
+  - `ops/benchmarks/adr_010/harness/odr.py` (positional strip + new-URL strip pass)
+  - `ops/benchmarks/adr_010/tests/test_claim_support.py`
+  - `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`
+- **Ports / adapters affected:** none (harness-internal).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress. Hermetic tests green (ADR-010 187 passed, whole-repo 1173 passed + 19 skipped). Colossus 3-trial re-run pending.

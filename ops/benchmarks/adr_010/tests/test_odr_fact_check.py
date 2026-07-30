@@ -319,7 +319,15 @@ def test_retry_report_that_re_emits_failed_url_is_stripped(monkeypatch):
     assert "https://fake.example/x" in strip["stripped"]
 
 
-def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
+def test_new_bad_url_in_retry_body_is_stripped(monkeypatch):
+    """Stage 6.3.6 extended enforcement net: a bad URL that only
+    appears in the retry body (never seen by the initial verify pass)
+    must ALSO be stripped, not annotated at finalize. This keeps
+    ``final_unverified_urls`` empty per DoD.
+
+    Supersedes the prior 6.3.5 behavior where such URLs survived to
+    ``annotate_unverified`` and gained an ``[unverified]`` marker.
+    """
     invocations: list[dict] = []
     rewrite_invocations: list[dict] = []
     _install_stub_deep_researcher(
@@ -334,7 +342,8 @@ def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
         rewrite_invocations=rewrite_invocations,
         rewrite_responses=[
             {
-                # Rewrite still hallucinated a bad URL
+                # Rewrite hallucinated a DIFFERENT bad URL not in the
+                # original unverified_first set.
                 "final_report": "cites https://fake2.example/",
             },
         ],
@@ -356,12 +365,21 @@ def test_bad_urls_persist_after_retry_get_annotated(monkeypatch):
     )
     assert len(invocations) == 1, invocations
     assert len(rewrite_invocations) == 1, rewrite_invocations
-    assert "https://fake2.example/ [unverified]" in metrics.final_answer
-    unverified_entry = next(
-        e for e in metrics.trajectory
-        if isinstance(e, dict) and "final_unverified_urls" in e
+    # Neither the new bad URL nor an [unverified] marker survives.
+    assert "https://fake2.example/" not in metrics.final_answer
+    assert "[unverified]" not in metrics.final_answer
+    # Extended-strip event was recorded.
+    events = _fact_check_events(metrics)
+    assert any(
+        e.get("pass") == "retry_enforce_strip_new" for e in events
+    ), events
+    # DoD: no final_unverified_urls trajectory entry emitted, since the
+    # extended strip removed every bad URL before annotate_unverified
+    # ran.
+    assert not any(
+        isinstance(e, dict) and "final_unverified_urls" in e
+        for e in metrics.trajectory
     )
-    assert "https://fake2.example/" in unverified_entry["final_unverified_urls"]
 
 
 def test_no_fact_check_disables_shim(monkeypatch):

@@ -539,16 +539,20 @@ async def run_odr_trial(
                     stripped_urls: list[str] = []
                     for bad in unverified_first:
                         if bad and bad in retry_report:
-                            retry_report = retry_report.replace(bad, "")
+                            # Remove the URL AND a trailing dangling
+                            # `[unverified]` (or `[unverified]` with
+                            # preceding whitespace) that was attached to
+                            # it. Only these positional markers get
+                            # stripped: legitimately unverified NEW URLs
+                            # emitted by the retry writer keep their
+                            # markers untouched and are handled by the
+                            # finalize `annotate_unverified` pass.
+                            retry_report = retry_report.replace(
+                                f"{bad} [unverified]", ""
+                            ).replace(
+                                f"{bad}[unverified]", ""
+                            ).replace(bad, "")
                             stripped_urls.append(bad)
-                    # Also strip a bare "[unverified]" left dangling after
-                    # the URL was removed by the writer (or by our strip),
-                    # since the marker is meaningless without its URL and
-                    # the vendor sometimes emits it as pure hedging.
-                    if "[unverified]" in retry_report:
-                        retry_report = retry_report.replace(
-                            " [unverified]", ""
-                        ).replace("[unverified]", "")
                     if stripped_urls:
                         fact_check_events.append(
                             {
@@ -559,7 +563,14 @@ async def run_odr_trial(
                         )
                         result = {**result, "final_report": retry_report}
                     # Re-verify the retry's URLs so persistent failures
-                    # still get annotated.
+                    # still get annotated, AND strip any NEW bad URLs the
+                    # retry writer introduced. Stage 6.3.6 extends the
+                    # enforcement net: the DoD requires
+                    # ``final_unverified_urls`` be empty, so anything the
+                    # retry writer emitted that fails verification is
+                    # ALSO stripped (with the same positional dangling-
+                    # marker cleanup as the original ``unverified_first``
+                    # sweep above).
                     retry_urls = extract_urls(retry_report)
                     if retry_urls:
                         try:
@@ -576,6 +587,30 @@ async def run_odr_trial(
                         unverified_after = [
                             u for u, r in retry_verifs.items() if not r.ok
                         ]
+                        # Strip any bad URL not already stripped above.
+                        already = set(stripped_urls)
+                        newly_stripped: list[str] = []
+                        for bad in unverified_after:
+                            if bad in already or not bad:
+                                continue
+                            if bad not in retry_report:
+                                continue
+                            retry_report = retry_report.replace(
+                                f"{bad} [unverified]", ""
+                            ).replace(
+                                f"{bad}[unverified]", ""
+                            ).replace(bad, "")
+                            newly_stripped.append(bad)
+                        if newly_stripped:
+                            stripped_urls.extend(newly_stripped)
+                            fact_check_events.append(
+                                {
+                                    "pass": "retry_enforce_strip_new",
+                                    "stripped_count": len(newly_stripped),
+                                    "stripped": newly_stripped,
+                                }
+                            )
+                            result = {**result, "final_report": retry_report}
                         fact_check_events.append(
                             {
                                 "pass": "retry",

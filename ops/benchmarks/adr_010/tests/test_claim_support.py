@@ -92,16 +92,37 @@ def test_grounded_subject_exempts_license_claim():
 
 
 def test_grounded_subject_token_match_case_insensitive():
-    """Token-level matching so \"DozerDB\" grounds a claim about
-    \"dozerdb\", and \"Neo4j Community\" grounds \"Neo4j\"."""
-    report = "Neo4j Community Edition is licensed under GPLv3."
+    """Token-level subset matching, case-insensitive.
+
+    Single-token subject ``"DozerDB"`` ⊆ grounded token set of
+    ``"DozerDB/dozerdb-plugin"`` (``{"dozerdb", "plugin"}``): grounded.
+    """
+    report = "DozerDB is licensed under GPL-3.0."
     result = find_unsupported_claims(
         report,
         [],
         "",
-        grounded_subjects={"neo4j", "neo4j"},
+        grounded_subjects={"dozerdb", "DozerDB/dozerdb-plugin"},
     )
     assert result == []
+
+
+def test_grounded_subject_subset_rule_rejects_partial_overlap():
+    """Subset (not any-overlap) rule: a claim subject with tokens NOT
+    fully contained in some grounded subject's token set is NOT
+    grounded. This prevents false negatives such as ``"Enterprise Java"``
+    matching a grounded ``"Neo4j Enterprise"`` via a shared
+    ``"enterprise"`` token.
+    """
+    report = "Enterprise Java is a bootstrapping plugin for something."
+    result = find_unsupported_claims(
+        report,
+        [],
+        "",
+        grounded_subjects={"Neo4j Enterprise", "neo4j"},
+    )
+    # "Enterprise Java" claim survives — must be flagged as unsupported.
+    assert any(u.claim.subject.lower() == "enterprise java" for u in result)
 
 
 def test_bracket_citation_skips_flag():

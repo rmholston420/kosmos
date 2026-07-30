@@ -313,3 +313,21 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ops/benchmarks/adr_010/harness/claim_support.py`
   - `ops/benchmarks/adr_010/harness/odr.py`
 - **Related BUILD_LOG entry:** 2026-07-30 18:01 EDT
+
+## 2026-07-30 18:10 EDT — grounded-subject any-token overlap could false-negatively exempt unrelated claims
+
+- **Symptom:** Post-6.3.6 review found `_subject_is_grounded` used any-token intersection: grounded subject `"Neo4j Enterprise"` (tokens `{"neo4j","enterprise"}`) would match a hypothetical claim subject like `"Enterprise Java"` (tokens `{"enterprise","java"}`) and exempt it from shim-8 unsupported-claim flagging. Same risk for any grounded subject containing common English tokens.
+- **Affected stage / plugin / port:** ADR-010 harness · shim 8 (claim_support) grounded-subjects gate.
+- **Root cause:** Loose set intersection (`tokens & g_tokens`) treated any single-token overlap as "grounded."
+- **Fix applied:** Rewrote to subset check (`tokens.issubset(g_tokens)`): the claim subject's tokens must ALL be present in some grounded subject's tokens. Distinctive-proper-noun coverage preserved (`"DozerDB"` ⊆ `"DozerDB/dozerdb-plugin"`); generic-token false positives eliminated.
+- **Files changed:** `ops/benchmarks/adr_010/harness/claim_support.py`, `ops/benchmarks/adr_010/tests/test_claim_support.py`.
+- **Related BUILD_LOG entry:** 2026-07-30 18:10 EDT.
+
+## 2026-07-30 18:10 EDT — blanket `[unverified]` strip could remove legitimate markers on new bad URLs
+
+- **Symptom:** Post-6.3.6 review: if the retry writer introduced a NEW bad URL (not in `unverified_first`) and preemptively annotated it with `[unverified]`, the shim-3 enforcement strip's blanket `retry_report.replace(" [unverified]", "").replace("[unverified]", "")` would remove the marker but leave the bad URL. `annotate_unverified` at finalize would then reannotate — still passing the report — but the intermediate observability signal was misleading and any timing edge (annotate_unverified skipped, extract_urls quirk) could leak an unverified URL past the DoD gate.
+- **Affected stage / plugin / port:** ADR-010 harness · shim 3 fact-check enforcement.
+- **Root cause:** Non-positional marker strip: `[unverified]` was globally removed rather than only from URLs that were being stripped.
+- **Fix applied:** (1) Positional strip: for each `bad` in `unverified_first`, replace `f"{bad} [unverified]"`, then `f"{bad}[unverified]"`, then `bad` itself. (2) New-URL enforcement pass: after retry re-verify, strip any `unverified_after` URL not already handled, with the same positional marker cleanup. Records `pass="retry_enforce_strip_new"` event.
+- **Files changed:** `ops/benchmarks/adr_010/harness/odr.py`, `ops/benchmarks/adr_010/tests/test_odr_fact_check.py`.
+- **Related BUILD_LOG entry:** 2026-07-30 18:10 EDT.

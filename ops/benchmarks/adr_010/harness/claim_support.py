@@ -78,14 +78,29 @@ def _sentence_has_bracket_citation(sentence: str) -> bool:
 
 
 def _subject_is_grounded(subject: str, grounded_subjects: Iterable[str]) -> bool:
-    """Return True iff ``subject`` matches any grounded-subject token.
+    """Return True iff ``subject`` is subsumed by a grounded-subject entry.
 
     A subject is grounded when a prior shim (license_grounding,
     feature_grounding, enterprise_license_grounding) successfully
-    verified a fact whose owner/repo/product name overlaps with the
-    claim's subject. Matching is token-based and case-insensitive so
-    ``"DozerDB"`` matches ``"dozerdb"`` and ``"Neo4j Community"``
-    matches ``"neo4j"``.
+    verified a fact whose owner/repo/product name subsumes the claim's
+    subject. Matching is token-based, case-insensitive, and requires
+    EVERY token of the claim's subject to appear in SOME grounded
+    subject's token set. This is stricter than any-token overlap and
+    prevents false negatives such as flagging ``"Enterprise Java"`` as
+    grounded because ``"Neo4j Enterprise"`` shares the ``"enterprise"``
+    token.
+
+    Examples (case-insensitive):
+    - subject ``"DozerDB"`` ⊇ grounded ``"DozerDB"``: grounded.
+    - subject ``"DozerDB"`` ⊇ grounded ``"DozerDB/dozerdb-plugin"``:
+      grounded (subject tokens ``{'dozerdb'}`` ⊆ ``{'dozerdb', 'plugin'}``).
+    - subject ``"Neo4j Community Edition"`` ⊇ grounded ``"neo4j/neo4j"``:
+      NOT grounded (subject tokens ``{'neo4j', 'community', 'edition'}``
+      ⊈ ``{'neo4j'}``). The bracket-citation skip or the notes-URL
+      check must handle this case instead.
+    - subject ``"Enterprise Java"`` ⊇ grounded ``"Neo4j Enterprise"``:
+      NOT grounded (``{'enterprise', 'java'}`` ⊈ ``{'neo4j',
+      'enterprise'}``).
     """
     if not subject:
         return False
@@ -98,7 +113,7 @@ def _subject_is_grounded(subject: str, grounded_subjects: Iterable[str]) -> bool
         if not g_low:
             continue
         g_tokens = {t for t in re.split(r"[\s.\-/]+", g_low) if len(t) >= 3}
-        if tokens & g_tokens:
+        if tokens.issubset(g_tokens):
             return True
     return False
 
