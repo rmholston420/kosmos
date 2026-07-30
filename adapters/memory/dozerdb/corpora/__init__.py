@@ -17,6 +17,8 @@ from .corpus_runner import (
     run_corpus_in_memory,
     run_corpus_live,
 )
+from .humanities_bilara import CORPUS as HUMANITIES_BILARA_CORPUS
+from .humanities_bilara import load_corpus as load_humanities_bilara_corpus
 from .humanities_cidoc import CORPUS as HUMANITIES_CIDOC_CORPUS
 from .models import (
     Corpus,
@@ -35,6 +37,7 @@ from .synthetic_lifeline import CORPUS as SYNTHETIC_LIFELINE_CORPUS
 ALL_CORPORA: tuple[Corpus, ...] = (
     SYNTHETIC_LIFELINE_CORPUS,
     HUMANITIES_CIDOC_CORPUS,
+    HUMANITIES_BILARA_CORPUS,
     RIGPA_EXPORT_CORPUS,
     SUPERPOWERS_CORPUS,
 )
@@ -45,6 +48,7 @@ __all__ = [
     "CorpusEdge",
     "CorpusFact",
     "CorpusRunSummary",
+    "HUMANITIES_BILARA_CORPUS",
     "HUMANITIES_CIDOC_CORPUS",
     "InMemoryTemporalIndex",
     "QueryOutcome",
@@ -54,6 +58,7 @@ __all__ = [
     "TemporalQuery",
     "build_live_index",
     "live_tier_requested",
+    "load_humanities_bilara_corpus",
     "load_rigpa_export_corpus",
     "load_superpowers_corpus",
     "run_corpus",

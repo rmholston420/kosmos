@@ -1,18 +1,28 @@
-# Kosmos Session Handoff — 2026-07-30 08:26 EDT
+# Kosmos Session Handoff — 2026-07-30 09:00 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 4.5 (next up)
-- **Plugin / kernel component:** DozerDB MemoryPort adapter corpora — Humanities corpus port under Gnosis (`gnosis-humanities-adr`)
-- **Port(s) in progress:** none (Stage 4.4 fully landed; awaiting Stage 4.5 kickoff)
+- **Stage / phase:** Stage 4.6 (Stage-4 exit gate) — next up.
+- **Plugin / kernel component:** Gnosis-facing retrieval surface over the five landed MemoryPort adapter corpora.
+- **Port(s) in progress:** MemoryPort read path (temporal + typed CIDOC-CRM link retrieval); no code change lands at 4.6 unless the exit-gate probe surfaces one.
 
 ## Completed this session
-- Stage 4.4 · Superpowers KB port under Gnosis · MemoryPort adapter corpus (full-body Markdown, MIT). Landed `obra/superpowers` @ `44c9b2d6e889982ac18c27d05a19fefe335194e1` (MIT) as the fourth Stage 4.2-shaped corpus, colocated with `rigpa-export` at `adapters/memory/dozerdb/corpora/superpowers/`. 38 records across 14 skill directories, 9 typed `CorpusEdge` cross-references, ~310 KB fixture. Workspace-local re-ingest CLI `scripts/ingest_superpowers.py` supports both `--via gh` and `--via checkout`. `models.py` gained `CorpusEdge` (frozen slots) + optional `Corpus.edges` field (backward-compatible with Stage 4.2 corpora). `ALL_CORPORA` now four. Env override `KOSMOS_SUPERPOWERS_PATH`. VectorPort surface deliberately NOT opened. ADR-007 AST scan upgraded to `rglob("*.py")` so subpackage `superpowers/` is covered. 7 new fast tests + 1 env-gated live-tier corpus parametrization. DozerDB adapter fast tier **142 passed / 8 skipped** (up from 130/7 at Stage 4.3). ADR-049 authored + fanout to spec §17, adrs/README, Build-Sequence §4.4 LANDED, PORTING_LEDGER (Gnosis section Superpowers KB PLANNED → INGESTED). Tag `stage-4-4-complete` applied on the fanout commit. Reconciles ADR-008 (Tektos-UX "do not vendor Superpowers code") with ADR-002 + ADR-016 (Personal-KB substrate under Gnosis) — Superpowers enters as MemoryPort **data**, not plugin code; both rules coexist. Refresh via `python3 scripts/ingest_superpowers.py --sha <SHA> [--via gh|checkout]` — workspace-local, not runtime.
+- Stage 4.5 LANDED: SuttaCentral Bilara humanities corpus (CC0-1.0 translations + public-domain Mahasangiti Pali root) ingested as fifth Stage 4.2-shaped adapter corpus at `adapters/memory/dozerdb/corpora/humanities_bilara/`.
+- Pinned SHA `3c93d1cea80fdebcefb777c8724c35bd971f360a`; fixture 141 records (70 translation + 70 root + 1 translator actor), 140 CIDOC-CRM edges (70 × `P73_is_translation_of` + 70 × `P94_was_created_by`), ~392 KB.
+- Q1 pivot from 84000 CC-BY-NC-4.0 → Bilara CC0 recorded in ADR-050 §Rejected Alternatives; 84000 kept alive as gated future ADR.
+- New workspace-local re-ingest CLI `scripts/ingest_humanities.py --sha <SHA> [--via gh|checkout]` (blob-by-blob `gh api` by default; no 920 MB clone).
+- First non-`references` CIDOC-CRM edge kinds materialized in a Kosmos corpus.
+- ADR-050 authored (Ratified v25, six-question shape); spec §17 + adrs/README + Build-Sequence §4.5 (rewritten as LANDED) + PORTING_LEDGER (Humanities flipped PLANNED → INGESTED) fanout complete.
+- Loader validates three subject namespaces (`bilara/actor/`, `bilara/root/`, `bilara/translation/`) with per-namespace required-attribute lists; unknown namespaces rejected.
+- Test suite: DozerDB adapter fast tier **155 passed / 9 skipped** (baseline 142/8 at Stage 4.4; delta = +7 new fast tests + 5 parametrized invariant extensions across five corpora + 1 new env-gated live-tier corpus parametrization).
+- BUILD_LOG appended (2026-07-30 09:00 EDT entry).
 
 ## Remaining before current Definition of Done
-- none — Stage 4.4 DoD met.
+- Commit Stage 4.5 fanout + tag `stage-4-5-complete` + push to `main` (attribution `-c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420`).
+- Refresh shared project-files bundles: Kosmos v25 zip + ADRs bundle (now 52 ADRs).
+- `pplx project files submit` + `share_file` under names "Kosmos v25 Bundle" and "Kosmos ADRs Bundle".
 
 ## Open questions / awaiting user answer
-- Stage 4.5 kickoff: Humanities corpus port under Gnosis (`gnosis-humanities-adr`) is next. Existing `humanities-cidoc-sample` corpus (5 CIDOC-CRM Buddhist historical facts, from Stage 4.2) is a scaffold, not the Stage 4.5 target. Stage 4.5 substrate scope (which classical-text corpora, ingest granularity, whether to open VectorPort surface, whether to reuse the Superpowers `CorpusEdge` typed-link pattern for CIDOC-CRM relations) is still open and will need a fresh six-question ADR-050 shape when Stage 4.5 kicks off.
+- None. Stage 4.5 fully locked. Stage 4.6 exit-gate scope inherits the Stage-4 §4.6 spec — Gnosis (or the MemoryPort-facing surrogate at 4.6, pre-Gnosis-plugin) answers a temporal question across the five corpora with full provenance chain (source + timestamp + confidence).
 
 ## Exact next action
-- Await user go-ahead to open Stage 4.5. When ready, first action is to inspect the current `humanities-cidoc-sample` corpus shape and CIDOC-CRM property set at `adapters/memory/dozerdb/corpora/humanities_cidoc_sample/`, then draft the Stage 4.5 six-question shape for ADR-050 (target classical-text corpora list, ingest granularity, VectorPort decision, typed-link reuse decision, adapter-corpus vs. `plugins/gnosis/` decision, MIT/public-domain provenance stance).
+- Commit + tag + push Stage 4.5 fanout: `cd /home/user/workspace/kosmos-scan && git add -A && git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 commit -m "Stage 4.5: Bilara humanities corpus adapter (ADR-050, CC0)" && git tag stage-4-5-complete && git push origin main --tags`.

@@ -19,6 +19,7 @@ import pytest
 
 from adapters.memory.dozerdb.corpora import (
     ALL_CORPORA,
+    HUMANITIES_BILARA_CORPUS,
     HUMANITIES_CIDOC_CORPUS,
     RIGPA_EXPORT_CORPUS,
     SUPERPOWERS_CORPUS,
@@ -31,6 +32,7 @@ from adapters.memory.dozerdb.corpora import (
     QueryOutcome,
     TemporalQuery,
     live_tier_requested,
+    load_humanities_bilara_corpus,
     load_rigpa_export_corpus,
     load_superpowers_corpus,
     run_corpus,
@@ -447,6 +449,187 @@ def test_superpowers_fixture_committed_to_repo():
         / "superpowers.jsonl"
     )
     assert fixture.exists(), "superpowers fixture must be committed for hermetic tests"
+
+
+# ── Stage 4.5 · Bilara humanities corpus ───────────────────────────────────
+
+
+def test_humanities_bilara_has_expected_cardinality():
+    """Fixture pins Sujato's KN/dhp+kp+cp English translations mirrored
+    by their Mahasangiti Pali root + one E21_Person actor record."""
+    assert HUMANITIES_BILARA_CORPUS.name == "humanities-bilara"
+    # 70 English translations + 70 Pali root + 1 translator actor.
+    assert len(HUMANITIES_BILARA_CORPUS.facts) == 141
+    subjects_by_ns: dict[str, int] = {"actor": 0, "root": 0, "translation": 0}
+    for f in HUMANITIES_BILARA_CORPUS.facts:
+        if f.subject.startswith("bilara/actor/"):
+            subjects_by_ns["actor"] += 1
+        elif f.subject.startswith("bilara/root/"):
+            subjects_by_ns["root"] += 1
+        elif f.subject.startswith("bilara/translation/"):
+            subjects_by_ns["translation"] += 1
+        else:  # pragma: no cover
+            pytest.fail(f"unexpected subject namespace: {f.subject!r}")
+    assert subjects_by_ns == {"actor": 1, "root": 70, "translation": 70}
+
+
+def test_humanities_bilara_carries_stage_45_provenance_triple():
+    """Every Bilara fact MUST carry source_commit + license; body-
+    carrying facts (root + translation) MUST additionally carry body."""
+    seen_commits: set[str] = set()
+    seen_licenses: set[str] = set()
+    for f in HUMANITIES_BILARA_CORPUS.facts:
+        commit = f.attributes.get("source_commit")
+        assert commit and len(commit) == 40, (
+            f"{f.event_id} bad source_commit: {commit!r}"
+        )
+        seen_commits.add(commit)
+        license_ = f.attributes.get("license")
+        assert license_ in {"CC0-1.0", "public-domain"}, (
+            f"{f.event_id} unexpected license {license_!r}"
+        )
+        seen_licenses.add(license_)
+        assert f.provenance.startswith(f"bilara@{commit}:"), f.provenance
+        if f.subject.startswith(("bilara/root/", "bilara/translation/")):
+            assert f.attributes.get("body"), f"{f.event_id} missing body"
+            assert f.attributes.get("crm_class") == "E33_Linguistic_Object", (
+                f"{f.event_id} missing/wrong CIDOC-CRM class"
+            )
+        elif f.subject.startswith("bilara/actor/"):
+            assert f.attributes.get("crm_class") == "E21_Person", (
+                f"{f.event_id} actor must be E21_Person"
+            )
+    # Fixture is pinned to exactly one upstream SHA.
+    assert len(seen_commits) == 1, seen_commits
+    # Both licenses must appear (translation vs. root Pali).
+    assert seen_licenses == {"CC0-1.0", "public-domain"}, seen_licenses
+
+
+def test_humanities_bilara_edges_are_cidoc_crm_typed_and_resolve():
+    """Cross-reference edges must resolve to facts in the same corpus
+    and use CIDOC-CRM property URIs as their kind.
+
+    ADR-050 Q4 mandate: temporal + typed-link retrieval, no VectorPort.
+    Expected edges: 70 P73_is_translation_of (translation -> root) +
+    70 P94_was_created_by (translation -> actor) = 140.
+    """
+    assert HUMANITIES_BILARA_CORPUS.edges, "expected typed edges from Bilara"
+    known = {f.event_id for f in HUMANITIES_BILARA_CORPUS.facts}
+    kinds: dict[str, int] = {}
+    for edge in HUMANITIES_BILARA_CORPUS.edges:
+        assert isinstance(edge, CorpusEdge)
+        assert edge.kind.startswith("P"), (
+            f"{edge.src_event_id}->{edge.dst_event_id}: "
+            f"kind {edge.kind!r} is not a CIDOC-CRM property URI"
+        )
+        assert edge.src_event_id in known, edge.src_event_id
+        assert edge.dst_event_id in known, edge.dst_event_id
+        kinds[edge.kind] = kinds.get(edge.kind, 0) + 1
+    assert kinds == {
+        "P73_is_translation_of": 70,
+        "P94_was_created_by": 70,
+    }, kinds
+
+
+def test_humanities_bilara_translation_root_pairs_are_bijective():
+    """Each translation record must have exactly one root mirror at the
+    same bilara_uid (the CIDOC-CRM P73 pair). Guards against silent
+    ingest drift where a translation is emitted without its Pali root
+    or vice versa."""
+    roots_by_uid: dict[str, str] = {}
+    translations_by_uid: dict[str, str] = {}
+    for f in HUMANITIES_BILARA_CORPUS.facts:
+        uid = f.attributes.get("bilara_uid")
+        if not uid:
+            continue
+        if f.subject.startswith("bilara/root/"):
+            roots_by_uid[uid] = f.event_id
+        elif f.subject.startswith("bilara/translation/"):
+            translations_by_uid[uid] = f.event_id
+    assert set(roots_by_uid) == set(translations_by_uid), (
+        set(roots_by_uid) ^ set(translations_by_uid)
+    )
+    assert len(roots_by_uid) == 70
+
+
+def test_humanities_bilara_env_path_overrides_fixture(tmp_path, monkeypatch):
+    """KOSMOS_HUMANITIES_BILARA_PATH points at an alternate JSONL for re-ingest."""
+    override = tmp_path / "override.jsonl"
+    row = {
+        "event_id": "bilara.actor.smoke",
+        "subject": "bilara/actor/smoke",
+        "predicate": "bilara.actor.declared",
+        "object": "smoke",
+        "as_of": "2026-07-30T12:00:00+00:00",
+        "provenance": "bilara@deadbeef:_author.json#smoke",
+        "confidence": 1.0,
+        "attributes": {
+            "author_uid": "smoke",
+            "source_commit": "deadbeef" + "0" * 32,
+            "license": "CC0-1.0",
+            "crm_class": "E21_Person",
+            "references": [],
+        },
+    }
+    override.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    monkeypatch.setenv("KOSMOS_HUMANITIES_BILARA_PATH", str(override))
+    corpus = load_humanities_bilara_corpus()
+    assert len(corpus.facts) == 1
+    assert corpus.facts[0].event_id == "bilara.actor.smoke"
+    assert corpus.edges == ()
+
+
+def test_humanities_bilara_env_path_missing_file_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "KOSMOS_HUMANITIES_BILARA_PATH", str(tmp_path / "nope.jsonl"),
+    )
+    with pytest.raises(FileNotFoundError):
+        load_humanities_bilara_corpus()
+
+
+def test_humanities_bilara_rejects_missing_stage_45_attributes(tmp_path, monkeypatch):
+    """Zero-trust: root/translation records MUST carry body +
+    source_commit + license, and unknown subject namespaces are
+    rejected outright."""
+    bad = tmp_path / "bad.jsonl"
+    row = {
+        "event_id": "x",
+        "subject": "bilara/translation/x",
+        "predicate": "z",
+        "object": "o",
+        "as_of": "2026-01-01T00:00:00+00:00",
+        "provenance": "p",
+        "confidence": 1.0,
+        "attributes": {"body": "...", "license": "CC0-1.0"},  # missing source_commit
+    }
+    bad.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    monkeypatch.setenv("KOSMOS_HUMANITIES_BILARA_PATH", str(bad))
+    with pytest.raises(ValueError, match="source_commit"):
+        load_humanities_bilara_corpus()
+
+    # Unknown subject namespace is also rejected.
+    bad2 = tmp_path / "bad2.jsonl"
+    row2 = dict(row)
+    row2["subject"] = "bilara/mystery/x"
+    row2["attributes"] = {
+        "body": "...",
+        "license": "CC0-1.0",
+        "source_commit": "a" * 40,
+    }
+    bad2.write_text(json.dumps(row2) + "\n", encoding="utf-8")
+    monkeypatch.setenv("KOSMOS_HUMANITIES_BILARA_PATH", str(bad2))
+    with pytest.raises(ValueError, match="unknown subject namespace"):
+        load_humanities_bilara_corpus()
+
+
+def test_humanities_bilara_fixture_committed_to_repo():
+    fixture = (
+        Path(__file__).parent
+        / "humanities_bilara"
+        / "fixtures"
+        / "humanities_bilara.jsonl"
+    )
+    assert fixture.exists(), "bilara fixture must be committed for hermetic tests"
 
 
 # ── ADR-007 guard ──────────────────────────────────────────────────────────

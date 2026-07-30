@@ -908,12 +908,19 @@
 - **ADR:** ADR-049 (Stage 4.4 substrate landing); references ADR-002 + ADR-016 (Gnosis endpoint), ADR-007 (adapter-corpus, no plugin-to-plugin imports), ADR-008 (Tektos-UX code-vendor rule preserved), ADR-047 (Stage 4.2 corpora contract inherited).
 - **Logged:** 2026-07-30 (Stage 4.4 landing)
 
-#### Humanities corpus — `PLANNED`
-- **Source:** TBD
-- **License:** dataset-specific
-- **Port(s):** DataPort
-- **ADR:** gnosis-humanities-adr
-- **Logged:** —
+#### Humanities canonical-text corpus — SuttaCentral Bilara — `INGESTED` (Stage 4.5, ADR-050)
+- **Source:** https://github.com/suttacentral/bilara-data
+- **Commit / Version:** `3c93d1cea80fdebcefb777c8724c35bd971f360a` (`published` branch tip on 2026-07-30)
+- **License:** translations CC0-1.0 (Creative Commons Public Domain dedication per upstream `LICENSE.md`), Mahasangiti Pali root public-domain
+- **Kosmos location (Stage 4.5):** `adapters/memory/dozerdb/corpora/humanities_bilara/` — corpus module, `__init__.py` re-exports, and `fixtures/humanities_bilara.jsonl` (141 records = 70 translation + 70 root + 1 translator actor; 140 typed CIDOC-CRM edges = 70 × `P73_is_translation_of` + 70 × `P94_was_created_by`; ~392 KB fixture).
+- **Kosmos location (Phase 3):** relocates to `plugins/gnosis/humanities/canonical_kb/` when Gnosis lands. Public loader shape stable across the move (`load_corpus`, `CORPUS` singleton, env override `KOSMOS_HUMANITIES_BILARA_PATH`).
+- **Stage 4.5 slice:** Bhikkhu Sujato's English translations of three Khuddaka Nikaya publications (scpub7 Dhammapada, scpub19 Khuddakapatha, scpub86 Cariyapitaka) mirrored by their Mahasangiti Pali root under `root/pli/ms/sutta/kn/{dhp,kp,cp}/`; single translator actor record from `_author.json`. Broader upstream slice (other translators, other nikayas, other target languages) available via re-ingest at the same pinned SHA — no adapter change required.
+- **Port(s):** MemoryPort (`record_event`, `query_temporal`, typed CIDOC-CRM-link retrieval via `CorpusEdge`). VectorPort surface deliberately NOT opened at 4.5 (ADR-050 Q4).
+- **Modifications:** none to upstream content. Ingest pipeline (`scripts/ingest_humanities.py`) walks `translation/<lang>/<translator>/**` + mirrored `root/<lang>/<edition>/**` at the pinned SHA, concatenates segment-keyed JSON values in insertion order into a single `body` string per record, and synthesizes actor records from `_author.json` so `P94_was_created_by` edges are resolvable inside the corpus. All CIDOC-CRM edge `kind` values are property URIs (`P73_is_translation_of`, `P94_was_created_by`) rather than generic `references`.
+- **Refresh cadence:** pinned SHA + workspace-local CLI (`scripts/ingest_humanities.py --sha <SHA> [--via gh|checkout]`). No cron, no runtime network fetch. Blob-by-blob `gh api` fetches by default — respects Colossus disk headroom (upstream repo is ~920 MB; no full clone needed).
+- **ADR:** ADR-050 (Stage 4.5 substrate landing); references ADR-002 + ADR-016 (Gnosis endpoint), ADR-007 (adapter-corpus, no plugin-to-plugin imports), ADR-047 (Stage 4.2 corpora contract inherited), ADR-049 (Superpowers KB precedent for content-ingest ≠ code-vendoring).
+- **Rejected alternative (recorded, not re-litigable without new ADR):** 84000 (Kangyur/Tengyur, `github.com/84000`) at CC-BY-NC-4.0 — rejected on NC downstream propagation risk (ADR-050 Q1). 84000 remains open as a possible additional Stage 5+ corpus behind its own ADR after Gnosis exposes the multi-corpus retrieval surface.
+- **Logged:** 2026-07-30 (Stage 4.5 landing)
 
 ---
 
