@@ -19,6 +19,41 @@
 >
 > **Consequences unchanged:** the file lists in the Consequences section below remain correct except that `plugins/zetesis/plugin.py` is **not modified** by sub-slice 2 (only tests + adapters are added). The other sub-slices (1, 3, 4, 5) are unchanged.
 
+> **STATUS AMENDMENT (2026-07-30, sub-slice 3):** Sub-slice 3 discovery corrected four further factual errors in the port-verb names §D3 uses to describe the research-call wiring, and locked the `research()` signature §D3 previously left "final signature settled at sub-slice 3 kickoff":
+>
+> 1. `ResourcePort.acquire` / `.release` → **`can_allocate(kind, amount)`** followed by **`allocate(kind, amount, *, intent, priority_class, requester)`**. `ResourcePort` has **no `release` verb**; allocation is fire-and-forget, with `replenish(kind, amount)` as the operator-facing counter-verb. `research()` therefore calls `can_allocate` + `allocate` at entry and does **not** call any release verb.
+>
+> 2. `MemoryPort.append_event` → **`write_event(subject, predicate, object, *, provenance, confidence, source_citation=None, pii_tier="Public", attributes=None)`**. Return type is `MemoryEventId`.
+>
+> 3. `DataPort.export_jsonld` → **`export_canonical(record_type, payload, *, provenance, confidence, pii_tier, source_citation=None, attributes=None)`**. Return type is `CanonicalExportHandle`.
+>
+> 4. `VectorPort.retrieve` → **`search(collection, query_vector, *, limit=10, filter=None)`**. Sub-slice 3's no-op wiring proof calls `search(collection=ZETESIS_STATE_NAMESPACE, query_vector=[], limit=1)` and ignores the result.
+>
+> **Signature lock (§D5):** `async def research(self, query: str, *, config: ZetesisResearchConfig | None = None) -> ResearchReport`. Positional query + keyword-only optional config. `ZetesisResearchConfig` bundles the ~18 inner-loop kwargs into an immutable dataclass with Stage 6.3.9-locked defaults (all feature gates on; Colossus-local Ollama/SearXNG URLs). `ResearchReport` is a frozen dataclass carrying `query`, `answer`, `citations`, `evidences`, `source_diversity`, `latency_seconds`, `trial_id`, `question_id`, `trajectory_events`, `memory_event_id`, and `error`. Both types are re-exported from `plugins.zetesis` alongside `ZETESIS_RESEARCH_EVENT_STARTED` and `ZETESIS_RESEARCH_EVENT_COMPLETED`.
+>
+> **Priority class (§D3):** Zetesis calls `allocate` at **`PriorityClass.BACKGROUND`** (spec §172: "Synedrion/Zetesis background"). `PriorityClass` has no `NORMAL` value.
+>
+> **PII tier (§D3):** `research()` writes both `DataPort.export_canonical` and `MemoryPort.write_event` at **`PIITier.PUBLIC`** — research reports contain aggregated web-sourced facts and carry no user identifiers.
+>
+> **Provenance / confidence lock (§D3):** every zero-trust field is drawn from ADR-052 §Q4 constants already locked at Stage 6.1: `ZETESIS_MEMORY_PROVENANCE = "zetesis_research"`; `ZETESIS_MEMORY_DEFAULT_CONFIDENCE = 0.75`. `MemoryPort.write_event` uses `ZETESIS_MEMORY_PREDICATE = "zetesis.research.completed"` (ADR-052 §Q4).
+>
+> **EventBus event-type constants (§D3, new):** `ZETESIS_RESEARCH_EVENT_STARTED = "zetesis.research.started"` and `ZETESIS_RESEARCH_EVENT_COMPLETED = "zetesis.research.completed"`. The completed event-type deliberately matches `ZETESIS_MEMORY_PREDICATE` — one string, two surfaces (pub/sub + temporal graph).
+>
+> **Failure semantics (§D3):** on inner-loop failure, the started event is published and the observability span records the exception; the completed event is **not** published and the memory / data writes do not occur. `research()` re-raises verbatim.
+>
+> **Corrected sub-slice 3 wiring order (executed as-corrected):**
+>
+> 1. `ObservabilityPort.trace("zetesis.research", attributes=...)` — wraps the entire call.
+> 2. `ResourcePort.can_allocate(COMPUTE, ...)` → `ResourcePort.allocate(COMPUTE, ..., priority_class=BACKGROUND, requester="zetesis")`.
+> 3. `EventBusPort.publish(EventEnvelope(event_type=ZETESIS_RESEARCH_EVENT_STARTED, ...))`.
+> 4. `run_zetesis_research(...)` — the inner loop; returns `TrialMetrics`.
+> 5. `VectorPort.search(...)` — no-op retrieval proof.
+> 6. `DataPort.export_canonical("zetesis_research_report", ..., pii_tier=PIITier.PUBLIC)`.
+> 7. `MemoryPort.write_event(subject=query, predicate=ZETESIS_MEMORY_PREDICATE, object=answer_head_256_chars, ...)`.
+> 8. `EventBusPort.publish(EventEnvelope(event_type=ZETESIS_RESEARCH_EVENT_COMPLETED, ...))`.
+>
+> **Consequences unchanged.** The Consequences section's file list still holds; sub-slice 3 modifies `plugins/zetesis/plugin.py`, `plugins/zetesis/__init__.py`, and `plugins/zetesis/research/__init__.py`, and adds `plugins/zetesis/tests/test_research_wiring.py`. Sub-slice 4 (real-adapter binding) and sub-slice 5 (regression harness) remain unchanged.
+
 ## Context
 
 Stage 6.4 (this session's ratification stage) closed the ADR-010 substrate-tuning arc via ADR-055: ODR-post-6.3.9 (commit `05366ac`, tag `stage-6-3-9-complete`, agent-rated mean 5.33 / 6 on 3 Colossus trials at Stage 6.3.9) is Zetesis's ratified research inner loop. The Stage 6.3.x sub-stages (6.3.1 → 6.3.9) executed ODR substrate-tuning under §6.3. Stage 6.3 (proper) is the outer §6.3 verb itself — wire the tuned ODR into Zetesis so the plugin can produce a multi-source research report with citations end-to-end.
@@ -73,7 +108,7 @@ Per-port wiring obligation:
 5. **`DataPort`** — JSON-LD import/export for research questions + reports. Called once during fixture run to export the research report as JSON-LD (feature: DataPort binding proof; not a fixture DoD requirement per se, but Q2=B commits to touching all 10).
 6. **`SearchPort`** — SearXNG-backed web search substrate (matches ODR's existing MCP search backend at `ops/benchmarks/adr_010/harness/mcp_search_server.py`, which moves to `plugins/zetesis/research/mcp_search_server.py` per D1). Called throughout the ODR loop as sources get discovered and visited.
 7. **`EventBusPort`** — publishes `zetesis.research.completed` for downstream consumers (Synedrion strategic-signal consumption per ADR-052 §Q7 rationale). One publish per completed research call.
-8. **`ResourcePort`** — priority-queue arbitration per spec §172. Discharges Zetesis's stub-role obligation for Tektos Phase-10 (ADR-052 §Q5=C). At Stage 6.3 (proper), `ResourcePort.acquire` is called once at the start of the research call and released at the end; real under-load arbitration ships when Tektos comes online.
+8. **`ResourcePort`** — priority-queue arbitration per spec §172. Discharges Zetesis's stub-role obligation for Tektos Phase-10 (ADR-052 §Q5=C). At Stage 6.3 (proper), `ResourcePort.can_allocate` + `allocate` are called once at the start of the research call at `PriorityClass.BACKGROUND`; there is no release verb on `ResourcePort` (allocation is fire-and-forget, `replenish` is the operator-facing counter-verb). Real under-load arbitration ships when Tektos comes online. **§D3 wording amended sub-slice 3 — see top-of-file STATUS AMENDMENT for the corrected verb names.**
 9. **`NotificationPort`** — algedonic path for grounding-failure or source-diversity-gate violations. Called only when the ODR loop detects a failure; may or may not fire during the ADR-010 fixture (Neo4j vs. DozerDB is a well-grounded query — expected to complete without algedonic escalation). The port binding must be functional even if not exercised end-to-end.
 10. **`ObservabilityPort`** — trace + metrics for every inner-loop call. Every `LLMPort`, `SearchPort`, `MemoryPort`, `VectorPort`, `DataPort`, `EventBusPort`, `ResourcePort`, `NotificationPort` call spawns an `ObservabilityPort.trace` span. Minimum: one root span per research call + one span per port call.
 
@@ -103,7 +138,7 @@ Sub-slices land in order, one at a time. Each sub-slice gets its own commit + BU
 
 - **Sub-slice 2: port-wiring skeleton.** Update `ZetesisPlugin.__init__` to accept real adapter arguments for all 10 required ports. Delete `_UntouchablePort` sentinel class from `plugins/zetesis/plugin.py`. Add stub adapter classes (`plugins/zetesis/adapters/`) implementing each port's protocol with minimal behavior sufficient for the DoD fixture. Add one fast-tier contract test per port under `plugins/zetesis/tests/`. **Whole-repo fast tier must pass.**
 
-- **Sub-slice 3: research call wiring.** Implement `ZetesisPlugin.research(query: str) -> ResearchReport` (or equivalent name — final signature settled at sub-slice 3 kickoff). This method dispatches to `run_zetesis_research` and, around that call, exercises `ResourcePort.acquire` / `.release`, `ObservabilityPort.trace`, `MemoryPort.append_event`, `EventBusPort.publish`, `VectorPort.retrieve` (no-op call), `DataPort.export_jsonld`. `LLMPort` and `SearchPort` are exercised inside `run_zetesis_research` itself. **Whole-repo fast tier must pass.**
+- **Sub-slice 3: research call wiring.** Implement `async def ZetesisPlugin.research(self, query: str, *, config: ZetesisResearchConfig | None = None) -> ResearchReport` (signature locked sub-slice 3 kickoff — see top-of-file STATUS AMENDMENT). This method dispatches to `run_zetesis_research` and, around that call, exercises `ResourcePort.can_allocate` + `allocate`, `ObservabilityPort.trace`, `MemoryPort.write_event`, `EventBusPort.publish` (started + completed events), `VectorPort.search` (no-op call), `DataPort.export_canonical`. `LLMPort` and `SearchPort` are exercised inside `run_zetesis_research` itself. **Whole-repo fast tier must pass.**
 
 - **Sub-slice 4: Colossus DoD trial.** Run one Colossus trial of the ADR-010 fixture through `ZetesisPlugin.research()`. Rate the trial with the same rater discipline as ADR-054's Stage 6.3.9 pass. Save the rating to `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`.
 

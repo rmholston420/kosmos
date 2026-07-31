@@ -26,9 +26,13 @@ from plugins.zetesis.plugin import (
     ZETESIS_MEMORY_PREDICATE,
     ZETESIS_MEMORY_PROVENANCE,
     ZETESIS_PLUGIN_NAME,
+    ZETESIS_RESEARCH_EVENT_COMPLETED,
+    ZETESIS_RESEARCH_EVENT_STARTED,
     ZETESIS_STATE_NAMESPACE,
     ZETESIS_VERSION,
+    ResearchReport,
     ZetesisPlugin,
+    ZetesisResearchConfig,
     build_zetesis_descriptor,
 )
 
@@ -38,8 +42,12 @@ __all__ = [
     "ZETESIS_MEMORY_PROVENANCE",
     "ZETESIS_MEMORY_DEFAULT_CONFIDENCE",
     "ZETESIS_PLUGIN_NAME",
+    "ZETESIS_RESEARCH_EVENT_COMPLETED",
+    "ZETESIS_RESEARCH_EVENT_STARTED",
     "ZETESIS_STATE_NAMESPACE",
     "ZETESIS_VERSION",
+    "ResearchReport",
     "ZetesisPlugin",
+    "ZetesisResearchConfig",
     "build_zetesis_descriptor",
 ]

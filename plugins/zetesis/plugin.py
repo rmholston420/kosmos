@@ -82,10 +82,15 @@ enforces this at test time.
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any
 
-from ports.data import DataPort
+from ports.data import DataPort, PIITier
 from ports.event_bus import EventBusPort
+from ports.event_envelope import EventEnvelope
 from ports.frontend_contract import (
     FrontendContractPort,
     PluginDescriptor,
@@ -95,7 +100,7 @@ from ports.llm import LLMPort
 from ports.memory import MemoryPort
 from ports.notification import NotificationPort
 from ports.observability import ObservabilityPort
-from ports.resource import ResourcePort
+from ports.resource import PriorityClass, ResourceKind, ResourcePort
 from ports.search import SearchPort
 from ports.secrets import SecretsPort
 from ports.vector import VectorPort
@@ -106,9 +111,13 @@ __all__ = [
     "ZETESIS_MEMORY_PREDICATE",
     "ZETESIS_MEMORY_PROVENANCE",
     "ZETESIS_PLUGIN_NAME",
+    "ZETESIS_RESEARCH_EVENT_COMPLETED",
+    "ZETESIS_RESEARCH_EVENT_STARTED",
     "ZETESIS_STATE_NAMESPACE",
     "ZETESIS_VERSION",
+    "ResearchReport",
     "ZetesisPlugin",
+    "ZetesisResearchConfig",
     "build_zetesis_descriptor",
 ]
 
@@ -151,6 +160,89 @@ ZETESIS_MEMORY_DEFAULT_CONFIDENCE: float = 0.75
 Phase-6 inner-loop scorer. Mirrors Tektos's pre-Reflexion default from
 ADR-036. Must sit in ``(0, 1]`` — enforced by
 :func:`ports.memory.validate_zero_trust_write`."""
+
+
+# ---------------------------------------------------------------------------
+# EventBus event-type constants — locked at Stage 6.3 (proper) sub-slice 3
+# ---------------------------------------------------------------------------
+
+ZETESIS_RESEARCH_EVENT_STARTED: str = "zetesis.research.started"
+"""EventBusPort event-type for the start of a `research()` call.
+Emitted after ResourcePort.allocate returns and before the inner-loop
+invocation. Payload includes `query_id` + `trial_id` + `question_id`."""
+
+ZETESIS_RESEARCH_EVENT_COMPLETED: str = "zetesis.research.completed"
+"""EventBusPort event-type for successful completion of a `research()`
+call. Emitted after MemoryPort.write_event returns. Payload includes
+`query_id`, `trial_id`, `question_id`, `latency_seconds`, and
+`source_diversity`. Matches ZETESIS_MEMORY_PREDICATE by design —
+ADR-052 §Q4 predicate is written to memory; this event-type is the
+pub/sub companion."""
+
+
+# ---------------------------------------------------------------------------
+# Public research API dataclasses — locked at Stage 6.3 (proper) sub-slice 3
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class ZetesisResearchConfig:
+    """Immutable per-call configuration for :meth:`ZetesisPlugin.research`.
+
+    Bundles the ~18 kwargs of the underlying ``run_zetesis_research``
+    inner loop into a single explicit value. Optional — pass ``None``
+    to :meth:`research` and the plugin applies Stage 6.3.9-locked
+    defaults (all feature gates on; Colossus-local Ollama/SearXNG
+    URLs).
+
+    Kept a plain dataclass (not TypedDict / not Pydantic) per ADR-023
+    kernel-avoids-Pydantic rule.
+    """
+
+    ollama_base_url: str = "http://127.0.0.1:11434/v1"
+    ollama_model: str = "qwen2.5:32b-instruct-q4_K_M"
+    mcp_server_url: str = "http://127.0.0.1:8000"
+    question_id: str = "adhoc"
+    trial_id: str = ""  # empty — :meth:`research` assigns a uuid4
+    fact_anchor_urls: tuple[str, ...] | None = None
+    rubric_lines: tuple[str, ...] | None = None
+    # Stage 6.3.9-locked feature gates (all on).
+    enable_fact_check: bool = True
+    enable_license_grounding: bool = True
+    enable_feature_grounding: bool = True
+    enable_enterprise_license_grounding: bool = True
+    enable_rubric_critique: bool = True
+    enable_cove: bool = True
+    enable_claim_support_gate: bool = True
+    enable_structural_finalize: bool = True
+    # Resource-budget parameters.
+    compute_budget: Decimal | float = Decimal("1")
+    priority_class: PriorityClass = PriorityClass.BACKGROUND
+
+
+@dataclass(frozen=True, slots=True)
+class ResearchReport:
+    """Plugin-facing output of :meth:`ZetesisPlugin.research`.
+
+    Higher-level than the internal ``TrialMetrics`` used by the
+    ADR-010 harness. ``TrialMetrics`` carries head-to-head benchmark
+    fields (GPU peak, VRAM peak, integration effort) that are not part
+    of the general research API surface. Consumers of the plugin's
+    public API get :class:`ResearchReport`; the harness continues to
+    consume ``TrialMetrics`` directly via
+    ``plugins.zetesis.research.run_zetesis_research``.
+    """
+
+    query: str
+    answer: str
+    citations: tuple[str, ...]
+    evidences: tuple[Mapping[str, str], ...]
+    source_diversity: int
+    latency_seconds: float
+    trial_id: str
+    question_id: str
+    trajectory_events: int
+    memory_event_id: str | None
+    error: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -288,3 +380,233 @@ class ZetesisPlugin:
         await self.frontend_contract.unregister_plugin(ZETESIS_PLUGIN_NAME)
         self._registration = None
         self._started = False
+
+    # ---- Stage 6.3 (proper) sub-slice 3 — public research API ----------
+
+    async def research(
+        self,
+        query: str,
+        *,
+        config: ZetesisResearchConfig | None = None,
+    ) -> ResearchReport:
+        """Run a Zetesis research query end-to-end.
+
+        Signature locked at ADR-056 sub-slice 3 kickoff (2026-07-30):
+        positional ``query`` + keyword-only ``config``. Config is
+        optional; when ``None``, Stage 6.3.9-locked defaults apply.
+
+        Wiring order (satisfies ADR-056 §D3 as amended sub-slice 3):
+
+        1. :class:`ObservabilityPort` — wrap the entire call in a
+           ``zetesis.research`` span (attributes: query, question_id,
+           trial_id).
+        2. :class:`ResourcePort` — ``can_allocate(COMPUTE, ...)`` then
+           ``allocate(...)`` at :attr:`config.priority_class` with
+           requester="zetesis". No explicit release verb exists on
+           :class:`ResourcePort` (spec surface is fire-and-forget);
+           replenish is the operator-facing counter-verb.
+        3. :class:`EventBusPort` — publish
+           :data:`ZETESIS_RESEARCH_EVENT_STARTED` envelope.
+        4. Inner loop — delegate to
+           ``plugins.zetesis.research.run_zetesis_research`` (aliased
+           to ``run_odr_trial``). Returns
+           :class:`ops.benchmarks.adr_010.metrics.TrialMetrics`.
+        5. :class:`VectorPort` — no-op ``search(...)`` per ADR-056
+           §D3 (retrieval wiring proof; results ignored at 6.3).
+        6. :class:`DataPort` — ``export_canonical(...)`` the report as
+           ``zetesis_research_report`` with ADR-052 §Q4 provenance +
+           :data:`ZETESIS_MEMORY_DEFAULT_CONFIDENCE` + PIITier.PUBLIC.
+        7. :class:`MemoryPort` — ``write_event(...)`` with subject=query,
+           predicate=:data:`ZETESIS_MEMORY_PREDICATE`, object=answer
+           (elided to first 256 chars for temporal-index compactness),
+           provenance=:data:`ZETESIS_MEMORY_PROVENANCE`, confidence=
+           :data:`ZETESIS_MEMORY_DEFAULT_CONFIDENCE`. Zero-trust
+           invariants enforced by :func:`ports.memory.validate_zero_trust_write`.
+        8. :class:`EventBusPort` — publish
+           :data:`ZETESIS_RESEARCH_EVENT_COMPLETED` envelope with
+           latency + source_diversity.
+
+        LLMPort and SearchPort are exercised **inside** the inner loop
+        (via LangGraph + MCP), not by this wrapper directly.
+        NotificationPort is not exercised at sub-slice 3 — the
+        algedonic path is reserved for grounding-failure escalation
+        (spec §46) which requires a scorer that lands post-Phase-6.
+        SecretsPort is optional and untouched by the default flow.
+
+        Args:
+            query: Verbatim user query.
+            config: Optional per-call configuration bundle. When
+                ``None``, Stage 6.3.9-locked defaults apply.
+
+        Returns:
+            :class:`ResearchReport` — plugin-facing view of the trial's
+            output (higher-level than the internal ``TrialMetrics``).
+
+        Raises:
+            RuntimeError: If :meth:`start` has not been called.
+            Any exception raised by the inner loop propagates verbatim
+            after being recorded on the observability span and after
+            the started event has been published (the completed event
+            is not published on failure).
+        """
+        if not self._started:
+            raise RuntimeError(
+                "ZetesisPlugin has not started — call start() before research()"
+            )
+
+        # Import inside method to keep module import cost low. The
+        # inner-loop import triggers a LangGraph dependency chain that
+        # test suites monkeypatch out at the module attribute level.
+        from plugins.zetesis.research import run_zetesis_research
+        from ops.benchmarks.adr_010.metrics import TrialMetrics
+
+        cfg = config if config is not None else ZetesisResearchConfig()
+        trial_id = cfg.trial_id or str(uuid.uuid4())
+
+        span_attrs: dict[str, Any] = {
+            "query": query,
+            "question_id": cfg.question_id,
+            "trial_id": trial_id,
+            "ollama_model": cfg.ollama_model,
+        }
+
+        with self.observability.trace(
+            "zetesis.research", attributes=span_attrs
+        ) as span:
+            # 2. Resource allocation.
+            _ok = await self.resource.can_allocate(
+                ResourceKind.COMPUTE, cfg.compute_budget
+            )
+            _handle = await self.resource.allocate(
+                ResourceKind.COMPUTE,
+                cfg.compute_budget,
+                intent="zetesis.research",
+                priority_class=cfg.priority_class,
+                requester=ZETESIS_PLUGIN_NAME,
+            )
+
+            # 3. Started event.
+            started_env = EventEnvelope(
+                producer_plugin=ZETESIS_PLUGIN_NAME,
+                event_type=ZETESIS_RESEARCH_EVENT_STARTED,
+                payload={
+                    "query": query,
+                    "question_id": cfg.question_id,
+                    "trial_id": trial_id,
+                },
+            )
+            await self.event_bus.publish(started_env)
+
+            # 4. Inner-loop delegation.
+            metrics: TrialMetrics = await run_zetesis_research(
+                question=query,
+                question_id=cfg.question_id,
+                trial_id=trial_id,
+                ollama_base_url=cfg.ollama_base_url,
+                ollama_model=cfg.ollama_model,
+                mcp_server_url=cfg.mcp_server_url,
+                fact_anchor_urls=(
+                    list(cfg.fact_anchor_urls)
+                    if cfg.fact_anchor_urls is not None
+                    else None
+                ),
+                enable_fact_check=cfg.enable_fact_check,
+                enable_license_grounding=cfg.enable_license_grounding,
+                enable_feature_grounding=cfg.enable_feature_grounding,
+                enable_enterprise_license_grounding=cfg.enable_enterprise_license_grounding,
+                enable_rubric_critique=cfg.enable_rubric_critique,
+                rubric_lines=(
+                    list(cfg.rubric_lines)
+                    if cfg.rubric_lines is not None
+                    else None
+                ),
+                enable_cove=cfg.enable_cove,
+                enable_claim_support_gate=cfg.enable_claim_support_gate,
+                enable_structural_finalize=cfg.enable_structural_finalize,
+            )
+
+            citations = tuple(
+                str(ev.get("url", "")) for ev in metrics.final_evidences
+            )
+            evidences = tuple(
+                dict(ev) for ev in metrics.final_evidences
+            )
+
+            # 5. Vector no-op retrieval (ADR-056 §D3).
+            _hits = await self.vector.search(
+                collection=ZETESIS_STATE_NAMESPACE,
+                query_vector=[],
+                limit=1,
+            )
+
+            # 6. Canonical data export.
+            _data_handle = await self.data.export_canonical(
+                record_type="zetesis_research_report",
+                payload={
+                    "query": query,
+                    "answer": metrics.final_answer,
+                    "citations": list(citations),
+                    "trial_id": trial_id,
+                    "question_id": cfg.question_id,
+                    "source_diversity": metrics.source_diversity,
+                    "latency_seconds": metrics.latency_seconds,
+                },
+                provenance=ZETESIS_MEMORY_PROVENANCE,
+                confidence=ZETESIS_MEMORY_DEFAULT_CONFIDENCE,
+                pii_tier=PIITier.PUBLIC,
+            )
+
+            # 7. Memory event (zero-trust ADR-008).
+            answer_head = (metrics.final_answer or "")[:256]
+            event_id_obj = await self.memory.write_event(
+                subject=query,
+                predicate=ZETESIS_MEMORY_PREDICATE,
+                object=answer_head,
+                provenance=ZETESIS_MEMORY_PROVENANCE,
+                confidence=ZETESIS_MEMORY_DEFAULT_CONFIDENCE,
+                pii_tier=PIITier.PUBLIC.value,
+                attributes={
+                    "trial_id": trial_id,
+                    "question_id": cfg.question_id,
+                    "source_diversity": metrics.source_diversity,
+                    "latency_seconds": metrics.latency_seconds,
+                    "citations_count": len(citations),
+                },
+            )
+            memory_event_id_str = (
+                str(getattr(event_id_obj, "id", event_id_obj))
+                if event_id_obj is not None
+                else None
+            )
+
+            # 8. Completed event.
+            completed_env = EventEnvelope(
+                producer_plugin=ZETESIS_PLUGIN_NAME,
+                event_type=ZETESIS_RESEARCH_EVENT_COMPLETED,
+                payload={
+                    "query": query,
+                    "question_id": cfg.question_id,
+                    "trial_id": trial_id,
+                    "latency_seconds": metrics.latency_seconds,
+                    "source_diversity": metrics.source_diversity,
+                    "memory_event_id": memory_event_id_str,
+                },
+            )
+            await self.event_bus.publish(completed_env)
+
+            span.set_attribute("source_diversity", metrics.source_diversity)
+            span.set_attribute("latency_seconds", metrics.latency_seconds)
+
+            return ResearchReport(
+                query=query,
+                answer=metrics.final_answer,
+                citations=citations,
+                evidences=evidences,
+                source_diversity=metrics.source_diversity,
+                latency_seconds=metrics.latency_seconds,
+                trial_id=trial_id,
+                question_id=cfg.question_id,
+                trajectory_events=len(metrics.trajectory),
+                memory_event_id=memory_event_id_str,
+                error=metrics.error,
+            )
