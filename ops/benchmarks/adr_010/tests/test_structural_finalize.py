@@ -356,3 +356,111 @@ def test_prompt_truncates_long_notes():
         notes_text=long_notes,
     )
     assert "notes truncated" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Stage 6.3.9 · Q1: rationale-preservation prompt nudge
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_instructs_rationale_clause_preservation():
+    """Q1 (Stage 6.3.9): the finalize prompt must explicitly instruct the
+    writer to preserve rationale clauses ('chosen to', 'to avoid',
+    'because', 'so that', 'in order to', 'specifically to') verbatim.
+
+    Regression target: 6.3.8 Colossus 3-trial run consistently dropped
+    F4's AGPL network-copyleft rationale ('chosen by the DozerDB
+    maintainer specifically to avoid AGPL's network-copyleft
+    implications') when compressing the rubric line into the emitted
+    JSON claim, costing ~1 point per trial on F4.
+    """
+    prompt = sf.build_structural_finalize_prompt(
+        draft_report="draft.",
+        rubric_lines=["[F4] ASSERT: DozerDB is GPLv3 to avoid AGPL copyleft."],
+        notes_text="notes",
+    )
+    low = prompt.lower()
+    # Every rationale connector we tell the writer to look for must be
+    # named in the prompt.
+    for phrase in (
+        "chosen to",
+        "to avoid",
+        "because",
+        "so that",
+        "in order to",
+        "specifically to",
+    ):
+        assert phrase in low, f"prompt missing rationale connector {phrase!r}"
+    assert "rationale" in low
+    assert "verbatim" in low
+
+
+# ---------------------------------------------------------------------------
+# Stage 6.3.9 · Q2: numeric-only citation label rewrite
+# ---------------------------------------------------------------------------
+
+
+def test_numeric_only_label_regex_matches_all_common_forms():
+    """The detection regex must match all shapes the 6.3.8 writer emitted."""
+    for form in ("1", "(2)", "[4]", " 3 ", "(12)", "[10]"):
+        assert sf._NUMERIC_ONLY_LABEL.match(form), form
+    # Non-matches: real labels must pass through.
+    for form in ("DozerDB docs", "Neo4j GitHub", "2 Neo4j", "GPL-3.0"):
+        assert not sf._NUMERIC_ONLY_LABEL.match(form), form
+
+
+def test_short_form_from_url_extracts_host_and_first_segment():
+    assert (
+        sf._short_form_from_url("https://github.com/DozerDB/dozerdb-plugin")
+        == "github.com/DozerDB"
+    )
+    assert (
+        sf._short_form_from_url("https://raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE.txt")
+        == "raw.githubusercontent.com/neo4j"
+    )
+    # www prefix stripped.
+    assert sf._short_form_from_url("https://www.dozerdb.org/") == "dozerdb.org"
+    # Bare host, no path segment.
+    assert sf._short_form_from_url("https://neo4j.com/") == "neo4j.com"
+
+
+def test_normalize_source_label_rewrites_numeric_only_labels():
+    # Numeric-only labels get rewritten to domain short-form.
+    assert (
+        sf._normalize_source_label("(2)", "https://github.com/DozerDB/dozerdb-plugin")
+        == "github.com/DozerDB"
+    )
+    assert (
+        sf._normalize_source_label("[4]", "https://neo4j.com/open-core-and-neo4j/")
+        == "neo4j.com/open-core-and-neo4j"
+    )
+    # Real labels pass through unchanged.
+    assert (
+        sf._normalize_source_label("DozerDB docs", "https://dozerdb.org/")
+        == "DozerDB docs"
+    )
+
+
+def test_render_markdown_rewrites_numeric_only_labels_in_sources_block():
+    """End-to-end: a claim with a numeric-only citation label renders a
+    sources-block line with a domain short-form, not `[1] (2): url`."""
+    raw = json.dumps({
+        "title": "T",
+        "claims": [
+            {
+                "text": "DozerDB restores multi-database support.",
+                "rubric_ref": "F5",
+                "citations": [
+                    {
+                        "label": "(2)",
+                        "url": "https://github.com/DozerDB/dozerdb-plugin",
+                    }
+                ],
+            }
+        ],
+    })
+    md = sf.render_markdown(sf.parse_and_validate(raw))
+    # The ugly numeric-only label must not survive into the sources block.
+    assert "(2):" not in md
+    # The domain short-form must appear in the sources block.
+    assert "[1] github.com/DozerDB: https://github.com/DozerDB/dozerdb-plugin" in md

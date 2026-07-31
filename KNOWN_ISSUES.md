@@ -30,3 +30,14 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
   - Alternatively, investigate whether earlier pier version (0.2.x?) matched the original `--jobs-root` + trajectory-writing contract this harness was written against.
 - **Related DEBUG_LOG search terms:** `pier`, `trajectory.json`, `PierTrialFailure`, `datacurve-pier`, `--jobs-dir`
 
+
+### 2026-07-30 — ADR-010 ODR shim 6 (rubric_critique) + shim 7 (cove) silent no-ops
+
+- **Blocks:** no blockers — Stage 6.3.8 structural finalize (shim 9) covers the coverage/overreach gap these shims were originally meant to fix. Rating floor of 5.67/6 achieved without them running.
+- **Symptom:** Colossus 3-trial 6.3.8 run (2026-07-30) recorded `rubric_critique outcome=no_fenced_output` and `cove outcome=insufficient_claims claims_found=0` on every trial. Both shims run the LLM call but their post-processors extract zero usable output, so both shim bodies no-op silently. Behavior appears to predate 6.3.7 (was already occurring, just noticed after 6.3.8 fixed the leak class that was dominating attention).
+- **Attempted fixes:** none yet.
+- **Next investigation:**
+  1. **rubric_critique** — `extract_rewritten_report` expects a fenced markdown block; the model is likely returning either an unfenced rewrite or a differently-fenced block. Log the raw LLM output on one trial, inspect the exact delimiters returned, and either (a) reconcile the parser to accept the observed shape, or (b) tighten the prompt to emit the exact expected fence. 10-line fix if it's a format mismatch; larger if the model is refusing the critique task entirely.
+  2. **cove** — `cove.extract_claims` scans the report body for numbered or otherwise-structured claim sentences. If `current_report` at that point is loose bulleted markdown, the extractor finds no candidates. Confirm by logging the input `current_report` shape at the cove call site; if bullet-based, extend `extract_claims` to accept `- ` bullets as claim boundaries.
+- **Related DEBUG_LOG search terms:** `rubric_critique`, `no_fenced_output`, `cove`, `insufficient_claims`, `extract_rewritten_report`, `extract_claims`.
+- **Deferred to:** Stage 6.4.x or later. Not blocking the ADR-010 head-to-head (Stage 6.3.9 → head-to-head).

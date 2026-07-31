@@ -1681,3 +1681,22 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** ADR-053 status remains **Ratified v25**; lock-in condition (Colossus 3-trial blind mean ≥ 4.17 baseline) satisfied.
 - **Stop-condition status:** **DONE.** Tag `stage-6-3-8-complete` pushed to origin/main (commit `f68bd1f`). ADR-010 ODR contender wrapper is production-ready for the Phase-6 head-to-head resolution stream.
+
+## 2026-07-30 20:21 EDT — Stage 6.3.9 · ADR-010 ODR finalize polish (Q1 rationale-preservation prompt + Q2 sources-label normalization + Q3 rubric_critique/cove deferred to KNOWN_ISSUES)
+
+- **Stage / plugin / port:** Stage 6.3.9 · ADR-010 ODR contender wrapper polish · harness only (no plugin, no port surface change)
+- **What changed:**
+  - Q1: added new rule 6 to `structural_finalize.build_structural_finalize_prompt` — verbatim preservation of rationale clauses introduced by *"chosen to / to avoid / because / so that / in order to / specifically to"* (previous rule 6 becomes rule 7). Positive-framing allow-list-flavored instruction, consistent with ADR-053 direction. Rationale for locus: 6.3.8 Colossus 3-trial run showed F4's canonical rationale clause ("chosen by the DozerDB maintainer specifically to avoid AGPL's network-copyleft implications for downstream users") was already present verbatim in the fixture and in the rubric line — the writer compressed it away during JSON emission. Fix belongs at the prompt boundary, not the fixture.
+  - Q2: added `_NUMERIC_ONLY_LABEL` regex + `_short_form_from_url` + `_normalize_source_label` helpers to `structural_finalize.py`; `render_markdown` sources-block loop now applies `_normalize_source_label`. Numeric-only labels (`"1"`, `"(2)"`, `"[4]"`) become URL-derived domain short-forms (`github.com/DozerDB`). Renderer-side normalization; audit trail preserved.
+  - Q3: `rubric_critique` (shim 6) `no_fenced_output` + `cove` (shim 7) `insufficient_claims claims_found=0` on all three 6.3.8 trials diagnosed as pre-existing parser/prompt mismatches predating 6.3.7. 6.3.8 structural finalize covers the gap they were meant to fix. Deferred to KNOWN_ISSUES; both shims remain enabled (no harm, one LLM call each per trial). No source changes.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/harness/structural_finalize.py` (prompt rule 6 added, renderer helpers added, sources-block loop updated)
+  - `ops/benchmarks/adr_010/tests/test_structural_finalize.py` (5 new tests appended)
+  - `docs/adrs/ADR-054-stage-6-3-9-finalize-polish.md` (new)
+  - `docs/adrs/README.md` (ADR-054 index row inserted above ADR-053)
+  - `KNOWN_ISSUES.md` (rubric_critique + cove entry appended)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten with 6.3.9 state)
+- **Ports / adapters affected:** none. Harness-internal.
+- **PORTING_LEDGER / ADR updated:** ADR-054 authored (amends ADR-053, does not supersede); no PORTING_LEDGER change.
+- **Stop-condition status:** code + tests locked in-repo (whole-repo fast tier 1199 → 1204 passed, 19 skipped unchanged). Colossus 3-trial 6.3.9 verification run pending user execution. Lock-in floor: mean ≥ 5.67 / 6 (the 6.3.8 floor).

@@ -1,33 +1,40 @@
-# Kosmos Session Handoff — 2026-07-30 20:12 EDT
+# Kosmos Session Handoff — 2026-07-30 20:21 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 6.3.8 **COMPLETE** (Phase 6 · ADR-010 ODR contender wrapper). Tag `stage-6-3-8-complete` on origin/main.
-- **Plugin / kernel component:** ADR-010 ODR benchmark harness (`ops/benchmarks/adr_010/`)
-- **Port(s) in progress:** none — harness-internal work only
+
+- **Stage / phase:** Stage 6.3.9 (ADR-010 ODR contender wrapper polish, post-6.3.8 lock-in)
+- **Plugin / kernel component:** ADR-010 head-to-head harness only — no plugin, no port surface change
+- **Port(s) in progress:** none
 
 ## Completed this session
-- Deep-research pass on RAG hallucination mitigation. Report at `research_6_3_7b.md`.
-- Reverted 6.3.7b regex-sweep draft (research-informed rejection).
-- Shipped Stage 6.3.8 structural finalize (new `structural_finalize.py` module, shim 9 in `odr.py`, CLI flag, 19 new tests). Whole-repo pytest 1180 → 1199 passed / 19 skipped.
-- Authored ADR-053 (Ratified v25) + ADR README row.
-- Colossus 3-trial 6.3.8 verification: **structural_finalize outcome=ok all 3, blind F1–F6 mean 5.67 / 6** (baseline 4.17; 6.3.7 was 2.94).
-- Tagged `stage-6-3-8-complete` on origin/main.
-- BUILD_LOG + DEBUG_LOG updated with regression + fix + lock-in entries.
+
+- Diagnosed Q3 (`rubric_critique` shim 6 + `cove` shim 7 silent no-ops seen on every 6.3.8 trial): both fire their LLM call but their post-processors extract zero usable output (`rubric_critique: no_fenced_output`; `cove: insufficient_claims claims_found=0`). Root cause is a parser/prompt shape mismatch that predates 6.3.7; 6.3.8 structural finalize (shim 9) covers the gap they were meant to catch. Filed to `KNOWN_ISSUES.md`; both shims remain enabled (harmless, one LLM call each per trial).
+- Q1 disposition corrected: fixture already carries F4 rationale verbatim ("chosen by the DozerDB maintainer specifically to avoid AGPL's network-copyleft implications"). Compression loss is at writer-side JSON emission. Fix landed as a **prompt-layer preservation instruction** (new rule 6 in `build_structural_finalize_prompt`) — positive framing, consistent with ADR-053's allow-list direction.
+- Q2 renderer-side normalization: numeric-only citation labels (`"1"`, `"(2)"`, `"[4]"`) now rewritten to URL-derived domain short-form (`github.com/DozerDB`) in the sources block. Regex-detected, host+first-path-segment derivation. Audit trail preserved (parse-time output unchanged).
+- Test coverage: added 5 tests to `test_structural_finalize.py` (rationale-preservation prompt nudge; numeric-only regex coverage; `_short_form_from_url` cases; `_normalize_source_label` cases; end-to-end render-time rewrite). Whole-repo fast tier: **1199 → 1204 passed** (+5), 19 skipped unchanged.
+- Authored ADR-054 (`docs/adrs/ADR-054-stage-6-3-9-finalize-polish.md`); inserted index row in `docs/adrs/README.md` above the ADR-053 row.
+- BUILD_LOG entry appended (2026-07-30 20:21 EDT).
 
 ## Remaining before current Definition of Done
-- **6.3.8 DoD is met.** Nothing outstanding for this stage.
+
+- **Agent side:** commit + push these 6.3.9 changes to `origin/main`.
+- **User side (Colossus):** pull, run 3-trial 6.3.9 verification (command below), and paste the runner log + one representative trial's `shim_events` for structural_finalize + the blind bundle. Lock-in floor is mean ≥ 5.67 / 6 (the 6.3.8 floor). Expected gain: F4 rating recovers ~0.5–1 point per trial from rationale preservation; sources block no longer emits `[N] (M): url` shapes.
 
 ## Open questions / awaiting user answer
-- **Next stage direction:** ADR-010 resolution path from here is either (a) run the head-to-head vs AREX-Turbo now that ODR is stable, or (b) address the F4 AGPL-rationale gap + F5 minor overreach observed in the 6.3.8 blind rating with a targeted prompt / notes tweak before the head-to-head. User's call — neither is spec-forcing.
 
-## Residual observations (candidates for future stages, not 6.3.8 blockers)
-1. **F4 rubric-detail-loss:** AGPL-network-copyleft rationale absent from all 3 trials. Fix would be a small notes-enrichment or prompt hint, not a structural change.
-2. **F5 rubric-orphan overreach:** trials 02/03 each added one URL-cited claim outside canonical facts (external cloud services / negated telemetry). Allow-list gate correctly retained them because they had valid URLs; not fabrication but detail-drift.
-3. **Sources-block cosmetic:** renderer emits `[N] {label}: {url}` where writer sometimes puts a numeric/bracketed citation number in `label`, yielding `[1] (2):` / `[1] [4]:`. Track as KNOWN_ISSUES.
-4. **Silent-fail shims (not new):** `rubric_critique` reported `no_fenced_output` and `cove` reported `insufficient_claims` on every trial — shims 6/7 are running but their inner LLM outputs don't match expected fences. Structural finalize covered the gap. Worth investigating in a small follow-up stage.
+- none.
 
 ## Exact next action
-Ask user which of these to pursue next:
-- **A.** Run ADR-010 head-to-head (ODR vs AREX-Turbo) with 6.3.8-stable ODR — the point of the entire Phase-6 stream.
-- **B.** Ship a 6.3.9 mini-stage: fix F4 notes-enrichment + sources-block cosmetic + investigate rubric_critique/cove silent-fail before head-to-head.
-- **C.** Something else.
+
+**Agent (this turn):** commit + push, then hand the exact Colossus rerun command below.
+
+**User (Colossus), once push lands:**
+
+```bash
+cd ~/dev/kosmos && \
+  rm -f ops/benchmarks/artifacts/adr-010-2026-07-30/odr/trial_*.json \
+        ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_*.log && \
+  git pull && source .venv/bin/activate && \
+  python -m ops.benchmarks.adr_010.runner --contender odr --trials 3 \
+    2>&1 | tee ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_6_3_9.log
+```

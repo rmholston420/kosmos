@@ -206,7 +206,12 @@ def build_structural_finalize_prompt(
         "or the notes (no fabricated security posture, telemetry "
         "behavior, indexing capabilities, or non-source features).\n"
         "5. The `text` field must be a single self-contained sentence.\n"
-        "6. Return ONLY the JSON object.  No markdown fences, no prose "
+        "6. When a rubric fact statement contains a rationale clause "
+        "introduced by phrases like 'chosen to', 'to avoid', 'because', "
+        "'so that', 'in order to', or 'specifically to', preserve that "
+        "rationale clause verbatim in the claim `text`.  The rationale is "
+        "part of the fact and must not be summarized away.\n"
+        "7. Return ONLY the JSON object.  No markdown fences, no prose "
         "before or after.\n"
         "\n"
         "### Draft report to rewrite\n"
@@ -325,6 +330,45 @@ def parse_and_validate(raw: str) -> ValidatedReport:
     )
 
 
+# Stage 6.3.9 · Q2: normalize numeric-only / bracketed-numeric citation
+# labels to a domain-short-form.  The writer sometimes emits a citation
+# whose `label` is just a bracketed footnote number like "(2)" or "[4]",
+# which produced ugly sources-block lines like `[1] (2): https://...` in
+# 6.3.8.  Detect that shape and substitute a reader-facing short form
+# derived from the URL's host + first path segment.
+_NUMERIC_ONLY_LABEL = re.compile(r"^\s*[\(\[]?\s*\d+\s*[\)\]]?\s*$")
+
+
+def _short_form_from_url(url: str) -> str:
+    """Return a compact human-readable label like ``github.com/DozerDB``.
+
+    Falls back to the bare host if no path segment is available, and to
+    the input URL if parsing fails.
+    """
+    try:
+        from urllib.parse import urlparse
+
+        p = urlparse(url)
+        host = (p.netloc or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        segs = [s for s in (p.path or "").split("/") if s]
+        if host and segs:
+            return f"{host}/{segs[0]}"
+        if host:
+            return host
+    except Exception:  # pragma: no cover — defensive
+        pass
+    return url
+
+
+def _normalize_source_label(label: str, url: str) -> str:
+    """Rewrite numeric-only citation labels to a URL-derived short form."""
+    if _NUMERIC_ONLY_LABEL.match(label or ""):
+        return _short_form_from_url(url)
+    return label
+
+
 def render_markdown(report: ValidatedReport) -> str:
     """Deterministic Python renderer.  No LLM involvement.
 
@@ -373,7 +417,8 @@ def render_markdown(report: ValidatedReport) -> str:
         lines.append("\n## Sources\n")
         for c in ordered:
             n = seen[c.url]
-            lines.append(f"[{n}] {c.label}: {c.url}")
+            label = _normalize_source_label(c.label, c.url)
+            lines.append(f"[{n}] {label}: {c.url}")
 
     return "\n".join(lines).rstrip() + "\n"
 
