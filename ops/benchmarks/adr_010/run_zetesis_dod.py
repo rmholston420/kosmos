@@ -42,6 +42,7 @@ from ops.benchmarks.adr_010.runner import (
 )
 from plugins.zetesis.adapters.real import build_stage_6_3_9_zetesis_plugin
 from plugins.zetesis.plugin import ZetesisResearchConfig
+from plugins.zetesis.research.rubric_critique import build_rubric_lines_from_facts
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,17 @@ async def run_one_trial(args: argparse.Namespace) -> TrialMetrics:
     question_id = str(fixture.get("id") or fixture.get("question_id") or "adr_010")
     question = fixture["question"]
     fact_anchor_urls = _collect_fact_anchor_urls(fixture)
+    # ADR-054 shim-data parity: rubric-critique fires only when
+    # rubric_lines is non-empty (see runner.py `not args.no_rubric_critique
+    # and bool(rubric_lines)`). ADR-054's 5.33 baseline built these from
+    # the fixture's canonical_facts; the DoD trial must do the same or
+    # the rubric-critique shim silently no-ops and F4/F5/F6 rationale-
+    # preservation regresses (which is exactly what trial_01_42e695
+    # exhibited).
+    canonical_facts = (fixture.get("ground_truth") or {}).get(
+        "canonical_facts", []
+    ) or []
+    rubric_lines = build_rubric_lines_from_facts(canonical_facts)
 
     trial_id = f"trial_01_{uuid.uuid4().hex[:6]}"
     logger.info(
@@ -209,7 +221,7 @@ async def run_one_trial(args: argparse.Namespace) -> TrialMetrics:
             question_id=question_id,
             trial_id=trial_id,
             fact_anchor_urls=tuple(fact_anchor_urls) if fact_anchor_urls else None,
-            rubric_lines=None,
+            rubric_lines=tuple(rubric_lines) if rubric_lines else None,
             enable_fact_check=not args.no_fact_check,
             enable_license_grounding=not args.no_license_grounding,
             enable_feature_grounding=not args.no_feature_grounding,

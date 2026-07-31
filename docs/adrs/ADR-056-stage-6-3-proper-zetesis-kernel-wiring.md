@@ -94,6 +94,24 @@
 >
 > **Sub-slice 5 unchanged:** rating capture at `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`; BUILD_LOG entry with DoD rating; tag `stage-6-3-complete` on Colossus green.
 
+> **STATUS AMENDMENT (2026-07-30, sub-slice 4b — shim-data parity fix):** Sub-slice 4's DoD trial 1 (`trial_01_42e695`) rated **3.75 / 6** — below the 4.83 gate by 1.08 and below the ADR-054 baseline of 5.33 by 1.58. Rating captured verbatim at `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`. Inner-loop mechanics were green (all shims fired, `error=None`, latency 194.71 s comparable to baseline ~270 s, all fixture URLs resolved, both LICENSE files fetched). The failure was localized to the structural-finalize output: F4 dropped the AGPL/ONgDB/network-copyleft rationale, F5 named 2 of 4 enterprise families instead of 4, F6 substituted wrong exclusions.
+>
+> **Root cause (§D4 investigation):** `run_zetesis_dod.py` hard-coded `rubric_lines=None` in the `ZetesisResearchConfig` construction. The rubric-critique shim in the inner loop fires only when `rubric_lines` is non-empty (see `runner.py`: `not args.no_rubric_critique and bool(rubric_lines)`); ADR-054's 5.33 baseline built these from the fixture's `canonical_facts` via `build_rubric_lines_from_facts(...)`. Because the DoD runner did not do the same, the rubric-critique shim silently no-op'd on trial 1 despite `enable_rubric_critique=True`, and the F4/F5/F6 rationale-and-fact-preservation nudges (the exact Q1 win the 5.33 baseline is built on) did not reach the writer.
+>
+> **Not the plugin's fault. Not the wiring's fault.** `ZetesisResearchConfig` exposes `rubric_lines` correctly; the plugin forwards it correctly to `run_zetesis_research(...)`. The bug is a **runner-side shim-data parity omission** — the DoD entry point failed to feed the shim its per-trial data payload. This is the fixture-owned data policy that landed at Stage 6.3.3 (medium-strength anchor policy, referenced in runner.py's `_collect_fact_anchor_urls` docstring).
+>
+> **Fix:** `run_zetesis_dod.py` now extracts `canonical_facts` from `fixture["ground_truth"]` and computes `rubric_lines = build_rubric_lines_from_facts(canonical_facts)` before constructing `ZetesisResearchConfig`, matching ADR-054's runner.py behavior verbatim. Also fixes the trajectory-events type mismatch (int event count vs. list-of-dict) discovered during trial 1 artifact assembly; the report field is now emitted as a single summary entry keyed `zetesis_research_summary` so the blind rater artifact stays informative without dragging the full trajectory list through the plugin's public API surface.
+>
+> **Sub-slice 4b files modified:**
+>
+> - `ops/benchmarks/adr_010/run_zetesis_dod.py` — extract `canonical_facts` + build `rubric_lines`; pass to `ZetesisResearchConfig`. Trajectory type fixup already landed in commit `9b38075`.
+>
+> **Sub-slice 4b files added:**
+>
+> - `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md` — records trial 1 rating of 3.75 / 6 with per-fact breakdown, root-cause analysis, and the sub-slice 4b remedy. This artifact stays even after the sub-slice 4b re-run rates ≥ 4.83, so the shim-data parity failure remains discoverable in the ADR-056 audit trail.
+>
+> **Sub-slice 5 unchanged from prior amendment.** Re-run the DoD trial with the patched runner. If the re-run rates ≥ 4.83, sub-slice 5 (BUILD_LOG DoD entry + tag `stage-6-3-complete`) proceeds. If it still rates below 4.83 with the shim-data parity restored, the wiring surface is the next investigation vector.
+
 ## Context
 
 Stage 6.4 (this session's ratification stage) closed the ADR-010 substrate-tuning arc via ADR-055: ODR-post-6.3.9 (commit `05366ac`, tag `stage-6-3-9-complete`, agent-rated mean 5.33 / 6 on 3 Colossus trials at Stage 6.3.9) is Zetesis's ratified research inner loop. The Stage 6.3.x sub-stages (6.3.1 → 6.3.9) executed ODR substrate-tuning under §6.3. Stage 6.3 (proper) is the outer §6.3 verb itself — wire the tuned ODR into Zetesis so the plugin can produce a multi-source research report with citations end-to-end.

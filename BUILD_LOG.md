@@ -1873,3 +1873,21 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** ObservabilityPort, ResourcePort, EventBusPort, VectorPort, DataPort, MemoryPort (all now runtime-safe under sub-slice 4 adapter matrix). No Protocol changes.
 - **PORTING_LEDGER / ADR updated:** ADR-056 third STATUS AMENDMENT block.
 - **Stop-condition status:** in-progress. Sub-slice 4 code complete; sandbox 1245 passed / 19 skipped (up from 1239 = +6 new construction tests, zero regressions). Colossus DoD trial pending. Gate: rating >= 4.83 / 6.
+
+## 2026-07-30 23:38 EDT — Stage 6.3 (proper) sub-slice 4 DoD trial 1: 3.75 / 6 FAIL + sub-slice 4b shim-data parity fix
+
+- **Stage / plugin / port:** Stage 6.3 (proper) · Zetesis kernel wiring · sub-slice 4 (DoD trial) → sub-slice 4b (runner-side shim-data parity fix)
+- **What changed:**
+  - Colossus DoD trial 1 (`trial_01_42e695`) completed cleanly at 194.71s / 27.53GB VRAM peak / GPU 100% peak / source_diversity=3 / error=None. Inner loop ran end-to-end: MCP negotiation, 4 Ollama chat completions, 5 canonical-fixture URL live probes (all resolved), both LICENSE files fetched, structural-finalize emitted.
+  - Blind agent rating (same rater as ADR-054 5.33 baseline, same F1–F6 · 0/0.5/1.0 rubric): **3.75 / 6** — 1.08 below 4.83 gate, 1.58 below 5.33 baseline. Per-fact: F1=1.0, F2=0.5, F3=1.0, F4=0.5, F5=0.5, F6=0.25. F4 lost the AGPL/ONgDB/network-copyleft rationale (the marquee 6.3.9 Q1 win). F5 named 2 of 4 enterprise families. F6 substituted graph-algorithms/Cypher-extensions for the canonical clustering/live-backup/high-limit-store trio. Rating captured verbatim at `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`.
+  - **Root cause identified as runner-side shim-data parity omission, NOT plugin wiring regression:** `run_zetesis_dod.py` hard-coded `rubric_lines=None` in the `ZetesisResearchConfig` construction. The rubric-critique shim in the inner loop fires only when `rubric_lines` is non-empty (`runner.py`: `not args.no_rubric_critique and bool(rubric_lines)`). ADR-054's 5.33 baseline built these from the fixture's `canonical_facts` via `build_rubric_lines_from_facts(...)`. Because the DoD runner did not do the same, the rubric-critique shim silently no-op'd despite `enable_rubric_critique=True`, and the F4/F5/F6 rationale-and-fact-preservation nudges never reached the writer. `ZetesisResearchConfig` and `ZetesisPlugin.research()` are innocent — they forward `rubric_lines` correctly to `run_zetesis_research(...)`.
+  - **Fix landed (sub-slice 4b):** `run_zetesis_dod.py` now extracts `canonical_facts` from `fixture["ground_truth"]` and computes `rubric_lines = build_rubric_lines_from_facts(canonical_facts)` before constructing `ZetesisResearchConfig`, matching ADR-054 runner.py behavior verbatim.
+  - Amended ADR-056 with a fourth STATUS AMENDMENT block (`sub-slice 4b — shim-data parity fix`): documents the root cause, the fix, and the sub-slice 5 gate condition unchanged.
+- **Files touched:**
+  - `ops/benchmarks/adr_010/run_zetesis_dod.py` (modified — extract canonical_facts + build rubric_lines; pass to ZetesisResearchConfig)
+  - `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md` (new — trial 1 FAIL rating for the audit trail)
+  - `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (amended — fourth STATUS AMENDMENT block)
+  - `BUILD_LOG.md` (this entry)
+- **Ports / adapters affected:** none. Sub-slice 4b is entirely runner-side. Plugin surface, port Protocols, and adapter matrix are unchanged.
+- **PORTING_LEDGER / ADR updated:** ADR-056 fourth STATUS AMENDMENT block.
+- **Stop-condition status:** in-progress. Sub-slice 4 code + trial 1 committed; sub-slice 4b patch pushed; sub-slice 5 gated on re-run.
