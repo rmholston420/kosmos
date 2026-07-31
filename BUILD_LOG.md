@@ -1760,3 +1760,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Naming-only diff.
 - **PORTING_LEDGER / ADR updated:** none newly authored. ADR-055 body text-diff only. ADR-010 amendment block text-diff only. `docs/adrs/README.md` ADR-055 and ADR-054 index-row text-diff only.
 - **Stop-condition status:** met. Correction lands cleanly; tag `stage-6-4-complete` continues to reflect the actual Stage 6.4 lock-in (no re-tag needed). Next stage: **Stage 6.3 (proper)** — author scoping ADR binding Q1=B / Q2=B / Q3=A, then execute Zetesis kernel wiring.
+
+## 2026-07-30 22:14 EDT — Stage 6.3 (proper) scoping ADR authored (ADR-056)
+
+- **Stage / plugin / port:** Stage 6.3 (proper) · Zetesis kernel wiring · scoping ADR (pre-code)
+- **What changed:** authored `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` binding the user's three scoping decisions (2026-07-30 22:02 EDT, re-confirmed 22:13 EDT):
+  - **Q1=B** — lift `run_odr_trial` + `build_odr_config` + 12 supporting modules from `ops/benchmarks/adr_010/harness/` to `plugins/zetesis/research/`; rename to `run_zetesis_research` / `build_zetesis_research_config`; add harness backward-compat shim at `ops/benchmarks/adr_010/harness/odr.py` re-exporting from the plugin. Dependency inverted: Zetesis owns its own inner loop; ADR-010 benchmark runner (`ops.benchmarks.adr_010.runner --contender odr`) continues to work via re-exports without modification.
+  - **Q2=B** — wire **all 10 required business ports** (`FrontendContractPort`, `LLMPort`, `MemoryPort`, `VectorPort`, `DataPort`, `SearchPort`, `EventBusPort`, `ResourcePort`, `NotificationPort`, `ObservabilityPort`) at Stage 6.3 (proper). Delete `_UntouchablePort` sentinel from `plugins/zetesis/plugin.py`. Add 9 stub adapter classes under `plugins/zetesis/adapters/` (FrontendContractPort adapter already exists from Stage 6.1). Add 10 fast-tier port-wiring contract tests under `plugins/zetesis/tests/`. `SecretsPort` (1 optional slot) stays `Optional[SecretsPort]` unless the ADR-010 fixture requires external credentials.
+  - **Q3=A** — reuse the ADR-010 F1–F6 fixture (Neo4j Community vs. DozerDB) as the "representative research query" that proves the §6.3 DoD verb ("Zetesis produces a multi-source research report with citations"). Regression floor **≥ 4.83** on 1 Colossus trial through `ZetesisPlugin.research()` (0.5 tolerance around Stage 6.3.9's 5.33 baseline, variance ≈ 0.056). Trial artifact + rating file under `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/`.
+
+  ADR-056 locks the sub-slice execution order (5 sub-slices, one commit + BUILD_LOG entry each): (1) harness lift + test co-move; (2) port-wiring skeleton + stub adapters + 10 contract tests; (3) `ZetesisPlugin.research()` method wiring all 10 ports around the lifted inner loop; (4) Colossus DoD trial + rating pass; (5) lock-in + tag `stage-6-3-complete`.
+
+  ADR-052 §Q3=A skeleton discharged at sub-slice 2 landing (`_UntouchablePort` sentinel deleted); §Q4 MemoryPort constants (`ZETESIS_MEMORY_PROVENANCE`, `ZETESIS_MEMORY_PREDICATE`, `ZETESIS_MEMORY_DEFAULT_CONFIDENCE`) inherited into Zetesis's write path at sub-slice 3; §Q7=B-plus port surface bound to real adapters. ADR-055 substrate ratification consumed. ADR-054's 5.33/6 rated floor consumed as the regression gate. ADR-007 respected (no plugin-to-plugin coupling). ADR-008 respected (all MemoryPort writes carry provenance + confidence).
+
+- **Files touched:**
+  - `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (new; ratifies Q1=B / Q2=B / Q3=A + sub-slice order)
+  - `docs/adrs/README.md` (ADR-056 index row inserted above ADR-055 row)
+  - `BUILD_LOG.md` (this entry)
+- **Ports / adapters affected:** none yet — ADR-056 is the scoping ADR, not the wiring commit. All 10 required Zetesis business ports enumerated for wiring across sub-slices 1–3.
+- **PORTING_LEDGER / ADR updated:** ADR-056 authored. `docs/adrs/README.md` index-row inserted. Zero PORTING_LEDGER change (Q1=B is a Kosmos-side code re-home, not a new vendor port; ODR remains VENDORED at its existing PORTING_LEDGER entry with unchanged upstream/license/commit).
+- **Stop-condition status:** in-progress. ADR-056 landed as the scoping ADR. Next: sub-slice 1 (harness lift + test co-move). Whole-repo fast tier must pass at each sub-slice landing. Stage 6.3 (proper) lock-in tag `stage-6-3-complete` at sub-slice 5.
