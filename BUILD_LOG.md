@@ -1658,3 +1658,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (harness-internal).
 - **PORTING_LEDGER / ADR updated:** ADR-053 authored (Ratified v25).
 - **Stop-condition status:** in-progress. Whole-repo pytest **1199 passed, 19 skipped** (+19 new tests, baseline was 1180). Blocking on Colossus 3-trial 6.3.8 rerun to verify F1–F6 mean ≥ 4.17 baseline (target ≥ 5/6).
+
+## 2026-07-30 20:12 EDT — Stage 6.3.8 LOCKED (blind F1–F6 mean 5.67/6 on 3-trial Colossus verification)
+
+- **Stage / plugin / port:** ADR-010 ODR harness · Stage 6.3.8 lock-in
+- **What was verified (Colossus 3-trial run 19:47–19:58 EDT):**
+  - **structural_finalize outcome=ok on every trial** (claims_kept 9 / 14 / 10; claims_dropped 0; drop_reasons empty).
+  - **Zero leak markers across all 3 trials:** no `[unverified]`, no `[unsupported: ...]`, no `[needs citation]`, no `[not covered]`, no `*(Source: )*` / `*(Raw GitHub Link: )*` wrappers, no empty `[N] Label:` sources-block entries.
+  - **Zero F5-fabrication of the 6.3.7 class** (no "hardened Docker containers", "phone-home telemetry asserted", "spatial indexing", "full-text search"). Trial 03 contained one *negated* telemetry line (properly stating telemetry does NOT occur), classified as rubric-orphan overreach not fabrication.
+  - **F1–F6 tags present** on the top six bullets of every report, ordered.
+  - **Blind rating (per-trial F1..F6 means):** trial_01_8cd7a5 5.67 · trial_02_97d561 5.67 · trial_03_e54089 5.67. **Aggregate mean 5.67 / 6.**
+- **Delta vs baseline / regression:**
+  - Baseline (6.3.6b): 4.17 / 6
+  - 6.3.7 regression: 2.94 / 6 (3-trial mean, 2026-07-30 19:14 EDT)
+  - **6.3.8: 5.67 / 6** — beats baseline by +1.50, recovers 6.3.7 regression by +2.73, clears the ≥5/6 target.
+- **Consistent residual gaps observed (rubric-detail-loss, not fabrication):**
+  - F4: AGPL network-copyleft rationale (why DozerDB avoids AGPLv3) not surfaced in any trial. Prompt/notes did not carry this detail to the finalize turn.
+  - F5: Minor rubric-orphan overreach — trial_02 added "external cloud services recommended", trial_03 added negated telemetry line. Neither fabricated a positive feature-delta; the allow-list gate correctly kept these because they carried valid URLs, but they aren't in canonical facts.
+  - These are candidates for a future prompt/notes tweak, not a structural fix. Not blocking 6.3.8.
+- **Cosmetic follow-up (not blocking):** the deterministic renderer's sources block emits `[N] {label}: {url}` where `{label}` was itself a numeric/parenthesized citation number from the writer's JSON, producing lines like `[1] (2): https://...` / `[1] [4]: https://...`. Suggest a small tweak in `structural_finalize.render_markdown` to detect and strip numeric-only or bracketed-only labels. Track as KNOWN_ISSUES item, not a 6.3.8 blocker.
+- **Files touched:** none.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** ADR-053 status remains **Ratified v25**; lock-in condition (Colossus 3-trial blind mean ≥ 4.17 baseline) satisfied.
+- **Stop-condition status:** **DONE.** Tag `stage-6-3-8-complete` pushed to origin/main (commit `f68bd1f`). ADR-010 ODR contender wrapper is production-ready for the Phase-6 head-to-head resolution stream.

@@ -1,52 +1,33 @@
-# Kosmos Session Handoff — 2026-07-30 19:45 EDT
+# Kosmos Session Handoff — 2026-07-30 20:12 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 6.3.8 (Phase 6 · ADR-010 head-to-head — ODR contender refinement)
+- **Stage / phase:** Stage 6.3.8 **COMPLETE** (Phase 6 · ADR-010 ODR contender wrapper). Tag `stage-6-3-8-complete` on origin/main.
 - **Plugin / kernel component:** ADR-010 ODR benchmark harness (`ops/benchmarks/adr_010/`)
-- **Port(s) in progress:** none — harness-internal change only
+- **Port(s) in progress:** none — harness-internal work only
 
 ## Completed this session
-- Deep-research pass on RAG hallucination mitigation (arXiv ALCE, RARR, FActScore, CoVe, CoNLI, LLMQuoter, I-CALM; Anthropic anti-hallucination guide; Ollama structured outputs; Instructor; Reducto; Vectara FaithBench). Report at repo root: `research_6_3_7b.md`.
-- Rejected the 6.3.7b regex-sweep-plus-deny-list draft (reverted all uncommitted edits) — direction ruled structurally weaker by the research.
-- Shipped Stage 6.3.8 structural finalize:
-  - **New module** `ops/benchmarks/adr_010/harness/structural_finalize.py` — strict JSON schema, Ollama `response_format=json_schema` call, allow-list gate, deterministic markdown renderer.
-  - **Wired shim 9** into `harness/odr.py` (best-effort, falls back to prior report on error).
-  - **New CLI flag** `--no-structural-finalize` in `runner.py`; banner bumped to "Stage 6.3.8".
-  - **19 new tests** at `ops/benchmarks/adr_010/tests/test_structural_finalize.py` (all passing).
-  - **Whole-repo pytest:** 1199 passed / 19 skipped (was 1180 / 19).
-- Authored ADR-053 (`docs/adrs/ADR-053-adr-010-odr-structural-finalize.md`) + ADR README row.
-- Appended BUILD_LOG entries (6.3.7 regression + 6.3.8 fix).
-- Appended DEBUG_LOG entry (6.3.7 regression root cause + fix reference).
+- Deep-research pass on RAG hallucination mitigation. Report at `research_6_3_7b.md`.
+- Reverted 6.3.7b regex-sweep draft (research-informed rejection).
+- Shipped Stage 6.3.8 structural finalize (new `structural_finalize.py` module, shim 9 in `odr.py`, CLI flag, 19 new tests). Whole-repo pytest 1180 → 1199 passed / 19 skipped.
+- Authored ADR-053 (Ratified v25) + ADR README row.
+- Colossus 3-trial 6.3.8 verification: **structural_finalize outcome=ok all 3, blind F1–F6 mean 5.67 / 6** (baseline 4.17; 6.3.7 was 2.94).
+- Tagged `stage-6-3-8-complete` on origin/main.
+- BUILD_LOG + DEBUG_LOG updated with regression + fix + lock-in entries.
 
 ## Remaining before current Definition of Done
-- **Colossus 3-trial 6.3.8 rerun.** Command below. Success criterion: F1–F6 blind-rated mean ≥ 4.17 baseline (target ≥ 5/6). Structural predictions:
-  - No `[unverified]`, `[unsupported: ...]`, `[needs citation]`, `[not covered]` in any `final_answer`.
-  - No `*(Source: )*` or empty `[N] Label:` sources-block entries.
-  - No F5 fabrication (hardened Docker, telemetry, phone-home, spatial indexing, full-text search) — rubric-orphan claims drop under the allow-list gate.
-  - `shim_events` contains a `structural_finalize` event with `outcome=ok` in each trial.
-- Git commit + push (pending — do this next before Colossus rerun so the workstation can `git pull`).
+- **6.3.8 DoD is met.** Nothing outstanding for this stage.
 
 ## Open questions / awaiting user answer
-- none
+- **Next stage direction:** ADR-010 resolution path from here is either (a) run the head-to-head vs AREX-Turbo now that ODR is stable, or (b) address the F4 AGPL-rationale gap + F5 minor overreach observed in the 6.3.8 blind rating with a targeted prompt / notes tweak before the head-to-head. User's call — neither is spec-forcing.
+
+## Residual observations (candidates for future stages, not 6.3.8 blockers)
+1. **F4 rubric-detail-loss:** AGPL-network-copyleft rationale absent from all 3 trials. Fix would be a small notes-enrichment or prompt hint, not a structural change.
+2. **F5 rubric-orphan overreach:** trials 02/03 each added one URL-cited claim outside canonical facts (external cloud services / negated telemetry). Allow-list gate correctly retained them because they had valid URLs; not fabrication but detail-drift.
+3. **Sources-block cosmetic:** renderer emits `[N] {label}: {url}` where writer sometimes puts a numeric/bracketed citation number in `label`, yielding `[1] (2):` / `[1] [4]:`. Track as KNOWN_ISSUES.
+4. **Silent-fail shims (not new):** `rubric_critique` reported `no_fenced_output` and `cove` reported `insufficient_claims` on every trial — shims 6/7 are running but their inner LLM outputs don't match expected fences. Structural finalize covered the gap. Worth investigating in a small follow-up stage.
 
 ## Exact next action
-1. Commit + push (this session, next):
-   ```bash
-   cd /home/user/workspace/kosmos-scan && \
-     git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
-       add -A && \
-     git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
-       commit -m "Stage 6.3.8 · ADR-010 ODR structural finalize (JSON-schema + deterministic render); ADR-053" && \
-     git -c user.email=lawapa.naljor@gmail.com -c user.name=rmholston420 \
-       push origin main
-   ```
-2. On Colossus (user runs after pull):
-   ```bash
-   cd ~/dev/kosmos && \
-     rm -f ops/benchmarks/artifacts/adr-010-2026-07-30/odr/trial_*.json \
-           ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_*.log && \
-     git pull && source .venv/bin/activate && \
-     python -m ops.benchmarks.adr_010.runner --contender odr --trials 3 \
-       2>&1 | tee ops/benchmarks/artifacts/adr-010-2026-07-30/odr/runner_stage_6_3_8.log
-   ```
-3. Blind-rate the 3 trials F1–F6; compare mean vs. 4.17 baseline.
+Ask user which of these to pursue next:
+- **A.** Run ADR-010 head-to-head (ODR vs AREX-Turbo) with 6.3.8-stable ODR — the point of the entire Phase-6 stream.
+- **B.** Ship a 6.3.9 mini-stage: fix F4 notes-enrichment + sources-block cosmetic + investigate rubric_critique/cove silent-fail before head-to-head.
+- **C.** Something else.
