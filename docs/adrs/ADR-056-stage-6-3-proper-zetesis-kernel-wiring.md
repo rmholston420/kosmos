@@ -1,8 +1,23 @@
 # ADR-056 — Stage 6.3 (proper) Zetesis Kernel Wiring
 
-**Status:** Ratified v25
+**Status:** Ratified v25 — Amended 2026-07-30
 **Lock-in phase:** Stage 6.3 (proper) — Kosmos-Build-Sequence-v25.md §6.3
 **Supersedes:** —
+
+> **STATUS AMENDMENT (2026-07-30):** Sub-slice 2 discovery corrected two factual errors in §D2 ("Sub-slice 2: port-wiring skeleton") without changing sub-slice intent:
+>
+> 1. `_UntouchablePort` does **not** live in `plugins/zetesis/plugin.py`. It lives in `plugins/zetesis/tests/test_zetesis_plugin.py` as a test-side sentinel that proves Stage 6.1's `start()` touches zero business ports (ADR-052 §Q3=A). Deleting it would break the load-bearing Stage 6.1 invariant test (`test_start_touches_no_business_port`).
+>
+> 2. `ZetesisPlugin.__init__` already accepts real adapter arguments for all 10 required ports (Stage 6.1 landed the dataclass field surface). No signature change was needed.
+>
+> **Corrected sub-slice 2 scope (executed as-corrected):**
+>
+> - Preserve `_UntouchablePort` and `_make_plugin` in `test_zetesis_plugin.py` for the Stage 6.1 "touches zero business ports" invariant test.
+> - Add 9 stub adapter files under `plugins/zetesis/adapters/` implementing each port's Protocol with minimal behavior (LLM/Memory/Data/Notification stubs raise NotImplementedError on state-changing methods; Search/EventBus/Resource/Vector/Observability stubs return safe defaults for calls sub-slice 3's `research()` will exercise).
+> - Add a shared `plugins/zetesis/tests/conftest.py` exposing `zetesis_stubs` and `make_zetesis_plugin` fixtures.
+> - Add 10 fast-tier port-wiring contract tests under `plugins/zetesis/tests/test_port_wiring_<port>.py` — one per port, asserting Protocol conformance via `isinstance(stub, Port)` and identity binding at the plugin's ctor slot.
+>
+> **Consequences unchanged:** the file lists in the Consequences section below remain correct except that `plugins/zetesis/plugin.py` is **not modified** by sub-slice 2 (only tests + adapters are added). The other sub-slices (1, 3, 4, 5) are unchanged.
 
 ## Context
 
