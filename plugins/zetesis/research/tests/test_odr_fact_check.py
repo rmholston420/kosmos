@@ -87,8 +87,8 @@ def _patch_verify_urls(monkeypatch, script: dict[str, bool] | Exception):
     Passing an Exception makes verify_urls raise it (exercises the
     verifier-failure branch).
     """
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
-    from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+    from plugins.zetesis.research import odr as odr_mod
+    from plugins.zetesis.research.url_verify import VerifyResult
 
     async def _fake(urls, **kwargs):
         if isinstance(script, Exception):
@@ -150,7 +150,7 @@ def test_fact_anchor_urls_inject_into_user_prompt(monkeypatch):
     )
     _patch_verify_urls(monkeypatch, {"https://neo4j.com/open-core-and-neo4j/": True})
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
 
     metrics = _run(
         odr_mod.run_odr_trial(
@@ -187,7 +187,7 @@ def test_all_urls_verify_no_retry_no_annotation(monkeypatch):
         {"https://good1.example/": True, "https://good2.example/": True},
     )
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
 
     metrics = _run(
         odr_mod.run_odr_trial(
@@ -235,7 +235,7 @@ def test_bad_urls_trigger_retry_and_retry_succeeds(monkeypatch):
         },
     )
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
 
     metrics = _run(
         odr_mod.run_odr_trial(
@@ -296,7 +296,7 @@ def test_retry_report_that_re_emits_failed_url_is_stripped(monkeypatch):
         },
     )
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
 
     metrics = _run(
         odr_mod.run_odr_trial(
@@ -356,7 +356,7 @@ def test_new_bad_url_in_retry_body_is_stripped(monkeypatch):
         },
     )
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
 
     metrics = _run(
         odr_mod.run_odr_trial(
@@ -414,7 +414,7 @@ def test_finalize_strip_removes_bad_url_from_body(monkeypatch):
     call_state = {"n": 0}
 
     async def _fake_verify(urls, **kw):
-        from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+        from plugins.zetesis.research.url_verify import VerifyResult
         call_state["n"] += 1
         is_finalize = call_state["n"] >= 2
         out = {}
@@ -432,7 +432,7 @@ def test_finalize_strip_removes_bad_url_from_body(monkeypatch):
             )
         return out
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
     monkeypatch.setattr(odr_mod, "verify_urls", _fake_verify)
 
     metrics = _run(
@@ -483,7 +483,7 @@ def test_finalize_strip_boundary_aware_prefix_collision(monkeypatch):
     call_state = {"n": 0}
 
     async def _fake_verify(urls, **kw):
-        from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+        from plugins.zetesis.research.url_verify import VerifyResult
         call_state["n"] += 1
         is_finalize = call_state["n"] >= 2
         out = {}
@@ -505,7 +505,7 @@ def test_finalize_strip_boundary_aware_prefix_collision(monkeypatch):
             )
         return out
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
     monkeypatch.setattr(odr_mod, "verify_urls", _fake_verify)
 
     metrics = _run(
@@ -547,7 +547,7 @@ def test_no_fact_check_disables_shim(monkeypatch):
     def _boom(urls, **kw):
         raise AssertionError("verify_urls should not run when enable_fact_check=False")
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
     monkeypatch.setattr(odr_mod, "verify_urls", _boom)
 
     metrics = _run(
@@ -576,7 +576,7 @@ def test_verifier_error_is_non_fatal(monkeypatch):
     )
     _patch_verify_urls(monkeypatch, RuntimeError("verifier crashed"))
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
 
     metrics = _run(
         odr_mod.run_odr_trial(
@@ -615,7 +615,7 @@ def test_finalize_strip_removes_empty_citation_wrappers(monkeypatch):
     call_state = {"n": 0}
 
     async def _fake_verify(urls, **kw):
-        from ops.benchmarks.adr_010.harness.url_verify import VerifyResult
+        from plugins.zetesis.research.url_verify import VerifyResult
         call_state["n"] += 1
         is_finalize = call_state["n"] >= 2
         out = {}
@@ -636,7 +636,7 @@ def test_finalize_strip_removes_empty_citation_wrappers(monkeypatch):
             )
         return out
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
     monkeypatch.setattr(odr_mod, "verify_urls", _fake_verify)
 
     metrics = _run(
@@ -688,7 +688,7 @@ def test_thermal_abort_skips_fact_check(monkeypatch):
     def _boom(urls, **kw):
         raise AssertionError("verify_urls should not run after ThermalAbort")
 
-    from ops.benchmarks.adr_010.harness import odr as odr_mod
+    from plugins.zetesis.research import odr as odr_mod
     monkeypatch.setattr(odr_mod, "verify_urls", _boom)
 
     thermal = threading.Event()

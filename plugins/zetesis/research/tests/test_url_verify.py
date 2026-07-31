@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from ops.benchmarks.adr_010.harness.url_verify import (
+from plugins.zetesis.research.url_verify import (
     VerifyResult,
     annotate_unverified,
     extract_urls,
@@ -71,7 +71,7 @@ def _patch_client(monkeypatch, script):
         return scripted
 
     monkeypatch.setattr(
-        "ops.benchmarks.adr_010.harness.url_verify.httpx.AsyncClient",
+        "plugins.zetesis.research.url_verify.httpx.AsyncClient",
         _factory,
     )
     return scripted
@@ -225,7 +225,7 @@ def test_annotate_unverified_only_annotates_bad(monkeypatch):
 
 
 def test_canonicalize_strips_trailing_encoded_gt():
-    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    from plugins.zetesis.research.url_verify import _canonicalize
     assert _canonicalize("https://x.example/y%3E") == "https://x.example/y"
     assert _canonicalize("https://x.example/y%3e") == "https://x.example/y"
     assert (
@@ -234,7 +234,7 @@ def test_canonicalize_strips_trailing_encoded_gt():
 
 
 def test_canonicalize_strips_trailing_gt_literal():
-    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    from plugins.zetesis.research.url_verify import _canonicalize
     assert _canonicalize("https://x.example/y>") == "https://x.example/y"
     assert _canonicalize("https://x.example/y>>") == "https://x.example/y"
     # Combined with other trailing junk
@@ -245,7 +245,7 @@ def test_canonicalize_strips_trailing_gt_literal():
 
 
 def test_canonicalize_strips_leading_lt():
-    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    from plugins.zetesis.research.url_verify import _canonicalize
     assert _canonicalize("<https://x.example/") == "https://x.example/"
     assert _canonicalize("<https://x.example/>") == "https://x.example/"
     # Two leading `<` would be pathological; we only strip one.
@@ -310,7 +310,7 @@ def test_canonicalize_strips_trailing_square_brackets():
     """_canonicalize only strips pure trailing punctuation runs; the deeper
     footnote-marker case like ``y[3]`` is handled at the extractor level
     (see test_extract_urls_footnote_marker_suffix)."""
-    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    from plugins.zetesis.research.url_verify import _canonicalize
     assert _canonicalize("https://x.example/y]") == "https://x.example/y"
     assert _canonicalize("https://x.example/y[") == "https://x.example/y"
     assert _canonicalize("https://x.example/y]]") == "https://x.example/y"
@@ -319,7 +319,7 @@ def test_canonicalize_strips_trailing_square_brackets():
 
 
 def test_canonicalize_strips_leading_open_bracket():
-    from ops.benchmarks.adr_010.harness.url_verify import _canonicalize
+    from plugins.zetesis.research.url_verify import _canonicalize
     assert _canonicalize("[https://x.example/") == "https://x.example/"
     assert _canonicalize("[https://x.example/]") == "https://x.example/"
 
@@ -328,7 +328,7 @@ def test_extract_urls_footnote_marker_suffix():
     """Regression: 6.3.4 Colossus run emitted `github.com/neo4j/neo4j[3]` and
     the extractor smuggled `[3` into the URL. Now the bracket + digits stay
     OUT of the URL and the clean URL is emitted."""
-    from ops.benchmarks.adr_010.harness.url_verify import extract_urls
+    from plugins.zetesis.research.url_verify import extract_urls
     text = (
         "See https://github.com/neo4j/neo4j[3] for details, and "
         "https://github.com/DozerDB/dozerdb-plugin[7]. Also "

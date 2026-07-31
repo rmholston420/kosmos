@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ops.benchmarks.adr_010.harness.cove import (
+from plugins.zetesis.research.cove import (
     CoveClaim,
     build_cove_rewrite_turn,
     build_sub_question,

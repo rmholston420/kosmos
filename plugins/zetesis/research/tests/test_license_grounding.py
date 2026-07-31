@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from ops.benchmarks.adr_010.harness.license_grounding import (
+from plugins.zetesis.research.license_grounding import (
     LicenseFact,
     LicenseMismatch,
     build_license_correction_directive,
@@ -149,7 +149,7 @@ class _FakeClient:
 
 @pytest.mark.asyncio
 async def test_ground_licenses_hits_first_ref_first_path(monkeypatch):
-    from ops.benchmarks.adr_010.harness import license_grounding as lg
+    from plugins.zetesis.research import license_grounding as lg
 
     canned = {
         "https://raw.githubusercontent.com/DozerDB/dozerdb-plugin/HEAD/LICENSE": _FakeResponse(
@@ -177,7 +177,7 @@ async def test_ground_licenses_hits_first_ref_first_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ground_licenses_falls_back_through_paths(monkeypatch):
-    from ops.benchmarks.adr_010.harness import license_grounding as lg
+    from plugins.zetesis.research import license_grounding as lg
 
     canned = {
         "https://raw.githubusercontent.com/x/y/HEAD/LICENSE": _FakeResponse(404),
@@ -197,7 +197,7 @@ async def test_ground_licenses_falls_back_through_paths(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ground_licenses_ok_false_on_total_miss(monkeypatch):
-    from ops.benchmarks.adr_010.harness import license_grounding as lg
+    from plugins.zetesis.research import license_grounding as lg
 
     fake = _FakeClient({})  # every URL returns 404
     monkeypatch.setattr(lg.httpx, "AsyncClient", lambda *a, **kw: fake)
@@ -223,7 +223,7 @@ async def test_ground_licenses_seed_urls_are_grounded_even_when_uncited(monkeypa
     """Stage 6.3.4e: seed_urls MUST be grounded even if the cited URL
     set doesn't include the repo. Fixes the 6.3.4c/6.3.4d hole where
     shim 4 only saw whichever repo the model happened to cite."""
-    from ops.benchmarks.adr_010.harness import license_grounding as lg
+    from plugins.zetesis.research import license_grounding as lg
 
     canned = {
         "https://raw.githubusercontent.com/neo4j/neo4j/HEAD/LICENSE": _FakeResponse(
@@ -254,7 +254,7 @@ async def test_ground_licenses_seed_urls_are_grounded_even_when_uncited(monkeypa
 async def test_ground_licenses_seed_urls_prepended_before_cited(monkeypatch):
     """Seed repos appear first in the returned list so they're always
     inside the max_repos window even when many URLs are cited."""
-    from ops.benchmarks.adr_010.harness import license_grounding as lg
+    from plugins.zetesis.research import license_grounding as lg
 
     fake = _FakeClient({})  # all 404; we care about ORDER, not content
     monkeypatch.setattr(lg.httpx, "AsyncClient", lambda *a, **kw: fake)
@@ -272,7 +272,7 @@ async def test_ground_licenses_seed_urls_prepended_before_cited(monkeypatch):
 @pytest.mark.asyncio
 async def test_ground_licenses_seed_urls_default_none_preserves_prior_behavior(monkeypatch):
     """Callers who don't pass seed_urls behave exactly as before."""
-    from ops.benchmarks.adr_010.harness import license_grounding as lg
+    from plugins.zetesis.research import license_grounding as lg
 
     canned = {
         "https://raw.githubusercontent.com/x/y/HEAD/LICENSE": _FakeResponse(
@@ -291,7 +291,7 @@ async def test_ground_licenses_seed_urls_default_none_preserves_prior_behavior(m
 
 @pytest.mark.asyncio
 async def test_ground_licenses_max_repos_cap(monkeypatch):
-    from ops.benchmarks.adr_010.harness import license_grounding as lg
+    from plugins.zetesis.research import license_grounding as lg
 
     fake = _FakeClient({})
     monkeypatch.setattr(lg.httpx, "AsyncClient", lambda *a, **kw: fake)

@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from ops.benchmarks.adr_010.harness import feature_grounding as fg
-from ops.benchmarks.adr_010.harness.feature_grounding import (
+from plugins.zetesis.research import feature_grounding as fg
+from plugins.zetesis.research.feature_grounding import (
     FeatureFact,
     FeatureOmission,
     build_feature_correction_directive,

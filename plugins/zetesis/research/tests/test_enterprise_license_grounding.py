@@ -13,8 +13,8 @@ from typing import Any
 
 import pytest
 
-from ops.benchmarks.adr_010.harness import enterprise_license_grounding as elg
-from ops.benchmarks.adr_010.harness.enterprise_license_grounding import (
+from plugins.zetesis.research import enterprise_license_grounding as elg
+from plugins.zetesis.research.enterprise_license_grounding import (
     LicenseFact,
     build_enterprise_license_directive,
     canonical_license_assertions,
@@ -241,7 +241,7 @@ def _install_stub_deep_researcher(
 def test_shim10_injects_directive_when_facts_ground(monkeypatch):
     """When shim 10 grounds assertions, it re-invokes the researcher
     with a SYSTEM CORRECTION directive prepended."""
-    from ops.benchmarks.adr_010.harness import (
+    from plugins.zetesis.research import (
         enterprise_license_grounding,
         odr as odr_mod,
     )
@@ -319,7 +319,7 @@ def test_shim10_injects_directive_when_facts_ground(monkeypatch):
 def test_shim10_no_op_when_all_unknown(monkeypatch):
     """When shim 10 grounds NOTHING, no retry fires; no invocation is
     added beyond shim 1's original."""
-    from ops.benchmarks.adr_010.harness import (
+    from plugins.zetesis.research import (
         enterprise_license_grounding,
         odr as odr_mod,
     )

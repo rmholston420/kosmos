@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ops.benchmarks.adr_010.harness.rubric_critique import (
+from plugins.zetesis.research.rubric_critique import (
     build_rubric_critique_turn,
     build_rubric_lines_from_facts,
     extract_rewritten_report,

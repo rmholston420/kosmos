@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ops.benchmarks.adr_010.harness.claim_support import (
+from plugins.zetesis.research.claim_support import (
     apply_unsupported_marks,
     find_unsupported_claims,
 )

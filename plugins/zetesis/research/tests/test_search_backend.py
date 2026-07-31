@@ -7,7 +7,7 @@ Perplexity sandbox.
 
 from __future__ import annotations
 
-from ops.benchmarks.adr_010.harness.search_backend import (
+from plugins.zetesis.research.search_backend import (
     SearchResult,
     format_search_results,
     format_visit_response,

@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from ops.benchmarks.adr_010.harness.prompts import (
+from plugins.zetesis.research.prompts import (
     build_anchored_user_turn,
     build_fact_check_correction_directive,
 )

@@ -19,7 +19,7 @@ import json
 
 import pytest
 
-from ops.benchmarks.adr_010.harness import structural_finalize as sf
+from plugins.zetesis.research import structural_finalize as sf
 
 
 # ---------------------------------------------------------------------------

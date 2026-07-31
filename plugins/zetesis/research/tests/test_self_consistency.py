@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ops.benchmarks.adr_010.harness.self_consistency import (
+from plugins.zetesis.research.self_consistency import (
     compose_consensus_report,
     summarize_vote,
     tally_claims,

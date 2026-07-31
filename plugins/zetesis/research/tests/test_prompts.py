@@ -20,14 +20,25 @@ import json
 import re
 from pathlib import Path
 
-from ops.benchmarks.adr_010.harness import odr as odr_module
-from ops.benchmarks.adr_010.harness.prompts import (
+from plugins.zetesis.research import odr as odr_module
+from plugins.zetesis.research.prompts import (
     KOSMOS_MCP_PROMPT,
     build_anchored_user_turn,
 )
 
-_HARNESS_DIR = Path(__file__).resolve().parents[1]
-_FIXTURE = _HARNESS_DIR / "fixtures" / "adr_010_question.json"
+# ADR-056 sub-slice 1: prompts / odr modules live at
+# ``plugins/zetesis/research/`` (this file's parent dir). The fixture stays
+# under ``ops/benchmarks/adr_010/fixtures/`` since it is fixture-side data.
+_RESEARCH_DIR = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_FIXTURE = (
+    _REPO_ROOT
+    / "ops"
+    / "benchmarks"
+    / "adr_010"
+    / "fixtures"
+    / "adr_010_question.json"
+)
 
 
 def _norm(text: str) -> str:
@@ -148,7 +159,7 @@ def test_scaffold_is_answer_agnostic() -> None:
 def test_prompts_module_never_names_canonical_facts() -> None:
     # Load canonical fact statements from the fixture and confirm none of
     # their identifying phrases appear in the prompt module source.
-    prompts_source = (_HARNESS_DIR / "harness" / "prompts.py").read_text(encoding="utf-8")
+    prompts_source = (_RESEARCH_DIR / "prompts.py").read_text(encoding="utf-8")
     norm_source = _norm(prompts_source)
     fixture = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     for fact in fixture["ground_truth"]["canonical_facts"]:
@@ -180,7 +191,7 @@ def test_odr_config_injects_kosmos_mcp_prompt() -> None:
 def test_odr_module_imports_anchoring_functions() -> None:
     # Guard against a future refactor that reintroduces the pre-6.3.1 inline
     # placeholder prompt in odr.py.
-    odr_source = (_HARNESS_DIR / "harness" / "odr.py").read_text(encoding="utf-8")
+    odr_source = (_RESEARCH_DIR / "odr.py").read_text(encoding="utf-8")
     assert "KOSMOS_MCP_PROMPT" in odr_source
     assert "build_anchored_user_turn" in odr_source
     # The placeholder that shipped in Stage 6.2 must be gone.

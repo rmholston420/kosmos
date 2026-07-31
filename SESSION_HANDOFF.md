@@ -1,100 +1,43 @@
-# Kosmos Session Handoff — 2026-07-30 22:17 EDT
+# Kosmos Session Handoff — 2026-07-30 22:27 EDT
 
 ## Current build-sequencing position
 
-- **Stage / phase:** **Stage 6.3 (proper)** — Zetesis kernel wiring. Scoping ADR (ADR-056) **LANDED**. Sub-slice 1 (harness lift) is the next executable step.
-- **Plugin / kernel component:** `plugins/zetesis/` (skeleton at Stage 6.1 per ADR-052; scoping locked at Stage 6.3 (proper) per ADR-056).
-- **Port(s) in progress:** all 10 required Zetesis business ports — `FrontendContractPort` (already wired at Stage 6.1), `LLMPort`, `MemoryPort`, `VectorPort`, `DataPort`, `SearchPort`, `EventBusPort`, `ResourcePort`, `NotificationPort`, `ObservabilityPort`. All will be bound to real adapters this stage (Q2=B).
-
-## Locked scoping decisions (ADR-056)
-
-- **Q1=B** — lift `run_odr_trial` + `build_odr_config` + 12 supporting modules from `ops/benchmarks/adr_010/harness/` to `plugins/zetesis/research/`. Rename `run_odr_trial` → `run_zetesis_research`; rename `build_odr_config` → `build_zetesis_research_config`. Add harness backward-compat shim so `ops.benchmarks.adr_010.runner --contender odr` continues to work.
-- **Q2=B** — wire **all 10 required business ports** at Stage 6.3 (proper). Delete `_UntouchablePort` sentinel from `plugins/zetesis/plugin.py`. Add 9 stub adapters under `plugins/zetesis/adapters/`. Add 10 fast-tier port-wiring contract tests under `plugins/zetesis/tests/`.
-- **Q3=A** — reuse the ADR-010 F1–F6 fixture (Neo4j Community vs. DozerDB) as the DoD "representative research query." Regression floor **≥ 4.83** on 1 Colossus trial through `ZetesisPlugin.research()` (0.5 tolerance around Stage 6.3.9's 5.33 baseline, variance ≈ 0.056).
-
-Full rationale + file enumeration + downstream ADR impact in `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md`.
+- **Stage / phase:** **Stage 6.3 (proper)** — Zetesis kernel wiring (scoped by ADR-056).
+- **Plugin / kernel component:** `plugins/zetesis/` (kernel plugin) + `plugins/zetesis/research/` (lifted inner loop).
+- **Port(s) in progress:** none this sub-slice. Sub-slice 1 was pure code-motion + shim. All 10 required business ports (`FrontendContractPort`, `LLMPort`, `MemoryPort`, `VectorPort`, `DataPort`, `SearchPort`, `EventBusPort`, `ResourcePort`, `NotificationPort`, `ObservabilityPort`) will be wired across sub-slices 2 and 3.
 
 ## Completed this session
 
-- **Stage 6.3.9 shipped and locked** (commit `05366ac`, tag `stage-6-3-9-complete`). 3-trial Colossus agent-rated mean 5.33 / 6.
-- **Stage 6.4 shipped and locked** (commit `c18e653`, tag `stage-6-4-complete`). ADR-055 ratifies ODR-post-6.3.9 as Zetesis's research inner loop. ADR-010 amended. AREX-Turbo re-comparison deferred to KNOWN_ISSUES.
-- **Stage-numbering correction** (commit `fda150a`). Renamed "Stage 6.5" → "Stage 6.3 (proper)" across ADR-055, ADR-010 amendment, `docs/adrs/README.md`, `KNOWN_ISSUES.md`, `SESSION_HANDOFF.md`. Also fixed non-existent Stage 6.6 / 6.7 references. BUILD_LOG append-only correction entry filed.
-- **ADR-056 authored** (this handoff). Stage 6.3 (proper) scoping locked. Sub-slice execution order defined. Regression floor set at 4.83 (0.5 tolerance around Stage 6.3.9's 5.33 baseline).
+- **2026-07-30 22:14 EDT** — Authored `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` binding Q1=B / Q2=B / Q3=A + sub-slice execution order + regression floor 4.83.
+- **2026-07-30 22:27 EDT** — Sub-slice 1 (harness lift + test co-move) landed. 13 modules + 14 tests moved to `plugins/zetesis/research/`; 13 backward-compat shims (`sys.modules` alias pattern) at `ops/benchmarks/adr_010/harness/`; plugin-facing aliases (`run_zetesis_research`, `build_zetesis_research_config`) added per user's "alias only" decision; all 14 moved test imports rewritten to the new path per user's "rewrite now" decision; new autouse conftest under `plugins/zetesis/research/tests/`. Sandbox `pytest` — 247 passed in 1.73s (Zetesis + moved ODR + fixture-side).
 
 ## Remaining before current Definition of Done
 
-**Stage 6.3 (proper) DoD** (`docs/Kosmos-Build-Sequence-v25.md` §6.3 verbatim): "Zetesis produces a multi-source research report with citations." Sub-slice landing order per ADR-056 §D5:
+Stage 6.3 (proper) DoD (per ADR-056): `ZetesisPlugin.research()` executes an ADR-010 F1–F6 trial through all 10 wired ports and lands a rating **≥ 4.83** on 1 Colossus trial. 5 sub-slices total; sub-slice 1 complete. Remaining:
 
-### Sub-slice 1: harness lift (next)
-
-Move code from `ops/benchmarks/adr_010/harness/` → `plugins/zetesis/research/`:
-
-- **Files to move (13 total):** `claim_support.py`, `cove.py`, `enterprise_license_grounding.py`, `feature_grounding.py`, `license_grounding.py`, `mcp_search_server.py`, `odr.py`, `prompts.py`, `rubric_critique.py`, `search_backend.py`, `self_consistency.py`, `structural_finalize.py`, `url_verify.py`.
-- **Rename in `odr.py`:** `run_odr_trial` → `run_zetesis_research`; `build_odr_config` → `build_zetesis_research_config`.
-- **Add harness shim at `ops/benchmarks/adr_010/harness/odr.py`:** re-exports both symbols from `plugins.zetesis.research.odr` under their original names (`run_odr_trial`, `build_odr_config`) so the benchmark runner continues to work unmodified.
-- **Move ODR-side tests** (12 candidates under `ops/benchmarks/adr_010/tests/`) to `plugins/zetesis/research/tests/`. Fixture-side tests (`test_fixture.py`, `test_arex_xml_parser.py`, `test_metrics.py`) stay under `ops/benchmarks/adr_010/tests/`. Final test-file distribution locked at sub-slice 2 kickoff (some tests may exercise both — decide per-file at that point).
-- **Do not modify `arex.py`** — AREX is not touched at Stage 6.3 (proper). AREX contender continues to work through its existing harness module.
-
-**Sub-slice 1 DoD:** whole-repo fast tier passes with no test lost or newly failing. Behavior identical to before the lift.
-
-### Sub-slice 2: port-wiring skeleton
-
-- Update `ZetesisPlugin.__init__` to accept real adapter arguments for all 10 required ports.
-- Delete `_UntouchablePort` sentinel class from `plugins/zetesis/plugin.py`.
-- Add stub adapter classes under `plugins/zetesis/adapters/` (9 files — `FrontendContractPort` adapter already exists from Stage 6.1) implementing each port's protocol with minimal behavior sufficient for the DoD fixture.
-- Add 10 fast-tier port-wiring contract tests under `plugins/zetesis/tests/` (`test_port_wiring_<port>.py`).
-
-**Sub-slice 2 DoD:** whole-repo fast tier passes. Every `_UntouchablePort` reference deleted.
-
-### Sub-slice 3: research call wiring
-
-- Implement `ZetesisPlugin.research(query: str) -> ResearchReport` (final signature settled at sub-slice 3 kickoff).
-- The method dispatches to `run_zetesis_research` and exercises all 10 ports around that call: `ResourcePort.acquire/.release`, `ObservabilityPort.trace`, `MemoryPort.append_event` (with ADR-052 §Q4 constants), `EventBusPort.publish`, `VectorPort.retrieve` (no-op call), `DataPort.export_jsonld`. `LLMPort` and `SearchPort` exercised inside `run_zetesis_research`. `NotificationPort` exercised only on grounding failure (may not fire on the Neo4j vs. DozerDB fixture — port binding must be functional even if not exercised end-to-end).
-
-**Sub-slice 3 DoD:** whole-repo fast tier passes. `ZetesisPlugin.research()` runs end-to-end with test doubles.
-
-### Sub-slice 4: Colossus DoD trial
-
-- Run 1 Colossus trial of the ADR-010 fixture through `ZetesisPlugin.research()`.
-- Rate the trial with the same rater discipline as ADR-054's Stage 6.3.9 pass.
-- Save the rating to `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`.
-
-**Sub-slice 4 DoD:** trial rating ≥ 4.83.
-
-### Sub-slice 5: lock-in
-
-- BUILD_LOG entry with the DoD rating.
-- SESSION_HANDOFF overwrite pointing at Stage 6.4 (exit gate) next.
-- Tag `stage-6-3-complete`.
+- **Sub-slice 2: port-wiring skeleton.**
+  - Delete `_UntouchablePort` sentinel binding from `plugins/zetesis/plugin.py` constructor deps.
+  - Add 9 stub adapter classes under `plugins/zetesis/adapters/` (`FrontendContractPort` adapter already exists from Stage 6.1). Each stub adapter: minimal `Protocol` conformance + `NotImplementedError` on non-noop methods.
+  - Add 10 fast-tier port-wiring **contract tests** under `plugins/zetesis/tests/`: one per port, each asserts (a) the plugin's descriptor requires the port; (b) the plugin accepts an adapter conforming to the port's `Protocol`; (c) the plugin rejects an adapter missing a required method.
+  - Whole-repo fast tier must pass.
+  - Commit `Stage 6.3 (proper) sub-slice 2: port-wiring skeleton`; BUILD_LOG entry.
+- **Sub-slice 3:** `ZetesisPlugin.research()` method — wire all 10 ports around the lifted inner loop; MemoryPort writes carry `ZETESIS_MEMORY_PROVENANCE` / `ZETESIS_MEMORY_PREDICATE` / `ZETESIS_MEMORY_DEFAULT_CONFIDENCE` per ADR-052 §Q4 + ADR-008. Consider flipping `run_odr_trial` primary → alias here (user's earlier "alias only" defer point).
+- **Sub-slice 4:** 1 Colossus DoD trial through `ZetesisPlugin.research()` on ADR-010 F1–F6 fixture. Rating must be ≥ 4.83 (0.5 tolerance around Stage 6.3.9's 5.33 baseline). Trial artifact + rating file under `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/`.
+- **Sub-slice 5:** lock-in commit + tag `stage-6-3-complete`.
 
 ## Open questions / awaiting user answer
 
-- **None blocking sub-slice 1.** Q1=B / Q2=B / Q3=A confirmed 22:13 EDT and locked in ADR-056.
-- **Potential mid-stage questions** (raised at sub-slice kickoff, not now):
-  - **Sub-slice 2 kickoff:** final test-file distribution — a few tests under `ops/benchmarks/adr_010/tests/` exercise both ODR-side modules *and* the fixture. Per-file placement decided at sub-slice 2 kickoff by inspecting each test.
-  - **Sub-slice 3 kickoff:** exact signature of `ZetesisPlugin.research()`. Candidates: `research(query: str) -> ResearchReport`, `research(query: str, *, config: Optional[ResearchConfig] = None) -> ResearchReport`, or an async streaming variant. Settled at sub-slice 3 kickoff.
-  - **Sub-slice 4 gate:** if the 1-trial rating comes in **below 4.83**, do we (a) diagnose + re-trial (default per ADR-056 §D3), or (b) accept the lower rating and ship with a KNOWN_ISSUES entry? Default is (a); user override to (b) requires explicit sign-off.
+- **Post-shim cleanup timing.** All 14 moved tests now import from `plugins.zetesis.research.*` directly (no shim dependency). Only `ops/benchmarks/adr_010/runner.py` and `ops/benchmarks/adr_010/harness/arex.py` still import through the shim (`.harness.odr`, `.harness.self_consistency`, `.harness.rubric_critique`, `.harness.search_backend`). Options: (i) leave shims indefinitely as a stable public API for benchmark tooling; (ii) drop them in sub-slice 5 as part of Stage 6.3 (proper) lock-in, updating `runner.py` + `arex.py` to import from the plugin path directly. No blocker either way — punt this decision to sub-slice 5.
 
 ## Exact next action
 
-**Sub-slice 1: harness lift.** Concretely (agent will drive; user runs on Colossus):
+**Run whole-repo fast tier on Colossus** to verify sub-slice 1 doesn't regress anything outside the Zetesis + ADR-010 tree:
 
-1. Create `plugins/zetesis/research/__init__.py` and `plugins/zetesis/research/tests/__init__.py`.
-2. `git mv ops/benchmarks/adr_010/harness/{claim_support,cove,enterprise_license_grounding,feature_grounding,license_grounding,mcp_search_server,odr,prompts,rubric_critique,search_backend,self_consistency,structural_finalize,url_verify}.py plugins/zetesis/research/`.
-3. Rename `run_odr_trial` → `run_zetesis_research` and `build_odr_config` → `build_zetesis_research_config` in the lifted `odr.py` (edit tool, exact matches).
-4. Fix relative imports in the 13 lifted files (`from ..metrics import TrialMetrics` → `from ops.benchmarks.adr_010.metrics import TrialMetrics`; `from . import claim_support, ...` stays valid within `plugins/zetesis/research/`).
-5. Create new `ops/benchmarks/adr_010/harness/odr.py` as a re-export shim:
-   ```python
-   from plugins.zetesis.research.odr import (
-       ThermalAbort,
-       run_zetesis_research as run_odr_trial,
-       build_zetesis_research_config as build_odr_config,
-   )
-   __all__ = ["ThermalAbort", "run_odr_trial", "build_odr_config"]
-   ```
-6. `git mv` the 12 ODR-side test files from `ops/benchmarks/adr_010/tests/` to `plugins/zetesis/research/tests/`. Fix their imports.
-7. Run whole-repo fast tier on Colossus. Fix regressions. Iterate until green.
-8. Commit `Stage 6.3 (proper) sub-slice 1: harness lift`, tag none, push.
-9. BUILD_LOG entry appended before commit.
+```bash
+cd ~/dev/kosmos && git pull && source .venv/bin/activate && \
+  python -m pytest --tb=short -q 2>&1 | tail -20
+```
 
-**Deferred (post-Phase-6, non-blocking):** ADR-010 head-to-head re-comparison (AREX-Turbo vs. tuned ODR under structural-finalize parity). See `KNOWN_ISSUES.md`.
+If green: reply `sub-slice 2` and the agent will execute sub-slice 2 (port-wiring skeleton).
+
+If red: paste the failure block. Agent triage-search `DEBUG_LOG.md` first per the search-first rule.
