@@ -1717,3 +1717,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Harness-internal.
 - **PORTING_LEDGER / ADR updated:** ADR-054 status-amended with lock-in outcome. No PORTING_LEDGER change.
 - **Stop-condition status:** met. Stage 6.3.9 locked at rated mean 5.33 / 6. Tag `stage-6-3-9-complete` pushed. Next stage: Stage 6.4 (ADR-010 head-to-head — ODR vs AREX-Turbo), scoping already drafted (see prior turn).
+
+## 2026-07-30 22:00 EDT — Stage 6.4 lock-in (ADR-010 substrate-tuning arc closure; ODR-post-6.3.9 ratified as Zetesis research inner loop; AREX re-comparison deferred)
+
+- **Stage / plugin / port:** Stage 6.4 · ADR-010 substrate-tuning arc closure · Zetesis Stage 6.5 wiring pre-condition
+- **What changed:** authored ADR-055 (`docs/adrs/ADR-055-stage-6-4-odr-tuned-ratification.md`) ratifying ODR-post-6.3.9 (commit `05366ac`, tag `stage-6-3-9-complete`, agent-rated mean 5.33 / 6 on 3 Colossus trials at Stage 6.3.9) as Zetesis's research inner loop for Stage 6.5 kernel wiring. ADR-055 amends ADR-010: extends the Stage 6.2 winner-lock (ODR chosen over AREX-Turbo, 3/3 vs 0/3 completion, aggregate 16.7% blind-rated F1–F6) with the Stage 6.3.x tuning arc result — ODR raised from 16.7% baseline to 89% (5.33 / 6) across sub-stages 6.3.1 → 6.3.9. AREX-Turbo re-comparison against the tuned ODR deferred as non-blocking follow-up (KNOWN_ISSUES entry filed); the Stage 6.2 rejection reason (AREX completion 0/3 on context-ceiling exhaustion) remains dispositive because structural-finalize (ADR-053) does not address context-ceiling. AREX contender stays wired at `ops/benchmarks/adr_010/harness/arex.py`; vendored `BAAI/AREX-Turbo` inference bundle stays at `vendor/adr_010/arex_inference/`. Structural-finalize parity work for AREX is on hold, not rejected.
+
+  User scoping decisions this stage (2026-07-30 21:50–21:55 EDT): Q1=A (AREX-Turbo already exists in-repo at `arex.py`, no new wiring), Q2=A (6-candidate single-sitting blind bundle — moot with the deferral), Q3=0.34 tie-break threshold (moot with the deferral), Q4=amends ADR-010 (not new supersession). Then final pivot: skip AREX re-comparison for now and revisit later. Stage 6.4 becomes pure scoping/ratification stage — no new Colossus trials, no PORTING_LEDGER change, no port surface change, no code touch.
+
+  This unblocks Stage 6.5 (Zetesis kernel wiring). Zetesis `LLMPort` slot (currently bound to `_UntouchablePort` sentinel per ADR-052 Q3=A) can bind to a real substrate. ADR-054's 5.33 / 6 rated floor becomes the Stage 6.5 wiring regression floor on the same fixture.
+
+- **Files touched:**
+  - `docs/adrs/ADR-055-stage-6-4-odr-tuned-ratification.md` (new; 9.5 KB, full context/decision/rationale/consequences)
+  - `docs/adrs/ADR-010-zetesis-inner-loop-eval.md` (status amendment block prepended at top, pointing at ADR-055; original Stage 6.2 lock text preserved)
+  - `docs/adrs/README.md` (ADR-055 index row inserted above ADR-054; ADR-054 row updated to point at Stage 6.5 wiring instead of the now-deferred Stage 6.4 head-to-head)
+  - `KNOWN_ISSUES.md` (entry appended: "ADR-010 head-to-head re-comparison deferred: AREX-Turbo vs. tuned ODR")
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten with 6.4-locked state, next=Stage 6.5)
+- **Ports / adapters affected:** none. Zero code touch. ADR-052 skeleton port surface unchanged; harness code unchanged.
+- **PORTING_LEDGER / ADR updated:** ADR-055 authored; ADR-010 status-amended. Zero PORTING_LEDGER change (ODR already `VENDORED`, AREX-Turbo already `REJECTED for Stage 6.2` with preserved on-shelf note).
+- **Stop-condition status:** met. Stage 6.4 lock-in condition (ADR-055 ratified, ADR-010 amended, KNOWN_ISSUES entry filed) satisfied. Tag `stage-6-4-complete` pushed. Next stage: Stage 6.5 (Zetesis kernel wiring — `LLMPort` slot binds to ODR-post-6.3.9 substrate). Stage 6.5 scoping ADR (author number TBD) will decide whether Zetesis imports the harness path directly (`ops/benchmarks/adr_010/harness/odr.py:run_odr_trial`) or lifts an equivalent under `plugins/zetesis/` — that scoping decision belongs to Stage 6.5, not to this ADR.
