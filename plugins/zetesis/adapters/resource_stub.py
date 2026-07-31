@@ -1,10 +1,17 @@
-"""ZetesisResourceStub — Protocol-conformant ResourcePort stub (ADR-056 sub-slice 2).
+"""ZetesisResourceStub — Protocol-conformant ResourcePort stub (ADR-056 sub-slice 2/4).
 
-`can_allocate` returns True. `allocate` raises. Sub-slice 3 revisits.
+Runtime-safe no-op stub. ``can_allocate`` returns True; ``allocate``
+returns a synthesized :class:`AllocationHandle`. All queueing verbs
+raise. Sub-slice 4 upgraded ``allocate`` from a raising stub to a
+no-op-returning-valid-handle stub so the DoD trial could exercise the
+full ``ZetesisPlugin.research()`` port-call chain without a live
+ResourcePort MVP (that lands later in the build sequence).
 """
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from ports.resource import (
@@ -18,7 +25,7 @@ from ports.resource import (
 
 
 class ZetesisResourceStub:
-    """Minimal ResourcePort stub. All state-changing methods raise."""
+    """Minimal ResourcePort stub. Allocation returns a synthetic handle."""
 
     _MSG = "ZetesisResourceStub is a sub-slice-2 skeleton; wire a real ResourcePort."
 
@@ -36,7 +43,17 @@ class ZetesisResourceStub:
         priority_class: PriorityClass,
         requester: str,
     ) -> AllocationHandle:
-        raise NotImplementedError(self._MSG)
+        # Runtime-safe no-op: return a synthetic handle. Nothing is
+        # reserved; every call succeeds.
+        return AllocationHandle(
+            id=f"stub-{uuid.uuid4().hex}",
+            kind=kind,
+            amount=Decimal(str(amount)),
+            intent=intent,
+            priority_class=priority_class,
+            requester=requester,
+            allocated_at=datetime.now(timezone.utc),
+        )
 
     async def replenish(
         self, kind: ResourceKind, amount: Decimal | float

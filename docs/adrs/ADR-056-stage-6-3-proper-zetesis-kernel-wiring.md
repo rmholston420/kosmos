@@ -54,6 +54,46 @@
 >
 > **Consequences unchanged.** The Consequences section's file list still holds; sub-slice 3 modifies `plugins/zetesis/plugin.py`, `plugins/zetesis/__init__.py`, and `plugins/zetesis/research/__init__.py`, and adds `plugins/zetesis/tests/test_research_wiring.py`. Sub-slice 4 (real-adapter binding) and sub-slice 5 (regression harness) remain unchanged.
 
+> **STATUS AMENDMENT (2026-07-30, sub-slice 4 kickoff):** Sub-slice 4 kickoff resolved three optimal-choice delegations and one blocker discovered during factory construction:
+>
+> **Regression gate (§D6, ratified):** rating **>= 4.83 / 6** on the Stage 6.3.9 rubric (0.5 tolerance below the ADR-054 5.33 baseline). Latency is **informational only**, not gated — adapter-binding overhead is expected. GPU envelope (thermal watchdog at `--thermal-abort-c 85`, pre-flight cooldown to `--cooldown-target-c 60`, 435W power cap) is enforced verbatim from `ops/benchmarks/adr_010/runner.py` so the Zetesis-side trial is subject to the same Colossus safety boundaries as the baseline.
+>
+> **DoD question (§D6, ratified):** reuse the **same ADR-010 Neo4j-vs-DozerDB question** (`ops/benchmarks/adr_010/fixtures/adr_010_question.json`) that produced the 5.33 baseline. Apples-to-apples with ADR-054; sub-slice 4 proves the wiring preserves inner-loop behavior, not that a new question generalizes.
+>
+> **Trial count (§D6, ratified):** **one trial**. Matches the UPS-undersized envelope (CyberPower 425VA / 255W vs. 5090 cap 435W) and the sub-slice-3 plan. ADR-054's three-trial pass supplies the noise floor that anchors the >=4.83 gate against single-trial variance.
+>
+> **Adapter matrix locked (§D4):**
+>
+> | Port | Adapter | Backend | Rationale |
+> |------|---------|---------|-----------|
+> | FrontendContract | `KernelFrontendContractAdapter` | in-process manifest store | production adapter; needed for `plugin.start()` |
+> | LLM | `OllamaAdapter` | live Ollama (127.0.0.1:11434) | production adapter, live backend |
+> | Search | `SearxngAdapter` | live SearXNG (127.0.0.1:8888) | production adapter, live backend |
+> | Observability | `OtelStackObservabilityAdapter` | `StubOtelBackend` | production adapter code path; `RealOtelBackend` not shipped yet (LGTM stack lands in Stage 1.6.x live smoke, not up at 6.3.9) |
+> | EventBus | `ValkeyEventBusAdapter` | `InMemoryStreamClient` | production adapter code path; live Valkey not required for a single DoD trial and would confound the rating gate with a "was Valkey up?" question |
+> | Memory | `ZetesisMemoryStub` | in-process | DozerDB not up at 6.3.9 envelope; matches ADR-054 baseline |
+> | Vector | `ZetesisVectorStub` | in-process | Qdrant not up at 6.3.9 envelope; matches ADR-054 baseline |
+> | Data | `ZetesisDataStub` | in-process | DataPort adapter not up at 6.3.9 envelope; matches ADR-054 baseline |
+> | Resource | `ZetesisResourceStub` | in-process | ResourcePort MVP lands later in the build sequence |
+> | Notification | `ZetesisNotificationStub` | in-process | algedonic path unused at 6.3.9 |
+>
+> **Sub-slice-2 stub upgrade (blocker resolved):** three sub-slice-2 stubs previously raised `NotImplementedError` on the exact methods `ZetesisPlugin.research()` calls at runtime — `ZetesisResourceStub.allocate`, `ZetesisDataStub.export_canonical`, and `ZetesisMemoryStub.write_event`. The DoD trial would have crashed on the second port call. Sub-slice 4 upgraded all three to **runtime-safe no-op stubs** that return synthetic-but-valid handles (`AllocationHandle`, `CanonicalExportHandle`, `MemoryEventId`) with `stub-<uuid4>` ids and no persistence side effects. The other stub methods remain raising so no downstream caller silently reads phantom data. This is a stub-behavior refinement, not a Protocol change; the sub-slice-2 wiring contract tests continue to pass unchanged.
+>
+> **Files added by sub-slice 4:**
+>
+> - `plugins/zetesis/adapters/real/__init__.py` — factory re-export.
+> - `plugins/zetesis/adapters/real/factory.py` — `build_stage_6_3_9_zetesis_plugin(...)`.
+> - `plugins/zetesis/tests/test_real_adapter_factory.py` — 6 fast-tier construction tests (Protocol conformance for all 10 ports, adapter-matrix identity, endpoint-override plumbing, `plugin.start()` success). No network I/O.
+> - `ops/benchmarks/adr_010/run_zetesis_dod.py` — Colossus-side single-trial DoD entry point mirroring the thermal envelope from `runner.py`. Emits `TrialMetrics` JSON to `ops/benchmarks/artifacts/adr-010-2026-07-30/zetesis/trial_<n>.json`.
+>
+> **Files modified by sub-slice 4:**
+>
+> - `plugins/zetesis/adapters/memory_stub.py` — `write_event` now returns a synthetic `MemoryEventId` instead of raising.
+> - `plugins/zetesis/adapters/data_stub.py` — `export_canonical` now returns a synthetic `CanonicalExportHandle` with a blake2b digest of the payload.
+> - `plugins/zetesis/adapters/resource_stub.py` — `allocate` now returns a synthetic `AllocationHandle` instead of raising.
+>
+> **Sub-slice 5 unchanged:** rating capture at `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`; BUILD_LOG entry with DoD rating; tag `stage-6-3-complete` on Colossus green.
+
 ## Context
 
 Stage 6.4 (this session's ratification stage) closed the ADR-010 substrate-tuning arc via ADR-055: ODR-post-6.3.9 (commit `05366ac`, tag `stage-6-3-9-complete`, agent-rated mean 5.33 / 6 on 3 Colossus trials at Stage 6.3.9) is Zetesis's ratified research inner loop. The Stage 6.3.x sub-stages (6.3.1 → 6.3.9) executed ODR substrate-tuning under §6.3. Stage 6.3 (proper) is the outer §6.3 verb itself — wire the tuned ODR into Zetesis so the plugin can produce a multi-source research report with citations end-to-end.

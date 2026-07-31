@@ -1,40 +1,57 @@
-# Kosmos Session Handoff — 2026-07-30 23:01 EDT
+# Kosmos Session Handoff — 2026-07-30 23:14 EDT
 
 ## Current build-sequencing position
 
-- **Stage / phase:** Stage 6.3 (proper) — Zetesis kernel wiring (Kosmos-Build-Sequence-v25.md §6.3, ADR-056)
-- **Plugin / kernel component:** Zetesis plugin — sub-slice 3 (research call wiring) **COMPLETE**
-- **Port(s) in progress:** none — the 6 non-inner-loop business ports (Observability, Resource, EventBus, Vector, Data, Memory) are now wired end-to-end through `ZetesisPlugin.research()` using sub-slice-2 stubs. Sub-slice 4 will bind real adapters for the subset available on Colossus (LLM = Ollama, Search = SearXNG, Observability = otel_stack, EventBus = Valkey; Memory / Vector / Data / Resource / Notification stay stubbed).
+- **Stage / phase:** Stage 6.3 (proper) — Zetesis kernel wiring (Kosmos-Build-Sequence-v25.md §6.3, ADR-056).
+- **Plugin / kernel component:** Zetesis plugin — sub-slice 4 (real-adapter binding for Colossus DoD trial) **code complete**; awaiting Colossus DoD trial.
+- **Port(s) in progress:** none code-wise. Real adapters bound: `OllamaAdapter` (LLM → live Ollama), `SearxngAdapter` (Search → live SearXNG), `OtelStackObservabilityAdapter` w/ `StubOtelBackend` (Observability), `ValkeyEventBusAdapter` w/ `InMemoryStreamClient` (EventBus), `KernelFrontendContractAdapter` (FrontendContract). Sub-slice-2 stubs kept for the other 5 ports (Memory / Vector / Data / Resource / Notification) — matches ADR-054 Stage 6.3.9 envelope apples-to-apples.
 
 ## Completed this session
 
-- **Sub-slice 3 (research call wiring):** authored `ZetesisPlugin.research(query, *, config=None) -> ResearchReport` at `plugins/zetesis/plugin.py`. Wiring order: `ObservabilityPort.trace` → `ResourcePort.can_allocate` + `allocate` → `EventBusPort.publish(started)` → `run_zetesis_research(...)` → `VectorPort.search(no-op)` → `DataPort.export_canonical` → `MemoryPort.write_event` (ADR-008 zero-trust) → `EventBusPort.publish(completed)` → return `ResearchReport`.
-- **New dataclasses:** `ZetesisResearchConfig` (immutable, ~18 inner-loop kwargs, Stage 6.3.9-locked defaults) + `ResearchReport` (frozen; `query`/`answer`/`citations`/`evidences`/`source_diversity`/`latency_seconds`/`trial_id`/`question_id`/`trajectory_events`/`memory_event_id`/`error`). Both re-exported from `plugins.zetesis`.
-- **Two new EventBus event-type constants:** `ZETESIS_RESEARCH_EVENT_STARTED="zetesis.research.started"`, `ZETESIS_RESEARCH_EVENT_COMPLETED="zetesis.research.completed"` (the completed event-type deliberately matches `ZETESIS_MEMORY_PREDICATE`).
-- **`plugins/zetesis/research/__init__.py`** — previously empty — now re-exports `run_zetesis_research` and `build_zetesis_research_config` from `plugins.zetesis.research.odr`.
-- **11 new fast-tier port-wiring tests** at `plugins/zetesis/tests/test_research_wiring.py`. Six lightweight spy adapters + monkeypatched inner loop + local recording frontend-contract stub. Verifies happy path, exact 8-step wiring order, event-envelope shapes, zero-trust invariants (Memory + Data), `PriorityClass.BACKGROUND` + `ResourceKind.COMPUTE`, not-started `RuntimeError` guard, config-override flow-through, span-wrap, failure-path (started published, completed not published), public API re-exports.
-- **ADR-056 second STATUS AMENDMENT block** (`docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md`). Corrects §D3's four port-verb wording errors (`ResourcePort.acquire`/`.release` → `can_allocate` + `allocate`; `MemoryPort.append_event` → `write_event`; `DataPort.export_jsonld` → `export_canonical`; `VectorPort.retrieve` → `search`), locks §D5 `research()` signature, and pins `PriorityClass.BACKGROUND` + `PIITier.PUBLIC`. §D3 bullet 8 (ResourcePort) inline-corrected. Documents the exact 8-step wiring order executed.
-- **BUILD_LOG.md** — 23:01 EDT sub-slice 3 entry appended.
-- **Verification:** sandbox `plugins/zetesis` — **264 passed in 0.50s** (253 sub-slice-2 baseline + 11 new); `plugins/zetesis` + `ops/benchmarks/adr_010` — **282 passed in 1.79s**; whole-repo sandbox — **1239 passed, 19 skipped in 10.41s** (up from 1228; zero regressions).
+- **Sub-slice 1 (harness lift, ca3c7c5):** Zetesis inner loop moved from `ops/benchmarks/adr_010/harness/*` to `plugins/zetesis/research/*` with backward-compat shims for both old import paths.
+- **Sub-slice 2 (port-wiring skeleton, 76b4434):** 9 sub-slice-2 stub adapters + 10 fast-tier port-wiring contract tests + ADR-056 §D2 first STATUS AMENDMENT.
+- **Sub-slice 3 (research() wiring, 0c75a6c):** `ZetesisPlugin.research(query, *, config=None) -> ResearchReport`; new immutable `ZetesisResearchConfig` + `ResearchReport` dataclasses; two new event-type constants; empty `plugins/zetesis/research/__init__.py` filled with `run_zetesis_research` re-export; 11 fast-tier wiring tests (spy adapters + monkeypatched inner loop); ADR-056 second STATUS AMENDMENT (§D3 port-verb corrections + §D5 signature lock).
+- **Sub-slice 4 kickoff (this commit):**
+  - `plugins/zetesis/adapters/real/factory.py` \+ `__init__.py` — `build_stage_6_3_9_zetesis_plugin(...)` factory with the ADR-056 §D4 adapter matrix.
+  - `ops/benchmarks/adr_010/run_zetesis_dod.py` — Colossus-side single-trial DoD entry point mirroring `runner.py`'s thermal envelope verbatim.
+  - Runtime-safety upgrade on three sub-slice-2 stubs (`ZetesisResourceStub.allocate`, `ZetesisDataStub.export_canonical`, `ZetesisMemoryStub.write_event`) — each now returns a synthetic-but-valid handle instead of raising, so the DoD trial does not crash on the second port call. Blocker discovered during factory construction; documented in ADR-056 third STATUS AMENDMENT.
+  - `plugins/zetesis/tests/test_real_adapter_factory.py` — 6 fast-tier construction tests (no network I/O).
+  - ADR-056 third STATUS AMENDMENT block: ratifies the three optimal-choice decisions (regression gate ≥ 4.83 / 6; same ADR-010 Neo4j-vs-DozerDB question; one trial); locks the adapter matrix; documents the stub upgrade.
+- **Verification:** sandbox `plugins/zetesis` — **270 passed / 0 failed / 0.55s** (264 sub-slice-3 baseline + 6 new construction tests). Whole-repo sandbox — **1245 passed / 19 skipped / 10.58s** (up from 1239 = +6 new; zero regressions).
 
 ## Remaining before current Definition of Done
 
-- **User runs Colossus fast tier** to confirm zero regressions across the full repo:
+1. **User runs Colossus whole-repo fast tier** to confirm zero regressions:
 
-  ```bash
-  cd ~/dev/kosmos && git pull && source .venv/bin/activate && \
-    python -m pytest 2>&1 | tail -1
-  ```
+    ```bash
+    cd ~/dev/kosmos && git pull && source .venv/bin/activate && \
+      python -m pytest 2>&1 | tail -1
+    ```
 
-  Expected: `1239 passed, 19 skipped, 1 warning in <10s`. Agent parses.
+    Expected: `1245 passed, 19 skipped, 1 warning in <10s`.
 
-- Once Colossus green: proceed to **sub-slice 4 (Colossus DoD trial).** Bind real adapters — LLM (Ollama at `http://127.0.0.1:11434/v1`, model `qwen2.5:32b-instruct-q4_K_M`), Search (SearXNG at `http://127.0.0.1:8888`), Observability (otel_stack), EventBus (Valkey). Memory / Vector / Data / Resource / Notification stay stubbed (DozerDB + Qdrant were not up at Stage 6.3.9, matching that envelope). Run **one** trial of the ADR-010 question through `ZetesisPlugin.research()`. Rate under the same rater discipline as ADR-054's Stage 6.3.9 pass. Save rating to `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`. Regression gate: rating ≥ 4.83 (0.5 tolerance below 5.33 baseline). GPU cap 435W; UPS undersized — prefer 1 trial.
+2. **User runs the Colossus DoD trial** (assumes Ollama + SearXNG + MCP server already up per `ops/benchmarks/adr_010/README.md` §"Colossus run sequence"):
 
-- Then **sub-slice 5 (lock-in):** BUILD_LOG entry with the DoD rating; SESSION_HANDOFF overwrite pointing at Stage 6.4 (exit gate) next; tag `stage-6-3-complete`.
+    ```bash
+    cd ~/dev/kosmos && source .venv/bin/activate && \
+      .venv/bin/python -m ops.benchmarks.adr_010.run_zetesis_dod
+    ```
+
+    Emits `ops/benchmarks/artifacts/adr-010-2026-07-30/zetesis/trial_01_<hex>.json`. Agent parses `final_answer` + metrics.
+
+3. **User runs the blind rater** on `final_answer` against the fixture's canonical facts (same rubric as ADR-054 / ADR-055). Records rating at:
+
+    ```
+    ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md
+    ```
+
+    Gate: **rating >= 4.83 / 6** (0.5 tolerance below the ADR-054 5.33 baseline). Latency is informational only.
+
+4. **Sub-slice 5 (lock-in):** BUILD_LOG entry with the DoD rating; SESSION_HANDOFF overwrite pointing at Stage 6.4 (exit gate); tag `stage-6-3-complete`.
 
 ## Open questions / awaiting user answer
 
-None. Sub-slice 3 executed with three "optimal choice" delegations already resolved (signature = option 2 keyword-only config; sub-slice 4 binding = option 3 partial-real; test isolation = option 1 spies + monkeypatched inner loop). Sub-slice 4 kickoff Q's (regression gate threshold ratification, whether to include Neo4j-vs-DozerDB or a fresh ADR-010 question, and whether one trial suffices given UPS constraint) will be raised at Colossus-green.
+None. Three optimal-choice decisions ratified in the ADR-056 third STATUS AMENDMENT. The stub-runtime-safety blocker was resolved in-band with a Protocol-preserving upgrade.
 
 ## Exact next action
 
@@ -45,4 +62,4 @@ cd ~/dev/kosmos && git pull && source .venv/bin/activate && \
   python -m pytest 2>&1 | tail -1
 ```
 
-Agent parses the output; on `1239 passed, 19 skipped`, agent kicks off sub-slice 4 with the three ratification Q's above.
+Expected: `1245 passed, 19 skipped`. Then user starts the Colossus DoD trial (step 2 above).
