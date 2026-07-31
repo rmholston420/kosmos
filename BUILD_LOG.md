@@ -1737,3 +1737,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Zero code touch. ADR-052 skeleton port surface unchanged; harness code unchanged.
 - **PORTING_LEDGER / ADR updated:** ADR-055 authored; ADR-010 status-amended. Zero PORTING_LEDGER change (ODR already `VENDORED`, AREX-Turbo already `REJECTED for Stage 6.2` with preserved on-shelf note).
 - **Stop-condition status:** met. Stage 6.4 lock-in condition (ADR-055 ratified, ADR-010 amended, KNOWN_ISSUES entry filed) satisfied. Tag `stage-6-4-complete` pushed. Next stage: Stage 6.5 (Zetesis kernel wiring — `LLMPort` slot binds to ODR-post-6.3.9 substrate). Stage 6.5 scoping ADR (author number TBD) will decide whether Zetesis imports the harness path directly (`ops/benchmarks/adr_010/harness/odr.py:run_odr_trial`) or lifts an equivalent under `plugins/zetesis/` — that scoping decision belongs to Stage 6.5, not to this ADR.
+
+## 2026-07-30 22:07 EDT — Stage 6.4 lock-in correction: prior entry's "Stage 6.5" naming was wrong; correct next stage is Stage 6.3 (proper)
+
+- **Stage / plugin / port:** Stage 6.4 · post-lock-in correction · naming-only, no behavioral change
+- **What changed:** the immediately-preceding BUILD_LOG entry (2026-07-30 22:00 EDT, "Stage 6.4 lock-in") referred to the next stage as "Stage 6.5 (Zetesis kernel wiring)." That name does not exist in `docs/Kosmos-Build-Sequence-v25.md`. The build sequence has only §6.1 (Zetesis skeleton, LANDED), §6.2 (ADR-010 head-to-head, LANDED), §6.3 (Wire winning inner-loop — DoD: "Zetesis produces a multi-source research report with citations"), and §6.4 (Stage-6 exit gate). The 6.3.x sub-stages executed this session (6.3.1 → 6.3.9) have been ODR substrate-tuning work living *under* §6.3, not a separate stage. The correct next stage is **Stage 6.3 (proper)** — the outer §6.3 DoD verb, now enabled by the completed substrate-tuning arc. Amended all forward-looking references in ADR-055, ADR-010 status amendment, `docs/adrs/README.md` (ADR-054 and ADR-055 index rows), `KNOWN_ISSUES.md`, and `SESSION_HANDOFF.md`. Also fixed downstream `Stage 6.6` and `Stage 6.7` references (also non-existent in v25) — `Stage 6.6+` → `Stage 6.4 (Stage-6 exit gate)`; `revisit stage 6.7 or later` → `revisit post-Phase-6`.
+
+  User Stage 6.3 (proper) scoping decisions (2026-07-30 22:02 EDT):
+  - **Q1=B** — lift a stable `run_odr_trial`-equivalent into `plugins/zetesis/research/` and have the harness import it (dependency inverted; cleaner plugin boundary). Rejected Q1=A (Zetesis imports ops/ directly) as insufficiently clean.
+  - **Q2=B** — wire all 10 required business ports at Stage 6.3 (proper), not just `LLMPort`. Rejected Q2=A (LLMPort-only, other 9 sentinels stay) as leaving Zetesis half-wired.
+  - **Q3=A** — reuse the ADR-010 fixture (Neo4j Community vs. DozerDB, F1–F6) as Stage 6.3 (proper)'s DoD "representative research query." Rejected Q3=B (new Zetesis fixture) — no rated baseline for a new fixture.
+
+  These three Q&A drive the Stage 6.3 (proper) scoping ADR (author number TBD at start of the next session). Not authored yet this session; queued for start of the next.
+
+- **Files touched:**
+  - `docs/adrs/ADR-055-stage-6-4-odr-tuned-ratification.md` (sed rename Stage 6.5 → Stage 6.3 (proper); Stage 6.6+ → Stage 6.4 (Stage-6 exit gate))
+  - `docs/adrs/ADR-010-zetesis-inner-loop-eval.md` (sed rename in status amendment block only; original v25 lock text untouched)
+  - `docs/adrs/README.md` (sed rename in ADR-055 and ADR-054 index rows)
+  - `KNOWN_ISSUES.md` (sed rename in the deferred head-to-head entry; revisit stage adjusted)
+  - `SESSION_HANDOFF.md` (rewritten with corrected Stage 6.3 (proper) scope + user's Q1/Q2/Q3 decisions bound in as scoping-locked, not just proposed)
+  - `BUILD_LOG.md` (this correction entry appended; prior 22:00 EDT entry preserved verbatim per append-only rule)
+- **Ports / adapters affected:** none. Naming-only diff.
+- **PORTING_LEDGER / ADR updated:** none newly authored. ADR-055 body text-diff only. ADR-010 amendment block text-diff only. `docs/adrs/README.md` ADR-055 and ADR-054 index-row text-diff only.
+- **Stop-condition status:** met. Correction lands cleanly; tag `stage-6-4-complete` continues to reflect the actual Stage 6.4 lock-in (no re-tag needed). Next stage: **Stage 6.3 (proper)** — author scoping ADR binding Q1=B / Q2=B / Q3=A, then execute Zetesis kernel wiring.
