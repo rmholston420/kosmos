@@ -237,7 +237,21 @@ async def run_one_trial(args: argparse.Namespace) -> TrialMetrics:
         final_evidences=list(report.evidences),
         final_confidence="",
         error=report.error,
-        trajectory=list(report.trajectory_events),
+        # ResearchReport.trajectory_events is an int count; TrialMetrics
+        # keeps a full trajectory list. We record the count under a single
+        # summary entry so the JSON artifact stays useful to the blind
+        # rater without dragging the full inner-loop trajectory through
+        # the plugin's public API surface.
+        trajectory=[
+            {
+                "zetesis_research_summary": {
+                    "trajectory_events_count": report.trajectory_events,
+                    "memory_event_id": report.memory_event_id,
+                    "trial_id": report.trial_id,
+                    "question_id": report.question_id,
+                }
+            }
+        ],
     )
     if monitor.thermal_exceeded():
         metrics.trajectory.append(
