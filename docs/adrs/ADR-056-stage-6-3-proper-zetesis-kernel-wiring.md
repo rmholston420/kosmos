@@ -1,6 +1,6 @@
 # ADR-056 — Stage 6.3 (proper) Zetesis Kernel Wiring
 
-**Status:** Ratified v25 — Amended 2026-07-30
+**Status:** Ratified v25 — Completed 2026-07-30
 **Lock-in phase:** Stage 6.3 (proper) — Kosmos-Build-Sequence-v25.md §6.3
 **Supersedes:** —
 
@@ -111,6 +111,22 @@
 > - `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md` — records trial 1 rating of 3.75 / 6 with per-fact breakdown, root-cause analysis, and the sub-slice 4b remedy. This artifact stays even after the sub-slice 4b re-run rates ≥ 4.83, so the shim-data parity failure remains discoverable in the ADR-056 audit trail.
 >
 > **Sub-slice 5 unchanged from prior amendment.** Re-run the DoD trial with the patched runner. If the re-run rates ≥ 4.83, sub-slice 5 (BUILD_LOG DoD entry + tag `stage-6-3-complete`) proceeds. If it still rates below 4.83 with the shim-data parity restored, the wiring surface is the next investigation vector.
+
+> **STATUS AMENDMENT (2026-07-30, sub-slice 4b re-run — PASS / sub-slice 5 lock-in):** Sub-slice 4b re-run (`trial_01_acda1a`) rated **5.5 / 6** — **PASS**, +0.67 above the 4.83 gate and +0.17 above the ADR-054 5.33 baseline. Full per-fact breakdown recorded at `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md`.
+>
+> **Per-fact scores (trial 2, sub-slice 4b):** F1=1.0, F2=1.0, F3=1.0, F4=1.0, F5=1.0, F6=0.5 — F6 tail-omission matches ADR-054 baseline on all 3 baseline trials (Rule 6 rationale-preservation does not currently cover "only if / unless" conditionals; extending it is deferred to Stage 6.4+). All F1–F5 lines stated verbatim from the fixture's canonical facts, including the ONgDB/AGPL/network-copyleft rationale that trial 1 dropped (marquee 6.3.9 Q1 win restored).
+>
+> **Trial 2 mechanics:** wall time 541.99 s (2.8× trial 1's 194.71 s, 2× baseline mean ~270 s — expected: the rubric-critique shim now actually fires, adding one Ollama round for the critique and one for the writer's rewrite); VRAM peak 27.46 GB; GPU peak 100 %; error=None; source_diversity=2 (below `min_diversity_target: 3`, but diversity is an audit metric per the fixture rubric, not a gate condition; ADR-056 §D6 gates on rating only). The 2-domain result is a **quality improvement disguised as a diversity drop** — trial 2 cites only what supports canonical facts, while trial 1's 3-domain result padded with rubric-orphan claims to `mindmeld.donnie.in` and unrelated `neo4j.com` operations-manual URLs.
+>
+> **Sub-slice 4b root-cause confirmation:** the +0.17 delta above baseline confirms the runner-side shim-data parity fix was the correct diagnosis. The plugin surface is byte-transparent to the inner loop when the runner feeds the shim its per-trial data payload. `ZetesisResearchConfig`, `ZetesisPlugin.research()`, and the sub-slice-4 real-adapter matrix all pass through the shim toggles and shim data faithfully.
+>
+> **Sub-slice 5 (lock-in) executed:** BUILD_LOG DoD entry appended with the 5.5 / 6 result. SESSION_HANDOFF overwritten to reflect Stage 6.3 (proper) complete and Stage 6.4 as the next entry point. Colossus tag `stage-6-3-complete` applied at the sub-slice 5 commit. ADR-056 status transitions from `Ratified v25 — Amended 2026-07-30` to `Ratified v25 — Completed 2026-07-30`.
+>
+> **Follow-ups deferred to Stage 6.4+:**
+>
+> 1. Extend Rule 6 rationale-preservation to also cover "only if / unless / provided that / when the community" conditional clauses so F6 can rate 1.0. All three ADR-054 baseline trials and the sub-slice 4b trial 2 land at F6=0.5 for exactly this reason; the ceiling is stable, not a regression.
+> 2. Consider whether the rubric-critique prompt should encourage the writer to cite at least one domain per canonical fact family so source_diversity meets the `min_diversity_target: 3` audit signal without loosening citation discipline.
+> 3. Backfill a fast-tier test at `plugins/zetesis/tests/test_research_wiring.py` (or the DoD runner's own test module) that asserts `rubric_lines` and `fact_anchor_urls` are non-empty when the fixture supplies canonical facts, so the shim-data parity failure cannot recur silently.
 
 ## Context
 

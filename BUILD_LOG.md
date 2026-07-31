@@ -1891,3 +1891,21 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Sub-slice 4b is entirely runner-side. Plugin surface, port Protocols, and adapter matrix are unchanged.
 - **PORTING_LEDGER / ADR updated:** ADR-056 fourth STATUS AMENDMENT block.
 - **Stop-condition status:** in-progress. Sub-slice 4 code + trial 1 committed; sub-slice 4b patch pushed; sub-slice 5 gated on re-run.
+
+## 2026-07-30 23:51 EDT — Stage 6.3 (proper) sub-slice 5: DoD PASS (5.5/6) + lock-in
+
+- **Stage / plugin / port:** Stage 6.3 (proper) · Zetesis kernel wiring · sub-slice 5 (Definition-of-Done lock-in)
+- **What changed:**
+  - Colossus DoD trial 2 (`trial_01_acda1a`, sub-slice 4b re-run with shim-data parity restored) completed cleanly at 541.99 s / 27.46 GB VRAM peak / GPU 100 % peak / error=None. Wall time is 2× the ADR-054 baseline mean (~270 s) — expected: the rubric-critique shim now actually fires (adding one Ollama round for the critique and one for the writer's rewrite), which is the exact shim ADR-054 depends on for the F4/F5 rationale-and-fact-preservation nudges.
+  - Blind agent rating (same rater as ADR-054 5.33 baseline, same F1–F6 · 0/0.5/1.0 rubric): **5.5 / 6 — PASS** (+0.67 above the 4.83 gate, +0.17 above the ADR-054 5.33 baseline). Per-fact: F1=1.0, F2=1.0, F3=1.0, F4=1.0, F5=1.0, F6=0.5. All F1–F5 lines stated verbatim from the fixture's canonical facts; F6=0.5 matches the baseline mean exactly (Rule 6 rationale-preservation does not cover "only if / unless" conditional clauses — stable ceiling, not a regression). Rating captured verbatim under the artifacts tree.
+  - Source diversity=2 (below `min_diversity_target: 3` audit signal, but diversity is not a gate — ADR-056 §D6 gates on rating only). The 2-domain result is a quality improvement disguised as a diversity drop — trial 2 cites only what supports canonical facts, while trial 1 padded with rubric-orphan citations to a blog and unrelated operations-manual URLs.
+  - **Stage 6.3 (proper) Definition of Done met:** ZetesisPlugin.research() produces a multi-source research report with citations end-to-end via the ADR-056 §D4 real-adapter matrix (real LLM/Search/Observability/EventBus/FrontendContract; sub-slice-2 stubs for Memory/Vector/Data/Resource/Notification per the 6.3.9 envelope), and the resulting report meets the ADR-054 baseline quality bar with 0.67 headroom.
+  - Amended ADR-056 with a fifth STATUS AMENDMENT block (`sub-slice 4b re-run — PASS / sub-slice 5 lock-in`); transitioned status from `Ratified v25 — Amended 2026-07-30` to `Ratified v25 — Completed 2026-07-30`. Three follow-ups filed to Stage 6.4+ (Rule 6 conditional-clause extension, rubric-critique source-diversity guidance, shim-data-parity regression test).
+- **Files touched:**
+  - `ops/benchmarks/adr_010/artifacts/adr-010-2026-07-30/zetesis/RATING_STAGE_6_3_PROPER.md` (amended — added trial 2 PASS section with per-fact commentary; kept trial 1 FAIL section for the audit trail)
+  - `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (amended — fifth STATUS AMENDMENT block; status → Completed)
+  - `SESSION_HANDOFF.md` (overwritten — Stage 6.3 proper complete; Stage 6.4 entry-point next)
+  - `BUILD_LOG.md` (this entry)
+- **Ports / adapters affected:** none. Sub-slice 5 is documentation lock-in only.
+- **PORTING_LEDGER / ADR updated:** ADR-056 fifth STATUS AMENDMENT block + status transition.
+- **Stop-condition status:** **MET**. Stage 6.3 (proper) complete. Colossus tag `stage-6-3-complete` applied at this commit.
