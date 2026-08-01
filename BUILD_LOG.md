@@ -2084,3 +2084,16 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `ApprovalResolverPort` protocol untouched.
 - **PORTING_LEDGER / ADR updated:** ADR-062 new; PORTING_LEDGER unchanged.
 - **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
+
+## 2026-08-01 02:40 EDT — Stage 6.5.6 · Tektos kernel mount + turn endpoint (ADR-063)
+
+- **Stage / plugin / port:** Stage 6.5.6 · Kernel HTTP surface · LLMPort + MemoryPort (registry-owned) · TektosPlugin/TektosAgent
+- **What changed:** Mounted Tektos on the kernel. Promoted `LLMPort` and `MemoryPort` to registry singletons shared across plugins (extends the ADR-058 `event_bus`/`resource`/`notification` sharing pattern). Added five new `_BootRegistry` fields: `llm` (OllamaAdapter via `KOSMOS_OLLAMA_BASE_URL` + `KOSMOS_TEKTOS_MODEL`), `memory` (DozerDbMemoryAdapter with env-gated backends via `KOSMOS_MEMORY_BACKEND=in_memory|dozerdb`; dozerdb mode wires `DozerDbGraphBackend` + `GraphitiTemporalIndex` + `AmgGuardPolicy(tiered)` from `KOSMOS_DOZERDB_URI/_USER/_PASSWORD/_DATABASE` + `KOSMOS_EMBED_MODEL` default `nomic-embed-text`), `tektos` (TektosPlugin), `tektos_agent` (long-lived TektosAgent), `tektos_agent_lock` (`asyncio.Lock` serializing concurrent requests). Added `POST /api/tektos/turn` body `{content: <non-empty str>}` → returns TektosStep JSON via `_dataclass_to_dict`; 400 on bad input, 502 on upstream adapter failure, 503 when subsystem down. `/health.subsystems` gains three bools (`llm`, `memory`, `tektos`). Class-name matching (`type(exc).__name__`) keeps `TektosAgent*Error` imports out of `kernel/app.py` per ADR-007. `kernel/app.py` version 6.5.5 → 6.5.6.
+- **Files touched:**
+  - `kernel/app.py` (added `_boot_llm` + `_boot_memory` closures, Tektos mount block, `tektos_turn` route, shutdown for `tektos`/`llm`, `/health` subsystem entries, `_BootRegistry` fields; version bump; docstring update)
+  - `docs/adrs/ADR-063-stage-6-5-6-tektos-kernel-mount.md` (new)
+  - `docs/adrs/README.md` (row inserted before ADR-062)
+  - `tests/kernel/test_stage_6_5_6_tektos_turn.py` (new)
+- **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `OllamaAdapter` + `DozerDbMemoryAdapter` + `DozerDbGraphBackend` + `GraphitiTemporalIndex` + `AmgGuardPolicy` already `VENDORED` per ADR-058 / ADR-027.
+- **PORTING_LEDGER / ADR updated:** ADR-063 new; PORTING_LEDGER unchanged.
+- **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
