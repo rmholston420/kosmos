@@ -16,11 +16,17 @@ export default function JobPage({
   title,
   description,
   slots,
+  governanceMode,
 }: {
   jobId: string;
   title: string;
   description: string;
   slots: PanelSlot[];
+  /**
+   * Wave B — `/govern` sets this true so the APPROVALS_QUEUE panel
+   * renders in tier-grouped governance view.
+   */
+  governanceMode?: boolean;
 }) {
   const [schema, setSchema] = useState<KernelSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +48,7 @@ export default function JobPage({
         <h1 data-testid={`job-${jobId}-title`}>{title}</h1>
         <p data-testid={`job-${jobId}-description`}>{description}</p>
       </header>
-      <PanelGrid panels={schema.panels} slots={slots} />
+      <PanelGrid panels={schema.panels} slots={slots} governanceMode={governanceMode} />
     </main>
   );
 }

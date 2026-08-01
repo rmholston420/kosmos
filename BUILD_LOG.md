@@ -2443,3 +2443,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. UI-only; consumes existing `FrontendContractPort` schema + ADR-068 D1/D2/D3 additive routes. ADR-007 preserved (no cross-plugin imports; all cross-plugin references go through the kernel schema).
 - **PORTING_LEDGER / ADR updated:** `PORTING_LEDGER.md` (Stage 1.5 section). ADR-068 remains the authoritative decision record.
 - **Stop-condition status:** met for Wave A. Blocked pending Colossus `pnpm i && (cd ui && npx next build) && pytest -q && (cd ui && npx playwright test)` sign-off before Waves B–D.
+
+## 2026-08-01 06:33 EDT — Stage 1.5 Wave B · Governance surface wired (ADR-068 D2/D3)
+
+- **Stage / plugin / port:** Stage 1.5 · Kosmos UI · Governance surface
+- **What changed:** UI-only patch that turns the previously-skeletal GOVERNANCE panel + APPROVALS_QUEUE-on-`/govern` into a live surface backed by the ADR-068 backend deltas already merged in kernel 6.5.9:
+  - **GovernancePanel** rewritten to fetch `/api/praxis/constitution` (D2) + `/api/praxis/apex/policies` (D3) on mount. Renders three subsections: constitution card (title, version, ratified_at, article_count, sha256[:12]), apex-policies list (all 9 Tier-2 triggers labelled HUMAN_REQUIRED, sorted by policy_id), and a visible-but-disabled Phrouros oversight surface (`data-enabled="false"`, `aria-disabled="true"`) placeholder for future anomaly-review + veto endpoints. Preserves prior "registered governance panels" ref list when non-empty.
+  - **Panel now always renders** even with zero registered GOVERNANCE-slot panels — the panel owns its own kernel fetches. `PanelGrid` short-circuits GOVERNANCE (like AGENT_TRACE) to bypass the placeholder fallback.
+  - **ApprovalsQueuePanel** gains optional `governanceMode?: boolean` prop. When true (`/govern` opts in), renders records grouped by tier — HUMAN_REQUIRED → HUMAN_REVIEW → AUTONOMOUS with per-tier counts and empty markers; when false (default, home `/` and `/command`), preserves the legacy flat `approvals-list` view. `data-governance-mode` attribute exposed on the article for testability.
+  - **`PanelGrid` + `JobPage`** plumb `governanceMode` through so only the `/govern` `<JobPage>` sets it — every other surface stays in legacy mode.
+  - **Playwright smoke** — 5 new tests in `ui/tests/10-governance-surface.spec.ts`: constitution card renders all 5 fields (or `role="alert"` error), apex policies enumerate ≥1 row all HUMAN_REQUIRED, Phrouros surface is visible-but-disabled, `/govern` opts APPROVALS_QUEUE into governance mode, `/command` regression guard confirms tier-grouped view does NOT leak there.
+- **Files touched:**
+  - `ui/components/panels/GovernancePanel.tsx` (rewritten)
+  - `ui/components/panels/ApprovalsQueuePanel.tsx` (governanceMode prop + tier grouping)
+  - `ui/components/PanelGrid.tsx` (GOVERNANCE always-render + governanceMode plumbing)
+  - `ui/components/JobPage.tsx` (governanceMode prop pass-through)
+  - `ui/app/govern/page.tsx` (governanceMode enabled)
+  - `ui/tests/10-governance-surface.spec.ts` (new, 5 tests)
+- **Ports / adapters affected:** none. UI-only; consumes existing D2/D3 routes.
+- **PORTING_LEDGER / ADR updated:** none (no new vendored deps; ADR-068 remains authoritative).
+- **Stop-condition status:** met for Wave B pending Colossus test pass.

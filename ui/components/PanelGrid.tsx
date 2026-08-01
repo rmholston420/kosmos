@@ -13,17 +13,30 @@ const ALL_SLOTS = [
 
 type AnySlot = (typeof ALL_SLOTS)[number];
 
-function renderPanelBySlot(slot: string, panels: Panel[]) {
+export interface PanelGridOptions {
+  /**
+   * Wave B — governance-mode surfaces (tier-grouped approvals + full
+   * governance panel) render on `/govern`. Passed through to opting-in
+   * panels; ignored by others.
+   */
+  governanceMode?: boolean;
+}
+
+function renderPanelBySlot(slot: string, panels: Panel[], opts: PanelGridOptions) {
   const slotPanels = panels
     .filter((p) => p.slot === slot)
     .sort((a, b) => b.priority - a.priority);
 
   // AGENT_TRACE reads directly from Phrouros (/api/phrouros/anomalies)
-  // and is not owned by any panel-registering plugin. Always render its
-  // real component so it can surface anomalies (or the empty state)
-  // regardless of PanelSlot registration.
+  // and is not owned by any panel-registering plugin.
   if (slot === "AGENT_TRACE") {
     return <AgentTracePanel key={slot} panels={slotPanels} />;
+  }
+
+  // GOVERNANCE (Wave B): reads constitution + apex policies directly from
+  // /api/praxis/*; always render even when zero panels are registered.
+  if (slot === "GOVERNANCE") {
+    return <GovernancePanel key={slot} panels={slotPanels} />;
   }
 
   if (slotPanels.length === 0) {
@@ -31,9 +44,13 @@ function renderPanelBySlot(slot: string, panels: Panel[]) {
   }
   switch (slot) {
     case "APPROVALS_QUEUE":
-      return <ApprovalsQueuePanel key={slot} panels={slotPanels} />;
-    case "GOVERNANCE":
-      return <GovernancePanel key={slot} panels={slotPanels} />;
+      return (
+        <ApprovalsQueuePanel
+          key={slot}
+          panels={slotPanels}
+          governanceMode={opts.governanceMode ?? false}
+        />
+      );
     default:
       return <PlaceholderPanel key={slot} slot={slot} populated />;
   }
@@ -42,6 +59,7 @@ function renderPanelBySlot(slot: string, panels: Panel[]) {
 export default function PanelGrid({
   panels,
   slots,
+  governanceMode,
 }: {
   panels: Panel[];
   /**
@@ -52,14 +70,16 @@ export default function PanelGrid({
    * (all nine slots visible) stays green.
    */
   slots?: readonly AnySlot[];
+  governanceMode?: boolean;
 }) {
   const activeSlots = slots ?? ALL_SLOTS;
+  const opts: PanelGridOptions = { governanceMode: governanceMode ?? false };
   return (
     <section data-testid="panel-grid">
       {panels.length === 0 && (
         <p data-testid="panel-grid-empty">No panels registered</p>
       )}
-      {activeSlots.map((slot) => renderPanelBySlot(slot, panels))}
+      {activeSlots.map((slot) => renderPanelBySlot(slot, panels, opts))}
     </section>
   );
 }
