@@ -2036,3 +2036,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — port surfaces unchanged.
 - **PORTING_LEDGER / ADR updated:** ADR-059 amended in place (row still Ratified; table value change only).
 - **Stop-condition status:** in-progress — Colossus reruns pending; expect 5 / 5 green on PR #3.
+
+## 2026-08-01 01:59 EDT — Stage 6.5.1+6.5.2 · fixup 2 (compute-seed band assertion)
+
+- **Stage / plugin / port:** Stage 6.5.1+6.5.2 fixup · Kernel tests
+- **What changed:** `test_resource_seed_values_match_kernel_constant` was asserting exact-match for all six kinds. The anomaly test (ordered earlier) runs Phrouros `_escalate` → `resource_port.allocate(COMPUTE, 32)`, ratcheting compute from 100 → 68 in shared `client` fixture state. Assert exact-match only for the five kinds Phrouros does not touch (time/money/attention/knowledge/energy) and a `0 ≤ actual ≤ seed` band for compute.
+- **Files touched:** `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py`
+- **Ports / adapters affected:** none — test-only fix.
+- **PORTING_LEDGER / ADR updated:** none (test hygiene).
+- **Stop-condition status:** in-progress — awaiting 5/5 green on Colossus.
