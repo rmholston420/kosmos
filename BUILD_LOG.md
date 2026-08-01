@@ -2569,3 +2569,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort read-only (contract unchanged; degradation now surfaces as empty page not 5xx)
 - **PORTING_LEDGER / ADR updated:** ADR-070 amended (D7 added)
 - **Stop-condition status:** in-progress; awaiting Colossus full-suite validation
+
+## 2026-08-01 07:46 EDT — Wave D merged + ADR-070 Ratified v25
+
+- **Stage / plugin / port:** Stage 1.5 · Wave D · `/api/gnosis/graph/*` + `MemoryIntegrityPanel`
+- **What changed:**
+  - PR #14 squash-merged as `9b81e2d` on main.
+  - ADR-070 promoted `Proposed → Ratified v25 (2026-08-01)`; index row amended to note D7 (cold-boot degradation on list endpoints).
+  - Kernel version 6.6.0 → 6.7.0 live on main.
+- **Files touched:**
+  - `docs/adrs/ADR-070-stage-1-5-memory-integrity-graph.md`
+  - `docs/adrs/README.md`
+- **Ports / adapters affected:** none (ratification only)
+- **PORTING_LEDGER / ADR updated:** ADR-070 ratified
+- **Stop-condition status:** met — Wave D DoD closed (pytest 17/17, Wave D Playwright 5/5, full 43/6/0 GREEN on Colossus)
