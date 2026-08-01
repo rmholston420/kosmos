@@ -398,3 +398,30 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Reverted the 6.3.7b regex-sweep draft entirely. Shipped **Stage 6.3.8 structural finalize** (see BUILD_LOG entry 2026-07-30 19:45 EDT). Approach: JSON-schema-constrained finalize turn via Ollama's native `response_format=json_schema` + deterministic Python markdown renderer. The three leak classes become structurally impossible: no free-form emission channel for wrapper syntax; no channel for scratch markers; F1–F6 allow-list gate drops rubric-orphan uncited claims before render.
 - **Files changed:** all 6.3.8 files listed in BUILD_LOG 2026-07-30 19:45 EDT entry.
 - **Related BUILD_LOG entry:** 2026-07-30 19:14 EDT (regression) and 2026-07-30 19:45 EDT (fix).
+
+
+## 2026-08-01 01:05 EDT — kernel.app lifespan crashes on PraxisApprovalResolverAdapter() missing 'engine'
+
+- **Symptom:**
+  ```
+  File "/home/rmholston/dev/kosmos/kernel/app.py", line 53, in lifespan
+      approval_resolver = PraxisApprovalResolverAdapter()
+  TypeError: PraxisApprovalResolverAdapter.__init__() missing 1 required positional argument: 'engine'
+  ```
+  Uvicorn logs `Application startup failed. Exiting.`; every `/api/*` endpoint returns nothing (connection closes).
+- **Affected stage / plugin / port:** Stage 6.4 · Kernel · ApprovalResolverPort composition
+- **Root cause:** `kernel/app.py` v1 was written from a stale audit that assumed `PraxisApprovalResolverAdapter()` was a no-arg no-op. Actual signature from `adapters/approval_resolver/praxis/adapter.py` is `__init__(self, engine: ApexEngine)` — the adapter is a thin wrapper over `KernelChangeApprovalAdapter` (a.k.a. `ApexEngine` in prose only; class name is `KernelChangeApprovalAdapter`), itself needing four seams: `storage=`, `scheduler=`, `event_bus=`, `notification=`. v1 constructed neither.
+- **Fix applied:** Rewrote `kernel/app.py` v2 with correct 4-seam composition:
+  ```python
+  engine = KernelChangeApprovalAdapter(
+      storage=PraxisStorage(),           # plugins.praxis.apex.storage.InMemoryStorage
+      scheduler=InProcessScheduler(),    # plugins.praxis.apex.scheduler.InProcessScheduler
+      event_bus=registry.event_bus,      # ValkeyEventBusAdapter() (env-driven URL)
+      notification=registry.notification, # KernelNotificationAdapter() (no args)
+  )
+  approval_resolver = PraxisApprovalResolverAdapter(engine=engine)
+  ```
+  Also degraded every port bootstrap behind try/except so a single failure surfaces as HTTP 503 on that subsystem's endpoint rather than a hard kernel crash. `SqliteResourceAdapter` similarly corrected to take `storage=InMemoryStorage()` (v1 passed no args).
+- **Files changed:**
+  - `kernel/app.py` (v1 → v2)
+- **Related BUILD_LOG entry:** 2026-08-01 01:12 EDT

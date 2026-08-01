@@ -95,6 +95,7 @@ from ports.frontend_contract import (
     FrontendContractPort,
     PluginDescriptor,
     PluginRegistration,
+    Route,
 )
 from ports.llm import LLMPort
 from ports.memory import MemoryPort
@@ -179,6 +180,15 @@ call. Emitted after MemoryPort.write_event returns. Payload includes
 ADR-052 §Q4 predicate is written to memory; this event-type is the
 pub/sub companion."""
 
+# ADR-057 (Stage 6.3) — Zetesis UI route surface. Locked constants.
+# Panels remain empty at 6.3; land at Stage 6.4 when the kernel FastAPI
+# shell mounts. `source_diversity >= 5` is an audit signal only (Option B
+# ratified 2026-08-01), not a Stage 6.4 exit-gate blocker.
+ZETESIS_ROUTE_PATH: str = "/zetesis"
+ZETESIS_ROUTE_LABEL: str = "Zetesis"
+ZETESIS_ROUTE_ICON: str = "🔬"
+ZETESIS_ROUTE_LAZY_MODULE: str = "zetesis/pages/ResearchPage"
+
 
 # ---------------------------------------------------------------------------
 # Public research API dataclasses — locked at Stage 6.3 (proper) sub-slice 3
@@ -256,9 +266,11 @@ def build_zetesis_descriptor() -> PluginDescriptor:
     (contract tests inspect the descriptor without instantiating the
     plugin or any port adapter).
 
-    ADR-052 §Q2=A shape: **zero panels, zero routes, empty design
-    tokens**. Stage 6.1 DoD is literally "Plugin loads." Panels + routes
-    land at Stage 6.3/6.4 when real research output exists to render.
+    ADR-052 §Q2=A shape amended by ADR-057 (Stage 6.3): **one route,
+    zero panels, empty design tokens**. Stage 6.1 DoD was "Plugin
+    loads"; Stage 6.3 promotes the descriptor to routes-only (one
+    top-nav entry). Panels land at Stage 6.4 when the kernel FastAPI
+    shell mounts.
 
     Returns:
         The canonical Zetesis descriptor.
@@ -269,7 +281,14 @@ def build_zetesis_descriptor() -> PluginDescriptor:
         version=ZETESIS_VERSION,
         kernel_compat=ZETESIS_KERNEL_COMPAT,
         design_tokens={},
-        routes=(),
+        routes=(
+            Route(
+                path=ZETESIS_ROUTE_PATH,
+                label=ZETESIS_ROUTE_LABEL,
+                icon=ZETESIS_ROUTE_ICON,
+                lazy_module=ZETESIS_ROUTE_LAZY_MODULE,
+            ),
+        ),
         panels=(),
     )
 
