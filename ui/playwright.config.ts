@@ -15,6 +15,11 @@ import { defineConfig, devices } from "@playwright/test";
 // serializes execution against the single shared kernel process.
 export default defineConfig({
   testDir: "./tests",
+  // Diagnostics are run explicitly by path (see
+  // tests/diagnostics/events-and-graph.spec.ts header). They call the
+  // real Zetesis research endpoint and can take 100s+ per run — not
+  // suitable for the standard regression sweep.
+  testIgnore: ["**/diagnostics/**"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
