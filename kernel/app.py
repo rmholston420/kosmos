@@ -1,4 +1,4 @@
-"""Kosmos kernel FastAPI app (Stage 6.5.3 — Zetesis /research SSE).
+"""Kosmos kernel FastAPI app (Stage 6.5.4 — WebSocket event-bus bridge).
 
 Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
 
@@ -14,16 +14,20 @@ Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
    ``ports/observability`` detectors + the shared kernel adapters
    (ADR-059 §D1). Failure surfaces under ``registry.errors["phrouros"]``.
 
-Kernel HTTP endpoints (6.5.3):
+Kernel HTTP endpoints (6.5.4):
 
 - ``/api/phrouros/anomalies`` — 200 with real (usually empty) records.
-- ``POST /api/zetesis/research`` — new SSE endpoint (ADR-060) emitting
-  ``started`` + ``completed`` events on the happy path; ``started`` +
-  ``error`` on failure.
+- ``POST /api/zetesis/research`` — SSE endpoint (ADR-060) emitting
+  ``started`` + ``completed`` on the happy path; ``started`` + ``error``
+  on failure.
+- ``GET /api/events/ws`` — WebSocket event-bus bridge (ADR-061); on
+  connect sends a ``ready`` frame with the subscribed event-type list,
+  then forwards published ``EventEnvelope``s as JSON ``event`` frames.
 """
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import uuid
@@ -31,7 +35,13 @@ from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import StreamingResponse
 
 # ---------------------------------------------------------------------------
@@ -287,7 +297,21 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.3", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.4", lifespan=lifespan)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket event-bus bridge — ADR-061
+# ---------------------------------------------------------------------------
+
+
+WS_DEFAULT_EVENT_TYPES: tuple[str, ...] = (
+    "phrouros.anomaly.detected",     # ADR-034
+    "zetesis.research.started",      # ADR-056
+    "zetesis.research.completed",    # ADR-056
+)
+
+_WS_QUEUE_MAXSIZE: int = 256
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +594,92 @@ async def notification_health() -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {"report": payload}
     return payload
+
+
+# ---------------------------------------------------------------------------
+# WebSocket route
+# ---------------------------------------------------------------------------
+
+
+def _parse_ws_types(raw: str | None) -> tuple[str, ...]:
+    """Parse the ``?types=a,b,c`` query string.
+
+    Whitespace-tolerant. Empty tokens dropped. Duplicates deduplicated
+    while preserving first-seen order.
+    """
+    if raw is None or not raw.strip():
+        return WS_DEFAULT_EVENT_TYPES
+    seen: dict[str, None] = {}
+    for token in raw.split(","):
+        t = token.strip()
+        if t:
+            seen.setdefault(t, None)
+    return tuple(seen.keys()) or WS_DEFAULT_EVENT_TYPES
+
+
+def _envelope_to_wire(envelope: Any) -> dict[str, Any]:
+    """Serialize an :class:`EventEnvelope` for a wire frame."""
+    return {
+        "frame": "event",
+        "envelope": _dataclass_to_dict(envelope),
+    }
+
+
+@app.websocket("/api/events/ws")
+async def events_ws(ws: WebSocket) -> None:
+    if registry.event_bus is None:
+        # Close before accepting; matches WS handshake semantics.
+        await ws.close(code=1011, reason="event_bus subsystem down")
+        return
+
+    types = _parse_ws_types(ws.query_params.get("types"))
+    bus = registry.event_bus
+
+    await ws.accept()
+    await ws.send_json({"frame": "ready", "subscribed": list(types)})
+
+    # One queue per event type; one forwarder task per queue.
+    queues: list[tuple[str, asyncio.Queue[Any]]] = []
+    for t in types:
+        q = bus.subscribe(t, maxsize=_WS_QUEUE_MAXSIZE)
+        queues.append((t, q))
+
+    async def _forward(q: asyncio.Queue[Any]) -> None:
+        while True:
+            envelope = await q.get()
+            await ws.send_json(_envelope_to_wire(envelope))
+
+    forwarders = [asyncio.create_task(_forward(q)) for _, q in queues]
+
+    async def _drain_client() -> None:
+        # Consume (and ignore) client-sent frames so a client `close()`
+        # surfaces promptly as `WebSocketDisconnect`.
+        while True:
+            await ws.receive_text()
+
+    drain = asyncio.create_task(_drain_client())
+
+    try:
+        # Wait for any task to finish (usually _drain_client on
+        # disconnect); an exception in a forwarder also unblocks here.
+        done, pending = await asyncio.wait(
+            [*forwarders, drain],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+    except WebSocketDisconnect:
+        for task in forwarders + [drain]:
+            task.cancel()
+    except Exception:  # noqa: BLE001
+        for task in forwarders + [drain]:
+            task.cancel()
+    finally:
+        for t, q in queues:
+            try:
+                bus.unsubscribe(t, q)
+            except Exception:  # noqa: BLE001
+                pass
 
 
 # ---------------------------------------------------------------------------
