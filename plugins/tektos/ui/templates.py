@@ -20,7 +20,7 @@ from ports.approval import ApprovalRecord
 
 from .models import DiffRender
 from .policy import (
-    TEKTOS_UI_HTMX_JS_PATH,
+    TEKTOS_UI_HTMX_JS_TEMPLATE_HREF,
     TEKTOS_UI_INDEX_PATH,
     TEKTOS_UI_PLAN_APPROVE_PATH,
     TEKTOS_UI_PLAN_DETAIL_PATH,
@@ -153,7 +153,10 @@ def render_dashboard_index(records: Iterable[ApprovalRecord]) -> str:
     rendered_rows = [render_pending_row(r) for r in records]
     body = "".join(rendered_rows) if rendered_rows else _EMPTY_ROW
     return _INDEX_SHELL.format(
-        htmx_src=escape(TEKTOS_UI_HTMX_JS_PATH),
+        # ADR-066 D5 — render as sub-app-relative so the browser resolves
+        # against the mount prefix; ``TEKTOS_UI_HTMX_JS_PATH`` remains the
+        # FastAPI route decorator target.
+        htmx_src=escape(TEKTOS_UI_HTMX_JS_TEMPLATE_HREF),
         rows=body,
     )
 
