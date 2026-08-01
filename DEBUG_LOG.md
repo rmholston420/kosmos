@@ -829,3 +829,17 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:**
   - `kernel/app.py` — new `_BootRegistry.approval_gateway` field; `_boot_approval` stores the engine; intention endpoint reads `approval_gateway`.
 - **Related BUILD_LOG entry:** 2026-08-01 16:40 EDT
+
+## 2026-08-01 17:07 EDT — `/api/tektos/plan/{id}` -> 500 PydanticSerializationError on records loaded from SqliteStorage
+
+- **Symptom:** `GET /api/tektos/plan/<approval_id>` returned HTTP 500 after Stage 3.13.2 shipped `SqliteStorage`. Kernel log:
+  ```
+  pydantic_core._pydantic_core.PydanticSerializationError: Unable to serialize unknown type: <class 'mappingproxy'>
+  ```
+  Row was present in `/var/lib/kosmos/apex/approvals.sqlite` (`SELECT approval_id,status,proposing_domain FROM approval_records` returned the id with `PENDING`/`tektos`) so the storage path worked; only the JSON response path failed.
+- **Affected stage / plugin / port:** Stage 3.13.2 · `plugins.praxis.apex.storage.SqliteStorage` · FastAPI response serialization on `/api/tektos/plan/{approval_id}` and (transitively) on every other endpoint that returns an `ApprovalRecord` loaded from sqlite.
+- **Root cause:** `_json_load` wrapped `json.loads(text)` in `types.MappingProxyType`. `ApprovalRecord.delta`/`modifications`/`diff_preview` are typed `Mapping[str, Any]`, so the immutable view technically satisfies the contract. But FastAPI serializes response bodies through pydantic, and pydantic's JSON encoder has no registered handler for `mappingproxy` — it raises `PydanticSerializationError` before the response leaves the app. `InMemoryStorage` never hit this because records there always carried plain `dict` (whatever `propose(...)` passed in).
+- **Fix applied:** `_json_load` now returns the plain `dict` from `json.loads(text)`. Immutability was never a real invariant here — records already round-trip through `dataclasses.replace` in `update_status`, which copies-by-value regardless. Contract is unchanged (`Mapping[str, Any]` accepts `dict`).
+- **Files changed:**
+  - `plugins/praxis/apex/storage.py` — dropped `MappingProxyType` import; `_json_load` returns `dict[str, Any]`; comment explains the FastAPI/pydantic constraint.
+- **Related BUILD_LOG entry:** 2026-08-01 17:12 EDT (Stage 3.13.2 landing — this fix ships as the follow-up push on the same slice).

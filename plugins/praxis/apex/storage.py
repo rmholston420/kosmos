@@ -20,7 +20,6 @@ from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any
 
 import aiosqlite
@@ -185,8 +184,12 @@ def _json_dump(value: Mapping[str, Any] | dict[str, Any]) -> str:
     return json.dumps(dict(value), sort_keys=True, default=str)
 
 
-def _json_load(text: str) -> Mapping[str, Any]:
-    return MappingProxyType(json.loads(text))
+def _json_load(text: str) -> dict[str, Any]:
+    # Return a plain dict rather than MappingProxyType: pydantic's JSON
+    # serializer (FastAPI response path) does not know how to encode
+    # ``mappingproxy``. ``ApprovalRecord`` typing is ``Mapping[str, Any]``
+    # so a plain dict satisfies the contract.
+    return json.loads(text)
 
 
 class SqliteStorage:
