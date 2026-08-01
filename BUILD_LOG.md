@@ -3272,3 +3272,16 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (semantic path, unchanged). Event bus contract: completed-event payload gained two additive fields (backward-compatible).
 - **PORTING_LEDGER / ADR updated:** — (no vendored change). ADR-076 D3 spec text unchanged; the fix is a bug fix against the ADR's stated intent.
 - **Stop-condition status:** in-progress. Fast tier: 2 tests collected clean, 0 failed. Live tier requires `sudo systemctl restart kosmos-kernel` + rerun on Colossus.
+
+## 2026-08-01 14:31 EDT — Stage 1.6 Phase 3 · D3 live-tier GREEN on Colossus
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · MemoryPort · Zetesis event fan-out (ADR-076 D3)
+- **What changed:** verification-only entry — `KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_zetesis_semantic_roundtrip_live.py -v` on Colossus produced `2 passed in 402.90s`. Both tests exercise the full Zetesis→drain→embed→Qdrant→search-semantic round-trip:
+  - `test_zetesis_report_lands_in_zetesis_reports_corpus` — fan-out hit found in `zetesis-reports` with `provenance="zetesis.event_bus"`, `confidence=1.0`, `corpus="zetesis-reports"`, score above 0.3 floor.
+  - `test_zetesis_reports_fanout_isolated_to_zetesis_reports_corpus` — fresh event fingerprinted by per-run `trial_id` present in `zetesis-reports`, absent from `default`. Historical leaks (pre-fix) ignored by design.
+- **Files touched:**
+  - BUILD_LOG.md
+  - SESSION_HANDOFF.md (rewritten)
+- **Ports / adapters affected:** — (no code change; verification of 273e79f).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** **D3 met**. D1 + Qdrant + D2 + D3 all green. D4–D7 remain (plus optional D6.5 pending user decision). Session recommended for fork at commit 273e79f.

@@ -1,34 +1,34 @@
-# Kosmos Session Handoff — 2026-08-01 14:12 EDT
+# Kosmos Session Handoff — 2026-08-01 14:31 EDT
 
 ## Current build-sequencing position
 - **Stage / phase:** Stage 1.6 Phase 3 (ADR-076)
 - **Plugin / kernel component:** MemoryPort · Zetesis fan-out · UI memory surfaces
 - **Branch:** `stage-1-6-p3-code` (rolling, PR #34 OPEN)
-- **Latest commit:** `a98868c` (D3)
+- **Latest commit:** `273e79f` (D3 fan-out reachability fix — live-tier green)
 
 ## Completed this session
 - **D1** — `tests/integration/test_semantic_hits_live.py` (3 tests, live tier). Green on Colossus.
 - **Qdrant deployment** — Kosmos-owned Qdrant on 127.0.0.1:6339 / 6340 via `ops/compose/memory.yml`. Kernel env `KOSMOS_QDRANT_URL=http://127.0.0.1:6339` in `ops/systemd/kosmos-kernel.env`. Logged in PORTING_LEDGER.md.
 - **D2** — UI memory search polish (`ui/app/memory/search/page.tsx`): highlighting, corpus `<select>` from `/api/gnosis/corpora`, empty state, error state, facet counts. 13/13 Playwright green.
-- **D3** — Kernel fan-out amendment at `kernel/app.py:604` stamps `attributes["corpus_name"]="zetesis-reports"`. New `tests/integration/test_zetesis_semantic_roundtrip_live.py` (2 async pytest tests behind `KOSMOS_STAGE_16_LIVE=1`) locks the round-trip and corpus-lane isolation. ADR-076 §D3 amended in place (2026-08-01 STATUS AMENDMENT).
+- **D3** — Kernel fan-out amendment at `kernel/app.py:604` stamps `attributes["corpus_name"]="zetesis-reports"` + attributes `trial_id`. Zetesis plugin completed-event payload amended (plugin.py:614+) to include `answer` and `report_id` — restores the fan-out from unreachable dead code (see DEBUG_LOG 2026-08-01 14:20 EDT). `tests/integration/test_zetesis_semantic_roundtrip_live.py`: 2 pytest live-tier tests behind `KOSMOS_STAGE_16_LIVE=1`. Live-tier green on Colossus (2 passed in 402.90s).
+
+## Two-lane Zetesis memory writes (locked in as of D3)
+Every Zetesis research call now produces TWO memory events by design (ADR-075 D3 intent, restored by ADR-076 D3):
+1. **Plugin direct write** (plugin.py:580): `provenance="zetesis_research"`, `confidence=0.75`, no `corpus_name` → lands in `kosmos-memory-default`. Zero-trust lane.
+2. **Kernel fan-out write** (kernel/app.py:612): `provenance="zetesis.event_bus"`, `confidence=1.0`, `attributes["corpus_name"]="zetesis-reports"` → lands in `kosmos-memory-zetesis-reports`. Kernel-vouched lane.
+
+Corpus isolation is verified per-run via `trial_id` fingerprinting.
 
 ## Remaining before current Definition of Done
-- **D3 live verification pending on Colossus:**
-  ```bash
-  cd ~/dev/kosmos && git fetch origin && git checkout stage-1-6-p3-code && \
-    git reset --hard origin/stage-1-6-p3-code && \
-    sudo systemctl restart kosmos-kernel && sleep 3 && \
-    KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_zetesis_semantic_roundtrip_live.py -v --tb=short
-  ```
 - **D4** — Quarantine port + routes + UI (ADR-076 lines 140+)
 - **D5** — Provenance route + UI
 - **D6** — AMG status route + pill
-- **D6.5 (proposed, awaiting user)** — Phrouros anomalies table on /observe (replace GovernancePanel placeholder). See "Phrouros surface" note below.
+- **D6.5 (proposed, awaiting user)** — Phrouros anomalies table on /observe (replace GovernancePanel placeholder). Option A from 2026-08-01 14:12 EDT proposal.
 - **D7** — Kernel version bump + Qdrant image 1.12 → 1.15+ + PORT_CONTRACTS audit
 
 ## Open questions / awaiting user answer
-- **Fork the session?** Recommended — session is heavily compacted. Fork point is clean (post-D3, pre-D4).
-- **Add D6.5 (Phrouros anomalies UI) to Phase 3?** Options in agent's 2026-08-01 14:12 EDT message. Default recommendation: Option A (add as D6.5, minimal anomalies table + WS live-invalidate on `phrouros.anomaly.detected`).
+- **Fork the session?** YES (recommended, this session is heavily compacted). Fork point clean at commit `273e79f`.
+- **Add D6.5 (Phrouros anomalies UI) to Phase 3?** Default recommendation: Option A (minimal anomalies table + WS live-invalidate on `phrouros.anomaly.detected`).
 
 ## Phrouros surface note (context for next session)
 - **Backend built + live** on Colossus. `GET /api/phrouros/anomalies` returns AnomalyRecord list. `phrouros.anomaly.detected` event topic published on WS.
