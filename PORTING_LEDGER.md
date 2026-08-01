@@ -253,6 +253,25 @@ vendored source trees; SPDX license verified on every version listed.
 - **ADR:** ADR-072
 - **Logged:** 2026-08-01 09:04 EDT
 
+## Stage 1.6 Phase 0 · EmbeddingsPort (ADR-073)
+
+#### httpx — EmbeddingsPort transport (continued satisfaction)
+- **Source:** https://github.com/encode/httpx
+- **Commit / Version:** already vendored per Stage 6.5.6 (ADR-063); no new version bump.
+- **License:** BSD-3-Clause (SPDX)
+- **Kosmos location:** `adapters/embeddings/ollama/adapter.py` (imports only)
+- **Port(s):** `EmbeddingsPort` (transport layer; not a vendored implementation of the port itself)
+- **Modifications:** none
+- **ADR:** ADR-073
+- **Logged:** 2026-08-01 10:35 EDT
+
+No other new vendored components: ``OllamaEmbeddingsAdapter`` calls
+Ollama's native ``/api/embed`` endpoint directly via ``httpx``. The
+``EmbeddingsPort`` protocol itself is Kosmos-original code (no OSS port
+vendored). Graphiti's ``EmbedderClient`` shape is duck-typed via
+``KosmosGraphitiEmbedder`` — no `graphiti_core` API surface is vendored
+into Kosmos beyond the existing memory adapter usage.
+
 
 ## Historical entries
 

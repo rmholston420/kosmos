@@ -90,7 +90,15 @@ class LLMPort(Protocol):
         input: str | list[str],
         model: str | None = None,
     ) -> dict[str, Any]:
-        """Return embeddings dict for input string or batch of strings."""
+        """Return embeddings dict for input string or batch of strings.
+
+        .. deprecated:: ADR-073 (Ratified v25 2026-08-01)
+           Use ``ports.embeddings.EmbeddingsPort.embed`` instead.
+           This method is retained through the ADR-073 deprecation
+           window to preserve Stage 6.3.9 factory (ADR-054) parity.
+           New call sites MUST use ``EmbeddingsPort``. A hard delete
+           is deferred to a follow-on ADR after all callers migrate.
+        """
         ...
 
     # ── Model management ───────────────────────────────────────────────────

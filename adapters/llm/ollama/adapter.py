@@ -174,7 +174,20 @@ class OllamaAdapter:
         input: str | list[str],
         model: str | None = None,
     ) -> dict[str, Any]:
-        """POST /api/embed — return raw response dict with embeddings."""
+        """POST /api/embed — return raw response dict with embeddings.
+
+        .. deprecated:: ADR-073 (Ratified v25 2026-08-01)
+           Use ``adapters.embeddings.ollama.adapter.OllamaEmbeddingsAdapter``
+           via ``ports.embeddings.EmbeddingsPort`` instead.
+        """
+        import warnings
+
+        warnings.warn(
+            "OllamaAdapter.embed() is deprecated per ADR-073. "
+            "Use OllamaEmbeddingsAdapter via EmbeddingsPort.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         payload: dict[str, Any] = {
             "model": model or self._default_model,
             "input": input,
