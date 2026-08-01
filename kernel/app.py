@@ -601,6 +601,14 @@ async def lifespan(app: FastAPI):
                             # DozerDbMemoryAdapter routes the corpus via
                             # ``attributes["corpus_name"]`` (see
                             # adapters/memory/dozerdb/adapter.py:421).
+                            # ADR-076 D3 fix: propagate ``trial_id`` from
+                            # the completed event payload into the fan-out
+                            # event's attributes so live-tier tests can
+                            # fingerprint the exact write this run
+                            # produced (needed for corpus-isolation
+                            # assertions against a live Qdrant that may
+                            # hold older leaked events).
+                            trial_id_attr = str(payload.get("trial_id") or "")
                             await registry.memory.write_event(
                                 subject=f"zetesis.report:{report_id}",
                                 predicate="zetesis.research.completed",
@@ -609,6 +617,7 @@ async def lifespan(app: FastAPI):
                                 confidence=1.0,
                                 attributes={
                                     "report_id": report_id,
+                                    "trial_id": trial_id_attr,
                                     "kind": "zetesis.report",
                                     "corpus_name": "zetesis-reports",
                                 },
