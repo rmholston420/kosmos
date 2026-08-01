@@ -531,9 +531,36 @@ async def lifespan(app: FastAPI):
             )
             registry.tektos_ui = _tektos_ui_app
             registry.tektos_ui_executor = _tektos_ui_executor
-            app.mount("/tektos-ui", _tektos_ui_app)
+            # Guard against duplicate mounts when lifespan is re-entered
+            # (TestClient reuses the module-level `app` across many tests).
+            if not any(getattr(r, "path", "") == "/tektos-ui" for r in app.routes):
+                app.mount("/tektos-ui", _tektos_ui_app)
         except Exception as exc:  # noqa: BLE001
             registry.errors["tektos_ui"] = f"{type(exc).__name__}: {exc}"
+
+    # --- Stage 1 GUI mount: serve Next.js static export at kernel root "/"
+    # (ADR-067). Runs last so `/api/*`, `/health`, `/openapi.json`, `/docs`,
+    # `/gnosis-gate`, `/tektos-ui` all resolve first via Starlette's
+    # insertion-order routing. Skipped silently if `ui/out` is absent.
+    try:
+        from pathlib import Path as _KosmosPath
+        from fastapi.staticfiles import StaticFiles as _KosmosStaticFiles
+
+        _kosmos_ui_out = _KosmosPath(__file__).resolve().parent.parent / "ui" / "out"
+        if _kosmos_ui_out.is_dir() and not any(
+            getattr(r, "name", "") == "kosmos-ui" for r in app.routes
+        ):
+            app.mount(
+                "/",
+                _KosmosStaticFiles(directory=str(_kosmos_ui_out), html=True),
+                name="kosmos-ui",
+            )
+    except Exception as _kosmos_ui_exc:  # noqa: BLE001
+        import logging as _kosmos_logging
+
+        _kosmos_logging.getLogger(__name__).warning(
+            "Kosmos UI not mounted at /: %s", _kosmos_ui_exc
+        )
 
     yield
 
@@ -1592,3 +1619,30 @@ def _dataclass_to_dict(obj: Any) -> Any:
             if not k.startswith("_")
         }
     return obj
+
+# --- KOSMOS_STAGE_1_GNOSIS_GATE_MOUNT (ADR-067) ---
+# Stage 1 GUI mount: Gnosis Stage 4.6 gate is a distinct ASGI sub-app; every
+# other GUI-required endpoint already lives at /api/* on this kernel app.
+# See ADR-067 (Stage 1 GUI · kernel_ui_glue superseded).
+try:
+    from adapters.memory.dozerdb.gate.server import (
+        build_stage_46_gate_app as _kosmos_build_stage_46_gate_app,
+    )
+    from adapters.memory.dozerdb.corpora import ALL_CORPORA as _KOSMOS_ALL_CORPORA
+
+    if not any(getattr(r, "path", "") == "/gnosis-gate" for r in app.routes):
+        app.mount("/gnosis-gate", _kosmos_build_stage_46_gate_app(corpora=_KOSMOS_ALL_CORPORA))
+except Exception as _kosmos_gate_exc:  # noqa: BLE001
+    import logging as _kosmos_logging
+
+    _kosmos_logging.getLogger(__name__).warning(
+        "Kosmos Gnosis gate not mounted at /gnosis-gate: %s", _kosmos_gate_exc
+    )
+# --- END KOSMOS_STAGE_1_GNOSIS_GATE_MOUNT ---
+
+# --- BEGIN KOSMOS_STAGE_1_UI_MOUNT ---
+# Stage 1 GUI mount is performed inside the lifespan (see below), *after*
+# all sub-app mounts (`/tektos-ui`, `/gnosis-gate`) so those retain
+# first-match priority. Module-scope mounting would prepend the static
+# handler and shadow `/tektos-ui/*`. Left as a marker only.
+# --- END KOSMOS_STAGE_1_UI_MOUNT ---

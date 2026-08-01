@@ -501,3 +501,106 @@ Entry format per `kosmos-log-maintenance` skill:
   - `plugins/tektos/ui/templates.py`
   - `tests/kernel/test_stage_6_5_9_gui_enablement.py` (D5 test class)
 - **Related BUILD_LOG entry:** 2026-08-01 04:35 EDT
+
+## 2026-08-01 05:07 EDT — `next build` TS2345 on `useState(null)` in Stage 1 GUI
+
+- **Symptom:** `./app/gnosis/[corpusName]/page.tsx:21:30 Type error: Argument of type 'string' is not assignable to parameter of type 'SetStateAction<null>'.` — `next build` on Colossus after `git pull` of `stage-1-gui-shell`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell (`ui/app/gnosis/*`, `ui/app/zetesis/page.tsx`).
+- **Root cause:** `useState(null)` under `"strict": true` in `tsconfig.json` infers the state type as `null` (not `null | T`), so any subsequent setter call with a string/object fails TS2345. Multiple pages had this pattern.
+- **Fix applied:** Added explicit generic type parameters to every `useState` call in the affected pages (`useState<string | null>(null)`, `useState<Corpus[]>([])`, etc.). Annotated `.catch(e: unknown)`, `.then(x: unknown)`, and `.map((c: T, i: number)` callbacks. Typed `params.corpusName` (`string | string[]`) with a `Array.isArray()` resolver.
+- **Files changed:**
+  - `ui/app/gnosis/page.tsx`
+  - `ui/app/gnosis/[corpusName]/page.tsx`
+  - `ui/app/zetesis/page.tsx`
+- **Related BUILD_LOG entry:** 2026-08-01 05:07 EDT
+
+## 2026-08-01 05:07 EDT — `test_sub_app_mounted_under_tektos_ui` fails with 13 duplicate `/tektos-ui` routes
+
+- **Symptom:** `AssertionError: expected a Mount at /tektos-ui, got: [...]` with 13 duplicate `/tektos-ui` entries in `app.routes`. Test at `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py:213` compares `mount_paths == ["/tektos-ui"]` and fails when the count exceeds 1.
+- **Affected stage / plugin / port:** Stage 6.5.8 (Tektos UI kernel mount, ADR-065) surfaced during Stage 1 full-tier retest.
+- **Root cause:** `kernel/app.py` mounts `/tektos-ui` inside the lifespan `@asynccontextmanager` at line 534. FastAPI/Starlette `TestClient` enters lifespan on every client construction, so a full `pytest tests/kernel/` run that constructs many `TestClient` instances re-runs the lifespan block and re-mounts `/tektos-ui` each time onto the shared module-level `app` object. Existing routes are never deduplicated. Bug shipped in ADR-065 (2026-07-30) but was masked because 6.5.8 test-tier runs collected fewer than 2 TestClient instances before the assertion. 6.5.9 tier expansion pushed the count past 1.
+- **Fix applied:** Added an idempotency guard around the mount call: `if not any(getattr(r, "path", "") == "/tektos-ui" for r in app.routes): app.mount(...)`. Same guard added preemptively to the new Stage 1 Gnosis-gate mount (module-scope, so belt-and-suspenders). Preserves cold-boot semantics.
+- **Files changed:**
+  - `kernel/app.py`
+- **Related BUILD_LOG entry:** 2026-08-01 05:07 EDT
+
+## 2026-08-01 05:07 EDT — Playwright web-server cannot find `.next` build
+
+- **Symptom:** `[WebServer] Error: Could not find a production build in the '.next' directory. Try building your app with 'next build' before starting the production server.` — Playwright refuses to start `next start`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell test tier.
+- **Root cause:** Cascade of the TS2345 build failure above. `next build` exits non-zero → no `.next` directory → `playwright.config.ts` `webServer.command` (`next start`) exits 1.
+- **Fix applied:** Fixed the underlying TS2345 errors (see entry above). No Playwright-config change needed.
+- **Files changed:** none in this entry
+- **Related BUILD_LOG entry:** 2026-08-01 05:07 EDT
+
+## 2026-08-01 05:10 EDT — `next build` TS "Expected 4 arguments, but got 2" on `gnosisGateClient.query`
+
+- **Symptom:** `./app/gnosis/[corpusName]/page.tsx:43:22 Type error: Expected 4 arguments, but got 2. gnosisGateClient.query(corpusName, query).then(...)`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell (`ui/lib/kernel-client.ts`).
+- **Root cause:** `gnosisGateClient.query(corpusName, q, asOf, limit)` had all four params untyped. Under `"strict": true`, TypeScript treats them all as implicitly required. Caller only passed 2 args → TS2554.
+- **Fix applied:** Explicit types on every `gnosisGateClient.*` method parameter. Marked `asOf?: string, limit?: number` optional on `query()`. Same treatment applied to `getJSONFromBase`.
+- **Files changed:** `ui/lib/kernel-client.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:10 EDT.
+
+## 2026-08-01 05:13 EDT — `next build` fails: `Page "/gnosis/[corpusName]" is missing "generateStaticParams()"`
+
+- **Symptom:** `Error: Page "/gnosis/[corpusName]" is missing "generateStaticParams()" so it cannot be used with "output: export" config.`
+- **Affected stage / plugin / port:** Stage 1 · GUI shell (`ui/next.config.js` uses `output: "export"`).
+- **Root cause:** Under `output: "export"`, Next.js pre-renders every route at build time. Dynamic segments (`[corpusName]`, `[approvalId]`) demand a `generateStaticParams()` function that enumerates every possible value — impossible here because IDs are only known at runtime against a running kernel + graph store.
+- **Fix applied:** Replaced both dynamic-segment routes with static routes that read the identifier from a query string via `useSearchParams()`. Wrapped the `useSearchParams()`-using tree in `<Suspense>` per Next 16 static-export contract. Updated internal link generators and Playwright tests to point at the new URLs.
+- **Files changed:** `ui/app/gnosis/[corpusName]/page.tsx` (removed), `ui/app/tektos/[approvalId]/page.tsx` (removed), `ui/app/gnosis/detail/page.tsx` (new), `ui/app/tektos/detail/page.tsx` (new), `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/tests/03-tektos-plan-workflow.spec.ts`, `ui/tests/07-gnosis-gate.spec.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:13 EDT.
+
+## 2026-08-01 05:16 EDT — Playwright `webServer` fails: `next start does not work with output: export`
+
+- **Symptom:** `[WebServer] Error: "next start" does not work with "output: export" configuration. Use "npx serve@latest out" instead. Process from config.webServer was not able to start. Exit code: 1.`
+- **Affected stage / plugin / port:** Stage 1 · GUI shell.
+- **Root cause:** With `output: "export"` the built artifact is a static `out/` directory. `next start` is a SSR server and refuses to serve it. Even a static file server (`serve out`) would put the UI on a different origin than the kernel's `/api/*`, breaking client fetches and requiring CORS.
+- **Fix applied:** Mounted `ui/out/` on the FastAPI kernel at root path `/` via `StaticFiles(html=True)`, so UI and API share origin `http://127.0.0.1:8000`. Removed the Playwright `webServer` block; `baseURL` now points at the kernel port. Build order: `next build` → uvicorn (already running) picks up `ui/out/` via idempotent module-scope mount check → `playwright test`.
+- **Files changed:** `ui/next.config.js`, `ui/playwright.config.ts`, `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/components/Sidebar.tsx`, `kernel/app.py`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:16 EDT.
+
+## 2026-08-01 05:33 EDT — Playwright test asserts wrong shape for `/api/resources/balances`
+
+- **Symptom:** `TypeError: balances.map is not a function at tests/06-resources-and-slo.spec.ts:12:30`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell tests.
+- **Root cause:** Endpoint returns a dict keyed by ResourceKind (per ADR-066 D2, kernel/app.py:676-695). Test assumed a list.
+- **Fix applied:** Test now reads keys via `Object.keys(balances)` and asserts each ResourceKind name is present. Client `getResourceBalances` type also corrected to `Record<string, ResourceBalance | null>`.
+- **Files changed:** `ui/tests/06-resources-and-slo.spec.ts`, `ui/lib/kernel-client.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:33 EDT.
+
+## 2026-08-01 05:33 EDT — Agent Trace panel test races the on-mount fetch
+
+- **Symptom:** `expect(locator).toBeVisible() failed. Locator: getByTestId('agent-trace-empty'). Timeout: 5000ms. Error: element(s) not found.`
+- **Affected stage / plugin / port:** Stage 1 · GUI shell tests.
+- **Root cause:** Panel renders `agent-trace-list` OR `agent-trace-empty` after `kernelClient.listAnomalies()` resolves. Test branched on `list.count()` before either testid was in the DOM, so the else-branch assertion timed out.
+- **Fix applied:** Added `await expect(list.or(empty)).toBeVisible()` before the branch, gating the entire assertion on the fetch completing.
+- **Files changed:** `ui/tests/04-agent-trace.spec.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:33 EDT.
+
+## 2026-08-01 05:34 EDT — Agent Trace panel: neither `agent-trace-list` nor `agent-trace-empty` ever renders
+
+- **Symptom:** `expect(list.or(empty)).toBeVisible()` times out even after adding the race gate. `panel-AGENT_TRACE` is visible but neither child appears.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell.
+- **Root cause:** `kernelClient.listAnomalies()` resolves with a non-array payload in the live-kernel case (e.g. a `{detail: ...}` dict when the phrouros registry entry is not what the endpoint expects). `setAnomalies(nonArray)` bypasses `.catch`, then `anomalies.length === 0` is `undefined === 0 → false`, so React tries `.map` on a non-array and throws mid-render — the panel body silently stops rendering.
+- **Fix applied:** Coerced fetch results to arrays with `Array.isArray(r) ? r : []` in AgentTracePanel, ApprovalsQueuePanel, and the Tektos index page. Kernel endpoint itself is unchanged.
+- **Files changed:** `ui/components/panels/AgentTracePanel.tsx`, `ui/components/panels/ApprovalsQueuePanel.tsx`, `ui/app/tektos/page.tsx`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:34 EDT.
+
+## 2026-08-01 05:36 EDT — Agent Trace: PlaceholderPanel shadows the real component when no plugin registers the slot
+
+- **Symptom:** `expect(list.or(empty)).toBeVisible()` still fails after array-coercion hardening. `/api/phrouros/anomalies` returns `200 []`, panel wrapper `panel-AGENT_TRACE` is visible, but neither `agent-trace-list` nor `agent-trace-empty` ever appears.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell.
+- **Root cause:** `PanelGrid.renderPanelBySlot()` returns `PlaceholderPanel` when `slotPanels.length === 0`. `PlaceholderPanel` reuses `data-testid={`panel-${slot}`}`, so the wrapper looks present but it renders `panel-AGENT_TRACE-empty`, not `agent-trace-empty`. The real `AgentTracePanel` (which owns those child testids) was never mounted.
+- **Fix applied:** Special-case AGENT_TRACE in `PanelGrid` to always render `AgentTracePanel`, since Phrouros anomalies are surfaced directly from the kernel and are not owned by any panel-registering plugin.
+- **Files changed:** `ui/components/PanelGrid.tsx`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:36 EDT.
+
+## 2026-08-01 05:40 EDT — Kernel `/` static mount shadows `/tektos-ui/*` (fixup #4 regression)
+
+- **Symptom:** `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py::test_tektos_ui_healthz_reachable` fails with `assert 404 == 200` after building `ui/out/`.
+- **Affected stage / plugin / port:** Stage 1 GUI same-origin mount vs. Stage 6.5.8 Tektos UI mount.
+- **Root cause:** The Stage 1 UI mount registered `/` at module scope (before lifespan). `/tektos-ui` mounts inside lifespan. Starlette matches routes in insertion order, so the module-scope `/` mount was resolved first and swallowed `/tektos-ui/healthz`.
+- **Fix applied:** Move UI mount inside lifespan, right after the `/tektos-ui` mount and before `yield`, so it lands last in `app.routes`. Idempotent name-guard prevents duplicate mounts across TestClient re-enters.
+- **Files changed:** `kernel/app.py`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:40 EDT.

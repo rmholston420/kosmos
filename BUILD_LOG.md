@@ -2214,3 +2214,156 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Zero new port surface; zero new file under `adapters/`. `_WebSocketAlgedonicSink` is a kernel-internal `Sink`-protocol implementation, not a port.
 - **PORTING_LEDGER / ADR updated:** ADR-066 authored + ratified. Zero `PORTING_LEDGER.md` change.
 - **Stop-condition status:** in-progress — PR #10 opened, awaiting Colossus retest.
+
+## 2026-08-01 05:04 EDT — Stage 1 · GUI shell (ADR-057 + ADR-067) — branch ready
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · Next.js 16 static export + Gnosis Stage 4.6 gate mount (ADR-057, ADR-067)
+- **What changed:**
+  - Scaffolded `ui/` — Next.js 16 static export shell wired to existing `/api/*` kernel routes.
+    - `ui/app/`: root layout + provider tree + Zetesis research page.
+    - `ui/components/`: top bar (Cmd+K stub, algedonic pill, model-swap stub), sidebar, kernel-schema debug panel, approvals inbox, phrouros anomalies panel, resources balance/queue panel, notifications tray, Gnosis panel, Zetesis research page shell — all Radix + Tailwind + OKLCH tokens.
+    - `ui/lib/kernel-client.ts` — typed client for kernel routes.
+    - `ui/tests/*.spec.ts` — 9 Playwright specs (`00-empty-state` through `08-zetesis-research`).
+    - `ui/next.config.js` sets `output: "export"`.
+    - `ui/package.json`, `ui/tsconfig.json`, `ui/playwright.config.ts`.
+    - `npm install` complete (53 packages); Playwright chromium installed.
+  - Kernel mount (`kernel/app.py`): appended one `app.mount("/gnosis-gate", build_stage_46_gate_app(corpora=ALL_CORPORA))` block, best-effort exception-guarded, module-scope. No other kernel change.
+  - **ADR-067 authored** — supersedes `Kosmos-gui-build-spec-v1.md` §5 `kernel_ui_glue` router.
+    Cross-reference against `kernel/app.py` at commit `3197b6d` (Stage 6.5.9) shows every glue-router
+    endpoint already lives at the identical `/api/*` path on the kernel FastAPI app. Spec's mount
+    block referenced non-existent module-level names — real adapter access flows through `registry.*`.
+    - D1: `kernel_ui_glue/` package NOT included; UI targets `/api/*` directly.
+    - D2: Gnosis Stage 4.6 gate mount at `/gnosis-gate` retained (distinct ASGI sub-app).
+    - D3: `ui/lib/kernel-client.ts` URLs corrected: `/api/kernel/tokens` → `/api/kernel/design-tokens`,
+      `POST /api/approvals/{id}/resolve` → split into `/approve` and `/reject` per ADR-062,
+      `/ws/algedonic` → `/api/algedonic/ws`.
+    - D4: `/api/tektos/plan/{id}[/approve|/execute|/diff]` UI wiring deferred to Stage 2 pending a
+      Tektos-plan-surface ADR (kernel only exposes `/api/tektos/turn` at 6.5.6). Client methods
+      preserved with a header comment marking the Stage 2 gap.
+    - D5: `Kosmos-gui-build-spec-v1.md` §5 note deferred to a follow-up amendment in the project
+      file repo (that spec is not tracked in the git repo).
+- **Files touched:**
+  - `ui/` (34 new files, full Next.js 16 shell)
+  - `kernel/app.py` (single Gnosis-gate mount block appended)
+  - `docs/adrs/ADR-067-stage-1-gui-glue-router-superseded.md` (new)
+  - `docs/adrs/README.md` (row inserted above ADR-066)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten with Stage 1 state)
+- **Ports / adapters affected:** none. Zero new port surface. `kernel_ui_glue/` intentionally NOT
+  added (superseded by ADR-067). No `adapters/` change; no plugin change.
+- **PORTING_LEDGER / ADR updated:** ADR-067 authored + ratified. Zero `PORTING_LEDGER.md` change
+  (Next.js is a build-time UI framework consumed via `ui/package.json` per ADR-057 static-export
+  policy; no runtime Python dependency).
+- **Stop-condition status:** in-progress — branch `stage-1-gui-shell` pushed, PR #11 to open; DoD
+  requires `ui/` builds green via `next build` and all Playwright test tiers green on Colossus.
+
+## 2026-08-01 05:07 EDT — Stage 1 · GUI shell fixes (TS strict + idempotent mount)
+
+- **Stage / plugin / port:** Stage 1 · GUI shell (ADR-057 + ADR-067)
+- **What changed:**
+  - `ui/app/gnosis/page.tsx`, `ui/app/gnosis/[corpusName]/page.tsx`, `ui/app/zetesis/page.tsx`: added explicit generic types to `useState` calls; annotated `.catch`/`.then`/`.map` callbacks; typed `params.corpusName` (`string | string[]` in Next 16) with a resolver. Fixes `next build` TS2345 under `"strict": true`.
+  - `kernel/app.py`: made `/tektos-ui` and `/gnosis-gate` mounts idempotent (skip re-mount if a route with the same path already exists on `app.routes`). Fixes `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py::test_sub_app_mounted_under_tektos_ui` which counted mount routes and failed with 13 duplicate `/tektos-ui` entries when the module-level `app` had its lifespan re-entered across many `TestClient` instances during a full-tier `pytest tests/kernel/` run. Preserves original mount semantics on cold boot.
+  - `.gitignore`: added `ui/next-env.d.ts`.
+- **Files touched:**
+  - `ui/app/gnosis/page.tsx`
+  - `ui/app/gnosis/[corpusName]/page.tsx`
+  - `ui/app/zetesis/page.tsx`
+  - `kernel/app.py`
+  - `.gitignore`
+  - `BUILD_LOG.md` (this entry)
+  - `DEBUG_LOG.md` (three new entries)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run of `next build`, `pytest tests/kernel/`, and `npx playwright test`.
+
+## 2026-08-01 05:10 EDT — Stage 1 · GUI shell fixup #2 — gnosisGateClient param typing
+
+- **Stage / plugin / port:** Stage 1 · GUI shell.
+- **What changed:** Added TypeScript parameter types to every method of `gnosisGateClient` in `ui/lib/kernel-client.ts`; marked `asOf` and `limit` on `query()` optional. Under `"strict": true`, untyped parameters are implicitly required, so `gnosisGateClient.query(corpusName, query)` was rejected because the caller only passed 2 of 4 (mistakenly-required) args. Also typed `getJSONFromBase(base, path)` explicitly (`string, string` → `Promise<unknown>`).
+- **Files touched:** `ui/lib/kernel-client.ts`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run.
+
+## 2026-08-01 05:13 EDT — Stage 1 · GUI shell fixup #3 — replace dynamic routes with query-string routes for static export
+
+- **Stage / plugin / port:** Stage 1 · GUI shell.
+- **What changed:**
+  - Removed `ui/app/gnosis/[corpusName]/page.tsx` and `ui/app/tektos/[approvalId]/page.tsx`. Next.js `output: "export"` rejects dynamic segments without a `generateStaticParams()` provider, which is unimplementable when the corpus/approval IDs are only known at runtime.
+  - Added `ui/app/gnosis/detail/page.tsx` — same component, reads `?corpus=<name>` via `useSearchParams()`. Wrapped in `<Suspense>` per Next 16 static-export requirement for `useSearchParams`.
+  - Added `ui/app/tektos/detail/page.tsx` — same component, reads `?id=<approval_id>`. Wrapped in `<Suspense>`.
+  - Updated link generators in `ui/app/gnosis/page.tsx` and `ui/app/tektos/page.tsx` to point at the new query-string URLs (`/gnosis/detail?corpus=...`, `/tektos/detail?id=...`, URL-encoded).
+  - Updated Playwright specs `ui/tests/03-tektos-plan-workflow.spec.ts` and `ui/tests/07-gnosis-gate.spec.ts` to navigate the new URLs.
+- **Files touched:** `ui/app/gnosis/[corpusName]/page.tsx` (removed), `ui/app/tektos/[approvalId]/page.tsx` (removed), `ui/app/gnosis/detail/page.tsx` (new), `ui/app/tektos/detail/page.tsx` (new), `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/tests/03-tektos-plan-workflow.spec.ts`, `ui/tests/07-gnosis-gate.spec.ts`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run.
+
+## 2026-08-01 05:16 EDT — Stage 1 · GUI shell fixup #4 — serve static export from kernel root, drop Playwright webServer
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · kernel same-origin mount.
+- **What changed:**
+  - Kept `output: "export"` in `ui/next.config.js`; added `trailingSlash: true` for static-export directory-index compatibility; removed the earlier `basePath` attempt.
+  - Added a `StaticFiles` mount at kernel root `/` in `kernel/app.py` (module-scope, idempotent-by-name, silent skip when `ui/out/` is absent). Mounted last so `/api/*`, `/health`, `/openapi.json`, `/docs`, `/gnosis-gate`, `/tektos-ui` retain first-match priority.
+  - Switched internal navigation to `next/link` in `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/components/Sidebar.tsx` for consistent Next.js routing.
+  - Rewrote `ui/playwright.config.ts`: dropped the `webServer` block entirely (kernel serves the UI now), pointed `baseURL` at `http://127.0.0.1:8000`.
+  - Playwright run order on Colossus is now: `cd ui && npx next build` (emits `ui/out/`) → kernel already running under uvicorn on 8000 → `cd ui && npx playwright test`.
+- **Files touched:** `ui/next.config.js`, `ui/playwright.config.ts`, `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/components/Sidebar.tsx`, `kernel/app.py`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** ADR-067 stays as-is (kernel is the same-origin host; this is the runtime consequence of "UI targets `/api/*` directly").
+- **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run against running kernel.
+
+## 2026-08-01 05:33 EDT — Stage 1 · GUI shell fixup #5 — align resource-balances test/client with dict shape; fix agent-trace race
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · test alignment.
+- **What changed:**
+  - `ui/tests/06-resources-and-slo.spec.ts` — `/api/resources/balances` returns a dict `{kind: balance|null}` per ADR-066 D2. Test was calling `balances.map(...)`. Rewrote to `Object.keys(balances)` so it validates all six ResourceKinds keys are present regardless of storage state.
+  - `ui/lib/kernel-client.ts` — corrected `getResourceBalances` return type from `ResourceBalance[]` to `Record<string, ResourceBalance | null>` to match the endpoint contract. No UI consumers exist yet, so this is a pure typing fix.
+  - `ui/tests/04-agent-trace.spec.ts` — race with the on-mount fetch. Added an explicit wait for `agent-trace-list` OR `agent-trace-empty` before branching on `list.count()`, so the assertion no longer fires while the fetch is still in flight.
+- **Files touched:** `ui/tests/06-resources-and-slo.spec.ts`, `ui/tests/04-agent-trace.spec.ts`, `ui/lib/kernel-client.ts`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run.
+
+## 2026-08-01 05:34 EDT — Stage 1 · GUI shell fixup #6 — harden list-fetch consumers against non-array responses
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · defensive typing.
+- **What changed:**
+  - `ui/components/panels/AgentTracePanel.tsx`, `ui/components/panels/ApprovalsQueuePanel.tsx`, `ui/app/tektos/page.tsx` — coerce `listAnomalies()`/`listPendingApprovals()` responses to arrays before `setState`. A non-array response (e.g. an error dict from a 503) made `anomalies.length` `undefined` so neither the empty-state paragraph nor the list rendered, breaking the Agent Trace panel test even after the race-condition gate.
+- **Files touched:** `ui/components/panels/AgentTracePanel.tsx`, `ui/components/panels/ApprovalsQueuePanel.tsx`, `ui/app/tektos/page.tsx`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run.
+
+## 2026-08-01 05:36 EDT — Stage 1 · GUI shell fixup #7 — always render AgentTracePanel (unowned Phrouros slot)
+
+- **Stage / plugin / port:** Stage 1 · GUI shell.
+- **What changed:**
+  - `ui/components/PanelGrid.tsx` — when zero plugins register an `AGENT_TRACE` panel, the grid used to fall back to `PlaceholderPanel`, which reuses `data-testid="panel-AGENT_TRACE"` but never renders the `agent-trace-list`/`agent-trace-empty` children. AGENT_TRACE surfaces `/api/phrouros/anomalies` directly (unowned by any panel-registering plugin), so always render `AgentTracePanel` for that slot regardless of registrations. Other slots retain the placeholder fallback.
+- **Files touched:** `ui/components/PanelGrid.tsx`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run.
+
+## 2026-08-01 05:40 EDT — Stage 1 · GUI shell fixup #8 — move UI mount into lifespan so `/tektos-ui/*` resolves first
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · kernel same-origin mount.
+- **What changed:**
+  - Moved the Next.js static-export `StaticFiles` mount from module scope to inside the FastAPI `lifespan`, immediately after the `/tektos-ui` mount and before `yield`. Module-scope registration inserted the root `/` handler at the top of `app.routes`, shadowing `/tektos-ui/*` — `test_tektos_ui_healthz_reachable` failed with 404.
+  - `/gnosis-gate` remains module-scope at line ~1610; the UI marker block at line ~1619 now only documents the strategy and defers to the lifespan block.
+- **Files touched:** `kernel/app.py`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus pytest re-run + Playwright confirmation.
+
+## 2026-08-01 05:45 EDT — Stage 1 · DoD-green · pre-merge log & handoff
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · session close.
+- **What changed:**
+  - Appended KNOWN_ISSUES.md entries for Next.js 16 CVE-2025-66478, deferred `PhrourosEngine.list_all()` (ADR-034 amendment), deferred `ResourcePort.get_balance()` (ADR-029 amendment).
+  - Overwrote SESSION_HANDOFF.md to reflect Stage 1 complete, pending PR #11 merge.
+  - Project wiki updated on the Kosmos project wiki (out-of-repo): `entities/rigpa-lms.md`, `projects/kosmos-lms.md`, `projects/kosmos-gui.md`, `index.md`.
+- **Files touched:** `KNOWN_ISSUES.md`, `SESSION_HANDOFF.md`, `BUILD_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none (ADR-067 already ratified in prior commit).
+- **Stop-condition status:** met — awaiting `gh pr merge 11`.
