@@ -2400,3 +2400,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none. ADR-066 D5 remains authoritative; these tests should have been updated in that commit.
 - **Stop-condition status:** met — Colossus pytest expected to return to green after this fixup.
+
+## 2026-08-01 06:50 EDT — Tektos-UI package re-exports TEKTOS_UI_HTMX_JS_TEMPLATE_HREF
+
+- **Stage / plugin / port:** Stage 6.5.9 · Tektos · UI package __init__ export (follow-up to 06:45 fixup)
+- **What changed:** ADR-066 D5 added `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF` to `plugins/tektos/ui/policy.py` but did not add it to `plugins/tektos/ui/__init__.py`'s re-export block. The prior test-fixup commit imported it from the package, which failed at collection. Added both the `from .policy import` line and the `__all__` entry.
+- **Files touched:** `plugins/tektos/ui/__init__.py`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** met — test collection expected to complete cleanly on next `pytest -q` run.
