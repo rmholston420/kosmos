@@ -15,6 +15,15 @@ import { defineConfig, devices } from "@playwright/test";
 // serializes execution against the single shared kernel process.
 export default defineConfig({
   testDir: "./tests",
+  // Diagnostics are excluded from the standard regression sweep because
+  // they call the real Zetesis research endpoint and can take 100s+ per
+  // run. Opt in by setting `KOSMOS_RUN_DIAGNOSTICS=1` on the command
+  // line, e.g.:
+  //   KOSMOS_RUN_DIAGNOSTICS=1 pnpm --dir ui exec playwright test \
+  //     tests/diagnostics/events-and-graph.spec.ts --project=chromium
+  testIgnore: process.env.KOSMOS_RUN_DIAGNOSTICS === "1"
+    ? []
+    : ["**/diagnostics/**"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
