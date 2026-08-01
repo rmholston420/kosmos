@@ -17,7 +17,7 @@
  *   pkill -f 'uvicorn kernel.app' && \
  *     uv run uvicorn kernel.app:app --host 127.0.0.1 --port 8000 &
  *   sleep 4
- *   pnpm --dir ui exec playwright test \
+ *   KOSMOS_RUN_DIAGNOSTICS=1 pnpm --dir ui exec playwright test \
  *     tests/diagnostics/events-and-graph.spec.ts \
  *     --project=chromium --reporter=list --workers=1
  *
