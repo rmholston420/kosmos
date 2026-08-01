@@ -1936,7 +1936,7 @@ async def read_gnosis_graph_communities(
             "degraded": True,
         }
 
-    facts = await _graph_query_memory_facts(corpus)
+    facts = await _graph_fetch_memory_facts(corpus, cap=500)
     reports = _graph_zetesis_reports(corpus)
     nodes, edges = _graph_project_nodes_edges(facts, reports)
     assignments, modularity = _compute_louvain_communities(facts, reports)

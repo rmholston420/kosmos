@@ -49,7 +49,9 @@ def _reset_suspension_state():
 
 
 def test_d6_kernel_version_6_6_0() -> None:
-    assert app.version == "6.6.0"
+    # Wave C locked version >= 6.6.0; later waves bump forward.
+    from packaging.version import Version
+    assert Version(app.version) >= Version("6.6.0")
 
 
 def test_d5_ws_default_types_include_kernel_lifecycle() -> None:
