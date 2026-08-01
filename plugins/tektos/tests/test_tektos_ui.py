@@ -46,6 +46,7 @@ from plugins.tektos.ui import (
     NopExecutor,
     TEKTOS_UI_HEALTHZ_PATH,
     TEKTOS_UI_HTMX_JS_PATH,
+    TEKTOS_UI_HTMX_JS_TEMPLATE_HREF,
     TEKTOS_UI_HTMX_SHA256,
     TEKTOS_UI_HTMX_UPSTREAM_COMMIT,
     TEKTOS_UI_HTMX_UPSTREAM_LICENSE,
@@ -295,7 +296,7 @@ def test_index_returns_dashboard_shell_with_htmx_script_tag() -> None:
     with _client(resolver=resolver, memory=memory) as client:
         response = client.get(TEKTOS_UI_INDEX_PATH)
     assert response.status_code == 200
-    assert TEKTOS_UI_HTMX_JS_PATH in response.text
+    assert TEKTOS_UI_HTMX_JS_TEMPLATE_HREF in response.text
     assert "apex-1" in response.text
     assert "add-dark-mode" in response.text
 
@@ -518,7 +519,7 @@ def test_plan_approve_execute_diff_flow_visible_in_kernel_dashboard_build_sequen
         assert index.status_code == 200
         assert "apex-1" in index.text
         assert "add-dark-mode" in index.text
-        assert TEKTOS_UI_HTMX_JS_PATH in index.text
+        assert TEKTOS_UI_HTMX_JS_TEMPLATE_HREF in index.text
         # Approve leg.
         approve = client.post(
             TEKTOS_UI_PLAN_APPROVE_PATH.format(approval_id="apex-1")

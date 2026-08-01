@@ -2367,3 +2367,139 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none (ADR-067 already ratified in prior commit).
 - **Stop-condition status:** met — awaiting `gh pr merge 11`.
+
+## 2026-08-01 06:15 EDT — ADR-068 authored (Stage 1.5 GUI realization scope + backend-gap ledger)
+
+- **Stage / plugin / port:** Stage 1.5 · GUI realization scope + backend deltas (no port change)
+- **What changed:** Authored `docs/adrs/ADR-068-stage-1-5-gui-realization-and-backend-gap-ledger.md` locking Stage 1.5 GUI realization to four sequential waves on branch `stage-1-5-gui-realized` with three additive backend deltas (D1 `GET /api/ollama/status`, D2 `GET /api/praxis/constitution`, D3 `GET /api/praxis/apex/policies`), hybrid IA (5 static job pages + preserved plugin routes), Tibetan Tailwind v4 `@theme` tokens hydrated from `/api/kernel/design-tokens`, and an explicit deferral list for `MEMORY_INTEGRITY` / `CONTEXT_PRESSURE` / `HARDWARE_RESILIENCE` / real `MODEL_SWAP_SLO` panels (each requires new port + Stage-TBD ADR). Backend audit against `kernel/app.py` v6.5.8 catalogued 22 HTTP endpoints, 2 WebSockets, `/gnosis-gate` HTML sub-app, `/tektos-ui` htmx sub-app. `/api/kernel/design-tokens` currently returns empty dict — no landed plugin registers non-empty `design_tokens`.
+- **Files touched:** `docs/adrs/ADR-068-stage-1-5-gui-realization-and-backend-gap-ledger.md` (new); `docs/adrs/README.md` (ADR-068 row inserted above ADR-067).
+- **Ports / adapters affected:** none (ADR is scope-only; port surface untouched).
+- **PORTING_LEDGER / ADR updated:** ADR-068 authored + indexed. PORTING_LEDGER unchanged this commit (Wave A commit will add `cmdk` VENDORED row; Wave D commit will add `cytoscape` VENDORED row).
+- **Stop-condition status:** met — ADR-068 lands as its own commit before Wave A code touches `kernel/app.py` or `ui/`.
+
+## 2026-08-01 06:35 EDT — ADR-068 Wave A backend deltas landed (kernel 6.5.9)
+
+- **Stage / plugin / port:** Stage 1.5 · kernel · 3 additive HTTP routes (no port change)
+- **What changed:** Landed the three backend deltas locked by ADR-068 as additive routes in `kernel/app.py`:
+  - **D1** `GET /api/ollama/status` — httpx passthrough to `${KOSMOS_OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/ps` returning `{model, size_vram, size_ram, vram_capacity_bytes}`. 32 GiB VRAM constant hardcoded for Colossus RTX 5090. 503 when `registry.llm is None`, 502 on transport failure (class-name preserved), idle-shape when no model loaded.
+  - **D2** `GET /api/praxis/constitution` — lazy-load + verify via `ConstitutionLoader(verify_on_init=True)`, then cache on `registry.praxis_constitution`. Returns `{version, sha256, ratified_at, title, article_count}` where sha256 is over `artifact.json_text`. 502 on tamper.
+  - **D3** `GET /api/praxis/apex/policies` — enumerates `plugins.praxis.apex.models.Trigger` (nine spec §14 Tier-2 triggers), each with `tier="HUMAN_REQUIRED"` and `active_since` = constitution's ratified_at. Sorted by policy_id.
+  - `FastAPI(version=)` bumped 6.5.8 → 6.5.9 (docstring header was already 6.5.9 from ADR-066, version string was overlooked at that lock-in).
+  - Kernel header route summary extended with the three new routes (ADR-068 D1/D2/D3).
+  - 11 new tests in `tests/kernel/test_stage_1_5_adr_068_backend_deltas.py` covering: D1 loaded-model / idle / 503 / 502; D2 verified-artifact / cache-hit / tamper-502; D3 nine-triggers / all-human-required / constitution-fail-cascades-502.
+- **Files touched:** `kernel/app.py` (header + 3 routes + version); `tests/kernel/test_stage_1_5_adr_068_backend_deltas.py` (new).
+- **Ports / adapters affected:** none — all three routes call existing subsystems (`registry.llm._base_url`, `ConstitutionLoader`, `Trigger` enum). ADR-007 respected (kernel imports `plugins.praxis.constitution.loader` + `plugins.praxis.apex.models` inside the route handlers; no cross-plugin import). Zero new pip dep (httpx already vendored via FastAPI's TestClient stack).
+- **PORTING_LEDGER / ADR updated:** none — ADR-068 already ratified in previous commit; no new vendored component.
+- **Stop-condition status:** met — user requested backend-only landing so Colossus can pull + run pytest before UI work begins. Wave A frontend blocked pending user green-light.
+
+## 2026-08-01 06:45 EDT — Tektos-UI test fixup for ADR-066 D5 (missed rename)
+
+- **Stage / plugin / port:** Stage 6.5.9 · Tektos · UI template test alignment (retroactive fix)
+- **What changed:** Two assertions in `plugins/tektos/tests/test_tektos_ui.py` still referenced `TEKTOS_UI_HTMX_JS_PATH` ("/htmx.min.js" — the ROUTE constant) after ADR-066 D5 renamed the template binding to `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF` ("htmx.min.js" — the bare mount-relative HREF). Updated both to assert `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF`. The route-level fetch at line 348 (`client.get(TEKTOS_UI_HTMX_JS_PATH)`) is correct as-is — the FastAPI decorator still binds `/htmx.min.js` per ADR-066 D5. Detected by Colossus full-suite pytest after ADR-068 backend deltas landed.
+- **Files touched:** `plugins/tektos/tests/test_tektos_ui.py` (3 edits: 1 import + 2 assertion sites).
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none. ADR-066 D5 remains authoritative; these tests should have been updated in that commit.
+- **Stop-condition status:** met — Colossus pytest expected to return to green after this fixup.
+
+## 2026-08-01 06:50 EDT — Tektos-UI package re-exports TEKTOS_UI_HTMX_JS_TEMPLATE_HREF
+
+- **Stage / plugin / port:** Stage 6.5.9 · Tektos · UI package __init__ export (follow-up to 06:45 fixup)
+- **What changed:** ADR-066 D5 added `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF` to `plugins/tektos/ui/policy.py` but did not add it to `plugins/tektos/ui/__init__.py`'s re-export block. The prior test-fixup commit imported it from the package, which failed at collection. Added both the `from .policy import` line and the `__all__` entry.
+- **Files touched:** `plugins/tektos/ui/__init__.py`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** met — test collection expected to complete cleanly on next `pytest -q` run.
+
+## 2026-08-01 06:15 EDT — Stage 1.5 GUI Wave A frontend: persistent shell + job segmentation
+
+- **Stage / plugin / port:** Stage 1.5 · kernel-ui-glue · Next.js UI at `ui/` (no port change; consumes `FrontendContractPort` schema + ADR-068 D1/D2/D3 additive routes)
+- **What changed:** Landed the full persistent-shell realization locked by ADR-068 as a UI-only patch:
+  - **Persistent shell** — moved every top-bar/drawer/sidebar/banner chrome into `ui/components/PersistentShell.tsx`, mounted globally in `ui/app/layout.tsx` (now a Server Component with `metadata` export). Home page `ui/app/page.tsx` becomes a bare `<PanelGrid panels={schema.panels}>` — no shell duplication.
+  - **Job-segmented sidebar** — `ui/components/Sidebar.tsx` rewritten to render two sections: (1) five VSM-derived job links (`/command`, `/operate`, `/govern`, `/observe`, `/memory`) via `data-testid="job-link-<path>"`; (2) plugin routes from the live `KernelSchema` via `data-testid="route-<path>"` (contract preserved for existing 01-shell test). `usePathname()` marks the active link with `aria-current="page"`.
+  - **Five job pages** — `ui/app/{command,operate,govern,observe,memory}/page.tsx`, each a thin `<JobPage>` wrapper (`ui/components/JobPage.tsx`) that filters `schema.panels` to a slot allow-list. Panel-slot mapping matches UX Design Spec §"Information Architecture, Job-Segmented, Not Data-Segmented".
+  - **`PanelGrid` slot-filter extension** — added optional `slots?: readonly PanelSlot[]` prop; when omitted (home `/`) all nine slots render as before, so the existing 01-shell nine-panel test contract stays intact.
+  - **Top-bar wiring (live)** — `ui/components/CommandPalette.tsx` (cmdk, MIT; Cmd+K keybind + static navigate group); `ui/components/AlgedonicPill.tsx` (WS-driven, color+text, never color-only); `ui/components/ModelSwapIndicator.tsx` (5s poll of `/api/ollama/status`, formats VRAM as `N.N / 32GB VRAM`); `ui/components/KillSwitch.tsx` (two-step confirm-then-really-suspend stub, no backend endpoint yet — deliberately unwired pending ADR).
+  - **Design-token hydration** — `ui/components/DesignTokenHydrator.tsx` fetches `/api/kernel/design-tokens` once on mount and sets each as a CSS custom property on `document.documentElement`; `data-tokens-hydrated="true"` on success. Tibetan Five-Wisdom OKLCH palette in `ui/app/globals.css` remains the authoritative default.
+  - **`kernelClient` extension** — added three typed helpers matching ADR-068 D1/D2/D3 route shapes: `getOllamaStatus()`, `getPraxisConstitution()`, `getPraxisApexPolicies()`. Types: `OllamaStatus`, `PraxisConstitution`, `PraxisApexPolicy` (shape verified against `kernel/app.py` handlers).
+  - **Playwright smoke** — 12 new tests in `ui/tests/09-persistent-shell.spec.ts`: top-bar all-four-indicators, drawer open/close, kill-switch two-step, Cmd+K palette contents, sidebar Jobs+Plugins sections, each of the five job pages renders its expected `panel-<SLOT>` set only.
+  - **PORTING_LEDGER** — new "Stage 1.5 · Kosmos UI Persistent Shell (ADR-068)" section: next 16, react 19, tailwindcss v4, @radix-ui/react-dialog, cmdk, @tanstack/react-query, zustand. All MIT. `cmdk` is the only new install this wave.
+- **Files touched:**
+  - `ui/package.json` (added `cmdk ^1.0.0`)
+  - `ui/app/layout.tsx` (rewritten: Server Component + PersistentShell wrapper)
+  - `ui/app/page.tsx` (slimmed: PanelGrid only)
+  - `ui/app/{command,operate,govern,observe,memory}/page.tsx` (new)
+  - `ui/components/PersistentShell.tsx` (new)
+  - `ui/components/JobPage.tsx` (new)
+  - `ui/components/Sidebar.tsx` (rewritten: Jobs + Plugins sections)
+  - `ui/components/PanelGrid.tsx` (slot allow-list prop)
+  - `ui/components/AlgedonicPill.tsx` (new)
+  - `ui/components/ModelSwapIndicator.tsx` (new)
+  - `ui/components/CommandPalette.tsx` (new)
+  - `ui/components/KillSwitch.tsx` (new)
+  - `ui/components/DesignTokenHydrator.tsx` (new)
+  - `ui/lib/kernel-client.ts` (3 new methods + 3 new types)
+  - `ui/tests/09-persistent-shell.spec.ts` (new, 12 tests)
+  - `PORTING_LEDGER.md` (Stage 1.5 UI section)
+- **Ports / adapters affected:** none. UI-only; consumes existing `FrontendContractPort` schema + ADR-068 D1/D2/D3 additive routes. ADR-007 preserved (no cross-plugin imports; all cross-plugin references go through the kernel schema).
+- **PORTING_LEDGER / ADR updated:** `PORTING_LEDGER.md` (Stage 1.5 section). ADR-068 remains the authoritative decision record.
+- **Stop-condition status:** met for Wave A. Blocked pending Colossus `pnpm i && (cd ui && npx next build) && pytest -q && (cd ui && npx playwright test)` sign-off before Waves B–D.
+
+## 2026-08-01 06:33 EDT — Stage 1.5 Wave B · Governance surface wired (ADR-068 D2/D3)
+
+- **Stage / plugin / port:** Stage 1.5 · Kosmos UI · Governance surface
+- **What changed:** UI-only patch that turns the previously-skeletal GOVERNANCE panel + APPROVALS_QUEUE-on-`/govern` into a live surface backed by the ADR-068 backend deltas already merged in kernel 6.5.9:
+  - **GovernancePanel** rewritten to fetch `/api/praxis/constitution` (D2) + `/api/praxis/apex/policies` (D3) on mount. Renders three subsections: constitution card (title, version, ratified_at, article_count, sha256[:12]), apex-policies list (all 9 Tier-2 triggers labelled HUMAN_REQUIRED, sorted by policy_id), and a visible-but-disabled Phrouros oversight surface (`data-enabled="false"`, `aria-disabled="true"`) placeholder for future anomaly-review + veto endpoints. Preserves prior "registered governance panels" ref list when non-empty.
+  - **Panel now always renders** even with zero registered GOVERNANCE-slot panels — the panel owns its own kernel fetches. `PanelGrid` short-circuits GOVERNANCE (like AGENT_TRACE) to bypass the placeholder fallback.
+  - **ApprovalsQueuePanel** gains optional `governanceMode?: boolean` prop. When true (`/govern` opts in), renders records grouped by tier — HUMAN_REQUIRED → HUMAN_REVIEW → AUTONOMOUS with per-tier counts and empty markers; when false (default, home `/` and `/command`), preserves the legacy flat `approvals-list` view. `data-governance-mode` attribute exposed on the article for testability.
+  - **`PanelGrid` + `JobPage`** plumb `governanceMode` through so only the `/govern` `<JobPage>` sets it — every other surface stays in legacy mode.
+  - **Playwright smoke** — 5 new tests in `ui/tests/10-governance-surface.spec.ts`: constitution card renders all 5 fields (or `role="alert"` error), apex policies enumerate ≥1 row all HUMAN_REQUIRED, Phrouros surface is visible-but-disabled, `/govern` opts APPROVALS_QUEUE into governance mode, `/command` regression guard confirms tier-grouped view does NOT leak there.
+- **Files touched:**
+  - `ui/components/panels/GovernancePanel.tsx` (rewritten)
+  - `ui/components/panels/ApprovalsQueuePanel.tsx` (governanceMode prop + tier grouping)
+  - `ui/components/PanelGrid.tsx` (GOVERNANCE always-render + governanceMode plumbing)
+  - `ui/components/JobPage.tsx` (governanceMode prop pass-through)
+  - `ui/app/govern/page.tsx` (governanceMode enabled)
+  - `ui/tests/10-governance-surface.spec.ts` (new, 5 tests)
+- **Ports / adapters affected:** none. UI-only; consumes existing D2/D3 routes.
+- **PORTING_LEDGER / ADR updated:** none (no new vendored deps; ADR-068 remains authoritative).
+- **Stop-condition status:** met for Wave B pending Colossus test pass.
+
+## 2026-08-01 06:49 EDT — Stage 1.5 Wave C · Kernel kill-switch backend + wiring (ADR-069)
+
+- **Stage / plugin / port:** Stage 1.5 · Kernel · lifecycle kill-switch (soft-suspend)
+- **What changed:** Wires the previously-stub top-bar kill-switch to a real kernel-level suspend/resume gate. ADR-069 authored (Proposed). Semantics per UX Design Spec §Persistent Top Bar: soft-suspend, not hard process kill — UI must stay alive to show suspended state and offer resume.
+  - **`kernel/app.py`**: version bump `6.5.9 → 6.6.0`; `_BootRegistry` gains `suspended: bool`, `suspended_at: str | None`, `suspend_reason: str | None`; `WS_DEFAULT_EVENT_TYPES` extended by `kernel.suspended` + `kernel.resumed`; asymmetric middleware gate — allow-lists `/health`, `/api/kernel/**`, `/api/events/ws`, `/api/algedonic/ws`, `HEAD`/`OPTIONS`; every other request while suspended returns 503 `{detail: "kernel suspended", suspended_at, reason}`; three new routes:
+    - `POST /api/kernel/kill` — idempotent (first reason wins), optional `{reason?}` body, publishes `kernel.suspended` on transition
+    - `POST /api/kernel/resume` — idempotent, publishes `kernel.resumed` on transition
+    - `GET /api/kernel/suspension` — read-only, never gated
+  - **`ui/lib/kernel-client.ts`**: `killKernel(reason?)`, `resumeKernel()`, `getSuspensionStatus()` + typed `KernelSuspensionStatus | KernelKillResponse | KernelResumeResponse`.
+  - **`ui/components/KillSwitch.tsx`**: two-step confirm dialog with reason input, POSTs on second confirm; polls `/api/kernel/suspension` every 3s; when suspended renders `kernel-suspended-banner` (role=status, aria-live) with reason + resume button; trigger toggles to a resume affordance while suspended.
+  - **`ui/components/CommandPalette.tsx`**: adds `Plugins` group enumerated from live `/api/kernel/schema` `plugins[].routes[]`, deduped by path, slug-encoded testids (`cmdk-item-plugin-<slug>`). Gracefully absent when schema returns no plugin routes.
+  - **`tests/kernel/test_stage_1_5_adr_069_kill_switch.py`** (new, 15 tests): version, WS types, GET baseline, kill (with/without reason, idempotent, empty-string reason ignored), resume (clears, idempotent), middleware (health/kernel introspection reachable, resume reachable, mutating routes 503 with detail, non-kernel GET gated, non-API paths untouched).
+  - **`ui/tests/11-kill-switch.spec.ts`** (new, 5 Playwright tests): two-step confirm + backend round-trip, resume clears banner, mutating routes 503 while suspended, kernel introspection stays 200, cmdk plugin-actions group enumerates schema routes.
+- **Files touched:**
+  - `docs/adrs/ADR-069-stage-1-5-kernel-kill-switch.md` (new)
+  - `docs/adrs/README.md` (ADR-069 row)
+  - `kernel/app.py` (registry fields, version, middleware, 3 endpoints, `_publish_kernel_event` helper, WS_DEFAULT_EVENT_TYPES)
+  - `ui/lib/kernel-client.ts` (3 methods + 3 interfaces)
+  - `ui/components/KillSwitch.tsx` (wired)
+  - `ui/components/CommandPalette.tsx` (Plugins group)
+  - `tests/kernel/test_stage_1_5_adr_069_kill_switch.py` (new, 15 tests)
+  - `ui/tests/11-kill-switch.spec.ts` (new, 5 tests)
+- **Ports / adapters affected:** none. Uses existing `EventBusPort` via `_publish_kernel_event` for best-effort event emission (never blocks control action on bus failure).
+- **PORTING_LEDGER / ADR updated:** ADR-069 authored (Proposed). No new vendored components — cmdk + Radix Dialog already ledgered from Wave A.
+- **Stop-condition status:** met pending Colossus green build + green pytest + green Playwright.
+
+## 2026-08-01 07:07 EDT — Stage 1.5 Wave C · GREEN on Colossus
+
+- **Stage / plugin / port:** Stage 1.5 · Kernel + UI · kill-switch (ADR-069) validation
+- **What changed:** Wave C validated end-to-end on Colossus after forcing a clean Next.js static-export rebuild. No code changes this entry — validation only.
+  - `pytest tests/kernel/test_stage_1_5_adr_069_kill_switch.py -v` → **15/15 passed**.
+  - `npx playwright test tests/11-kill-switch.spec.ts` → **5/5 passed**.
+  - Full Playwright (`npx playwright test`) → **38 passed / 6 skipped / 0 failed** across all 11 spec files.
+  - Kernel `/health` remained `200 OK` before, between, and after Playwright runs; middleware asymmetric gate confirmed at runtime (`POST /api/approvals/nonexistent/approve` → 503 while suspended, `/health` + `/api/kernel/**` stayed 200).
+- **Root cause of prior 27-failure run (2026-08-01 06:59 EDT):** stale `ui/out` static export — browser requested chunk hashes that no longer existed after Wave C's incremental client-code changes, hydration failed, no `data-testid` elements rendered. Fix: always `rm -rf ui/.next ui/out` before `npx next build` when Wave-C-touched client components change. Recorded in DEBUG_LOG.
+- **Files touched:** none (validation-only entry).
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none. ADR-069 status can now be moved from `Proposed` to `Ratified` on Wave C merge.
+- **Stop-condition status:** MET. Wave C ready to merge. Wave D (Memory Integrity graph) unblocked.

@@ -1,39 +1,33 @@
-# Kosmos Session Handoff — 2026-08-01 05:45 EDT
+# Kosmos Session Handoff — 2026-08-01 07:08 EDT
 
 ## Current build-sequencing position
-
-- **Stage / phase:** Stage 1 GUI shell — **COMPLETE pending PR #11 merge**.
-- **Plugin / kernel component:** Next.js 16 static-export UI at `ui/` served same-origin from the FastAPI kernel at `/`, inside lifespan (ADR-067).
-- **Port(s) in progress:** none — Stage 1 does not introduce new ports.
+- **Stage / phase:** Stage 1.5 · GUI realization · **Wave C GREEN on Colossus**
+- **Plugin / kernel component:** Kernel kill-switch (soft-suspend, ADR-069) + Kosmos UI (KillSwitch, CommandPalette, KernelSuspensionBanner) — validated end-to-end
+- **Port(s) in progress:** none. Wave C uses existing `EventBusPort` best-effort emit.
 
 ## Completed this session
-
-- Stage 1 GUI shell landed on `stage-1-gui-shell` (HEAD `1059ace`, PR #11):
-  - Fixup #3 — query-string routes replace dynamic segments (`/gnosis/detail?corpus=`, `/tektos/detail?id=`) with `<Suspense>`.
-  - Fixup #4 — Playwright `webServer` removed; `baseURL = 127.0.0.1:8000`; kernel serves UI + API same-origin.
-  - Fixup #5 — resource-balances dict alignment; agent-trace race gate.
-  - Fixup #6 — defensive `Array.isArray` coercion on list-fetch consumers.
-  - Fixup #7 — `PanelGrid` always renders real `AgentTracePanel` (Phrouros anomalies are unowned).
-  - Fixup #8 — UI mount moved into lifespan so `/tektos-ui/*` retains first-match priority (fixed `test_tektos_ui_healthz_reachable` 404 regression).
-- Kernel tests: pytest 671/671 green.
-- Playwright: 17/22 pass, 5 correctly skipped (Tektos plan seeded-plan requirement, algedonic deliver_algedonic fixture, Gnosis corpus-detail load).
-- `next build`: 8/8 static routes.
-- Project wiki updated (entities/rigpa-lms.md, projects/kosmos-lms.md, projects/kosmos-gui.md, index.md) to reflect Stage 1 GUI landing.
-- KNOWN_ISSUES.md entries added: Next.js 16.0.0 CVE-2025-66478 (deferred to Stage 2), `PhrourosEngine.list_all()` (ADR-034 amendment deferred), `ResourcePort.get_balance()` (ADR-029 amendment deferred).
+- Wave A landed and green (persistent shell + job-segmented sidebar + 5 job pages, commit `90dc57b`, ADR-068).
+- Wave B landed and green (governance surface wired to `/api/praxis/*`, commit `6c42015`, ADR-068 D2/D3).
+- Wave C authored, wired, and green:
+  - `ADR-069-stage-1-5-kernel-kill-switch.md` (Proposed → ready to Ratify on merge).
+  - `kernel/app.py` version 6.6.0, `_BootRegistry.suspended/suspended_at/suspend_reason`, `WS_DEFAULT_EVENT_TYPES` += `kernel.suspended`/`kernel.resumed`, asymmetric middleware (only gates `/api/**`, allow-lists `/api/kernel/**`, `/api/events/ws`, `/api/algedonic/ws`, `/health`, HEAD/OPTIONS), three endpoints: `POST /api/kernel/kill`, `POST /api/kernel/resume`, `GET /api/kernel/suspension`, `_publish_kernel_event` helper.
+  - `ui/lib/kernel-client.ts` — `killKernel`, `resumeKernel`, `getSuspensionStatus` + 3 typed interfaces.
+  - `ui/components/KillSwitch.tsx` — two-step confirm w/ reason input, 3s polling, suspended banner + resume affordance.
+  - `ui/components/CommandPalette.tsx` — Plugins cmdk group enumerated from `/api/kernel/schema` `plugins[].routes[]`.
+  - `tests/kernel/test_stage_1_5_adr_069_kill_switch.py` — 15 tests, all passing.
+  - `ui/tests/11-kill-switch.spec.ts` — 5 tests, all passing.
+  - Colossus final validation: pytest 15/15 ✓; kill-switch Playwright 5/5 ✓; full Playwright **38 passed / 6 skipped / 0 failed** ✓; kernel `/health` 200 throughout.
+- Root cause of prior 27-failure Playwright run captured in DEBUG_LOG (stale `ui/out` chunk-hash mismatch after incremental Wave C edits) — fix is `rm -rf ui/.next ui/out` before every rebuild when Wave-C-touched client components change.
 
 ## Remaining before current Definition of Done
-
-- Merge PR #11 (`stage-1-gui-shell` → `main`) via `gh pr merge 11 --squash --delete-branch`.
-- After merge: pull `main` on Colossus and confirm one last kernel restart still serves `ui/out/` at `/` correctly.
+- Merge PR #12 (`stage-1-5-gui-realized` → `main`) once Wave D lands, or merge now if user prefers to ship Waves A–C ahead of D.
+- Wave D: MEMORY_INTEGRITY graph via cytoscape.js (MIT, already ledgered from Stage 1 candidate list) + `/api/gnosis/graph/*` read-only endpoints. Not yet started.
+- On merge: flip ADR-069 status `Proposed → Ratified` and add a BUILD_LOG merge entry.
 
 ## Open questions / awaiting user answer
-
-- None for Stage 1. Deferred ADR amendments (ADR-034 `PhrourosEngine.list_all()`, ADR-029 `ResourcePort.get_balance()`) are captured in KNOWN_ISSUES.md for Stage 2 triage.
+- Merge Waves A–C now (PR #12) and open a fresh PR for Wave D, or land Wave D on the same branch and merge everything at once? Default recommendation: **merge PR #12 now** — Waves A–C are self-contained, all tests green, and shipping the persistent shell + governance + kill-switch unblocks daily use of the GUI while Wave D is authored.
 
 ## Exact next action
-
-- Merge PR #11:
-  ```
-  gh pr merge 11 --squash --delete-branch --repo rmholston420/kosmos
-  ```
-- Then propose Stage 2 kickoff scope.
+Await user decision on merge cadence, then either:
+1. **Merge PR #12 now** — squash-merge on GitHub (or `gh pr merge 12 --squash --delete-branch=false` since the branch stays for Wave D), flip ADR-069 to Ratified, log the merge, then start Wave D on a new branch `stage-1-5-wave-d-memory-graph` off refreshed `main`.
+2. **Continue on same branch** — start Wave D authoring directly on `stage-1-5-gui-realized`.

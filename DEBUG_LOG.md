@@ -604,3 +604,17 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Move UI mount inside lifespan, right after the `/tektos-ui` mount and before `yield`, so it lands last in `app.routes`. Idempotent name-guard prevents duplicate mounts across TestClient re-enters.
 - **Files changed:** `kernel/app.py`.
 - **Related BUILD_LOG entry:** 2026-08-01 05:40 EDT.
+
+## 2026-08-01 07:07 EDT — Stale ui/out static export causes 27 Playwright element-not-found failures
+
+- **Symptom:** After Wave C client changes were committed, `npx playwright test` reported 27 failed / 8 passed / 6 skipped / 3 did not run. Every failure was `locator.click`/`toBeVisible` for a top-bar or sidebar `data-testid` that Wave A/B had previously validated. Kernel `/health` remained 200 before, between, and after each run. Playwright trace showed `console errors: Failed to load resource: the server responded with a status of 404 (Not Found)` on `page.goto("/")`.
+- **Affected stage / plugin / port:** Stage 1.5 · Kosmos UI · Next.js static export served by kernel `/` mount.
+- **Root cause:** Wave C incrementally edited `KillSwitch.tsx` and `CommandPalette.tsx` without deleting the prior `ui/.next` and `ui/out` from Wave B. `npx next build` emitted new chunk hashes for the changed client components, but the served `index.html` (regenerated) referenced new hashes while some cached chunk files under `ui/out/_next/static/chunks/` were the old ones. The browser fetched `/_next/static/chunks/<new-hash>.js`, got 404, hydration failed, and none of the `data-testid` elements rendered — so every Playwright test that touched an interactive element failed at the very first assertion, and full-run parallelism turned into a cascade.
+- **Fix applied:** Before every `npx next build` on Colossus, force-clean the static export first:
+  ```bash
+  rm -rf ui/.next ui/out ui/node_modules/.cache
+  cd ui && npx next build && cd ..
+  ```
+  After clean rebuild: pytest 15/15, kill-switch Playwright 5/5, full Playwright 38 passed / 6 skipped / 0 failed. Diagnostic confirmed by observing `curl -s http://127.0.0.1:8000/ | head` served real Next.js HTML with valid chunk src attributes matching the new `ui/out/_next/static/chunks/` contents.
+- **Files changed:** none. Operational discipline only. Prevention: any Wave-C-and-later Colossus test paste must include the clean-rebuild step.
+- **Related BUILD_LOG entry:** 2026-08-01 07:07 EDT.

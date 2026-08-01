@@ -125,6 +125,85 @@ client, OTEL collector) attach at Stage 6.5.1+.
 - **ADR:** ADR-058
 - **Logged:** 2026-08-01 01:36 EDT
 
+
+## Stage 1.5 · Kosmos UI Persistent Shell (ADR-068)
+
+The Next.js UI at `ui/` composes these permissively-licensed OSS
+components behind the `FrontendContractPort` React client
+(`ui/lib/kernel-client.ts`). All are node_modules dependencies, not
+vendored source trees; SPDX license verified on every version listed.
+
+#### next 16 + react 19 + react-dom 19 — DEPENDED-ON
+- **Source:** https://github.com/vercel/next.js · https://github.com/facebook/react
+- **Commit / Version:** next `16.0.0`, react/react-dom `19.0.0`
+- **License:** MIT
+- **Kosmos location:** `ui/` (Next.js `app/` router, static export `output: "export"`)
+- **Port(s):** none directly; consumes `FrontendContractPort` schema
+- **Modifications:** none
+- **ADR:** ADR-067 (Stage 1 shell) · ADR-068 (Stage 1.5 realization)
+- **Logged:** 2026-08-01 06:12 EDT
+
+#### tailwindcss v4 (with Five-Wisdom OKLCH `@theme`) — DEPENDED-ON
+- **Source:** https://github.com/tailwindlabs/tailwindcss
+- **Commit / Version:** `^4.0.0`
+- **License:** MIT
+- **Kosmos location:** `ui/app/globals.css` (`@theme` block)
+- **Port(s):** none
+- **Modifications:** none — pure config; Tibetan Five Buddha Family palette
+  authored in-tree as OKLCH tokens, hydratable at runtime from
+  `/api/kernel/design-tokens` via `DesignTokenHydrator`.
+- **ADR:** ADR-068
+- **Logged:** 2026-08-01 06:12 EDT
+
+#### @radix-ui/react-dialog — DEPENDED-ON
+- **Source:** https://github.com/radix-ui/primitives
+- **Commit / Version:** `^1.1.0`
+- **License:** MIT
+- **Kosmos location:** `ui/components/PersistentShell.tsx`,
+  `ui/components/CommandPalette.tsx`, `ui/components/KillSwitch.tsx`
+- **Port(s):** none — provides Radix `Sheet`-equivalent (contextual
+  drawer), Cmd+K modal, and kill-switch confirmation dialog
+- **Modifications:** none
+- **ADR:** ADR-068
+- **Logged:** 2026-08-01 06:12 EDT
+
+#### cmdk — DEPENDED-ON
+- **Source:** https://github.com/pacocoursey/cmdk
+- **Commit / Version:** `^1.0.0`
+- **License:** MIT
+- **Kosmos location:** `ui/components/CommandPalette.tsx`
+- **Port(s):** none — a11y-correct combobox for the Cmd+K palette per
+  UX Design Spec §"Persistent Shell"
+- **Modifications:** none — wraps a static navigation list in Wave A;
+  Wave B swaps in kernel-schema-driven commands
+- **ADR:** ADR-068
+- **Logged:** 2026-08-01 06:12 EDT
+
+#### @tanstack/react-query — DEPENDED-ON (Wave B onward)
+- **Source:** https://github.com/TanStack/query
+- **Commit / Version:** `^5.60.0`
+- **License:** MIT
+- **Kosmos location:** `ui/` (installed; not yet consumed — Wave A uses
+  plain `useEffect` + `fetch` via `kernelClient`; Wave B introduces the
+  QueryClient provider and per-port hooks)
+- **Port(s):** none
+- **Modifications:** none
+- **ADR:** ADR-068
+- **Logged:** 2026-08-01 06:12 EDT
+
+#### zustand — DEPENDED-ON (Wave B onward)
+- **Source:** https://github.com/pmndrs/zustand
+- **Commit / Version:** `^5.0.0`
+- **License:** MIT
+- **Kosmos location:** `ui/` (installed; not yet consumed — Wave B
+  introduces per-`state_namespace` store per UX Design Spec §"Stack
+  Validation")
+- **Port(s):** none
+- **Modifications:** none
+- **ADR:** ADR-068
+- **Logged:** 2026-08-01 06:12 EDT
+
+
 ## Historical entries
 
 Full history through ADR-056 lives in `docs/adrs/README.md`. Notable
