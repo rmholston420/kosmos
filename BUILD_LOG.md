@@ -2097,3 +2097,56 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `OllamaAdapter` + `DozerDbMemoryAdapter` + `DozerDbGraphBackend` + `GraphitiTemporalIndex` + `AmgGuardPolicy` already `VENDORED` per ADR-058 / ADR-027.
 - **PORTING_LEDGER / ADR updated:** ADR-063 new; PORTING_LEDGER unchanged.
 - **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
+
+## 2026-08-01 03:05 EDT — Stage 6.5.7 · Gnosis retrieval surrogate + boot seeder (ADR-064)
+
+- **Stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · MemoryPort (consumer side; surrogate for future Gnosis plugin)
+- **What changed:** Mounted four read-only Gnosis routes on the kernel over the existing `MemoryPort` singleton (ADR-063). No new port, no new adapter, no new plugin package. Routes: `GET /api/gnosis/query?q&as_of&limit&corpus` → `MemoryPort.query_temporal` (limit bounded `[1,100]`, default 20; `as_of` optional but must be tz-aware ISO-8601; `corpus` optional and validated against the manifest, translated to a payload-side `provenance` filter with a widened raw limit to preserve pagination). `GET /api/gnosis/corpora` → manifest of the five landed corpora (`synthetic-lifeline`, `humanities-cidoc-sample`, `rigpa-export`, `superpowers`, `humanities-bilara`) augmented with live `fact_count` and `last_ingested_at` from the boot seeder. `GET /api/gnosis/stats` → top-line dashboard numbers computed from the static `ALL_CORPORA` tuple (total_facts, corpora_count, distinct_subjects, distinct_predicates, earliest_as_of, latest_as_of, seeded_this_boot, last_seeded_at); safe to call when memory is down. `GET /api/gnosis/event/{event_id}` → single hit lookup constrained to `^[A-Za-z0-9._:-]+$`, returns 404 when no hit matches the id. Endpoints return 503 when `registry.memory is None`; class-name matching (`type(exc).__name__`) preserves ADR-007 (no Gnosis/Graphiti exception imports in `kernel/app.py`). Added env-gated boot seeder (`KOSMOS_GNOSIS_SEED=1`, default off) that iterates `ALL_CORPORA` and writes every fact through `MemoryPort.write_event` with idempotency via class-name matching against `MemoryWriteBlocked` / `ClientError` / `ConstraintValidationFailed`; records `registry.gnosis_corpus_counts` and `registry.gnosis_last_seeded_at`. `_BootRegistry` gains `gnosis_corpus_counts: dict[str, int]` and `gnosis_last_seeded_at: str | None`. `kernel/app.py` version 6.5.6 → 6.5.7.
+- **Files touched:**
+  - `kernel/app.py` (added `GNOSIS_CORPORA_MANIFEST`, `_GNOSIS_CORPUS_BY_NAME`, `_GNOSIS_EVENT_ID_RE`, `_GNOSIS_SEED_IGNORABLE`, `_gnosis_hit_to_dict`; four Gnosis routes; boot seeder block after `_boot_memory`; two new `_BootRegistry` fields; version bump; docstring update)
+  - `docs/adrs/ADR-064-stage-6-5-7-gnosis-retrieval-surrogate.md` (new)
+  - `docs/adrs/README.md` (row inserted before ADR-063)
+  - `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (new)
+- **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `MemoryPort` protocol untouched; `DozerDbMemoryAdapter` untouched; `ALL_CORPORA` tuple consumed as-is.
+- **PORTING_LEDGER / ADR updated:** ADR-064 new; PORTING_LEDGER unchanged.
+- **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
+
+## 2026-08-01 03:15 EDT — Stage 6.5.7 · Gnosis seeder NameError hotfix
+
+- **Stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · Gnosis boot seeder (ADR-064)
+- **What changed:** Hoisted `import os` to module-top imports in `kernel/app.py`. The Gnosis boot seeder block added earlier this session referenced `os.environ.get("KOSMOS_GNOSIS_SEED", ...)` at `create_app()` scope, but `os` was only imported inside the sibling `_boot_memory()` closure — so both the `TestClient` lifespan (18/21 Stage 6.5.7 tests erroring at setup with `NameError: name 'os' is not defined`) and the live `uvicorn` startup (`Application startup failed. Exiting.`) hit the same crash on Colossus. Single-line fix. No behavior change to any working path.
+- **Files touched:**
+  - `kernel/app.py` (added `import os` at module top, alphabetical position between `json` and `uuid`)
+  - `DEBUG_LOG.md` (new entry — first `NameError: name 'os' is not defined` symptom recorded)
+  - `SESSION_HANDOFF.md` (overwritten with retest posture)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest.
+
+## 2026-08-01 03:32 EDT — Stage 6.5.7 · Test env preamble to prevent shell-env lifespan hang
+
+- **Stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · MemoryPort test fixtures
+- **What changed:** Added an env preamble at the top of `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (before the `from kernel.app import ...` statement) that pins `KOSMOS_MEMORY_BACKEND=in_memory` and `KOSMOS_GNOSIS_SEED=0`. Prevents the module-level `app = create_app()` from booting against real DozerDB + Ollama when the developer shell still exports live-smoke env vars, which caused the pytest run to hang indefinitely on Colossus. Uses `# noqa: E402` for the intentionally-late imports.
+- **Files touched:**
+  - `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (env preamble)
+  - `DEBUG_LOG.md` (new entry for the hang symptom)
+  - `SESSION_HANDOFF.md` (overwritten with retest posture)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest.
+
+## 2026-08-01 03:55 EDT — Stage 6.5.7 · Corpus filter fix (provenance hydration in Graphiti adapter)
+
+- **Stage / plugin / port:** Stage 6.5.7 · Gnosis retrieval surrogate · `/api/gnosis/query` corpus filter (ADR-064) · `adapters/memory/dozerdb/graphiti_temporal_index.py`
+- **What changed:**
+  - `GraphitiTemporalIndex.query_temporal` now batch-hydrates the `EpisodicNode`s that back each returned `EntityEdge` (via `EpisodicNode.get_by_uuids(client.driver, uuids)`), and injects `provenance` (singular, first source) + `provenances` (plural, ordered union) into each `MemoryHit.payload`. Best-effort — hydration failure logs a warning and returns hits with no provenance rather than failing the query.
+  - `kernel/app.py:gnosis_query` filter accepts membership in `payload["provenances"]` OR equality to legacy `payload["provenance"]`, and widens `raw_limit` from `limit * 5` to `min(100, max(limit * 10, 50))` when a corpus filter is set.
+  - Colossus live smoke verified all four routes green with `KOSMOS_GNOSIS_SEED` unset (kernel booted in 15s against a graph already holding 214 seeded facts). `/api/gnosis/query?q=Rigpa&corpus=rigpa-export` bug isolated to the adapter payload, fixed here.
+- **Files touched:**
+  - `adapters/memory/dozerdb/graphiti_temporal_index.py` (query_temporal payload hydration)
+  - `kernel/app.py` (corpus filter membership + wider raw_limit)
+  - `DEBUG_LOG.md` (new entry for the corpus-filter symptom)
+  - `SESSION_HANDOFF.md` (overwritten with retest posture)
+- **Ports / adapters affected:** `TemporalIndex` (payload shape widened — additive, no breaking change).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest of corpus filter.

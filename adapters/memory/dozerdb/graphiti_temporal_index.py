@@ -98,18 +98,68 @@ class GraphitiTemporalIndex:
     ) -> list[MemoryHit]:
         client = await self._ensure_client()
         raw = await client.search(query=query, num_results=limit)
+        raw_edges = list(raw or [])
+
+        # Batch-hydrate the EpisodicNodes that back the returned edges so we
+        # can surface ``provenance`` (Graphiti's ``source_description``) on
+        # each ``MemoryHit.payload``. Graphiti dedupes entity edges across
+        # episodes, so a single edge may span multiple source corpora — we
+        # collect the union set as ``provenances``.
+        episode_uuids: set[str] = set()
+        for edge in raw_edges:
+            for eid in getattr(edge, "episodes", None) or []:
+                if isinstance(eid, str) and eid:
+                    episode_uuids.add(eid)
+
+        provenance_by_episode: dict[str, str] = {}
+        if episode_uuids:
+            try:
+                # Lazy import — matches the module-wide lazy Graphiti pattern.
+                from graphiti_core.nodes import EpisodicNode
+
+                nodes = await EpisodicNode.get_by_uuids(
+                    client.driver, list(episode_uuids)
+                )
+                for n in nodes or []:
+                    prov = getattr(n, "source_description", None)
+                    uuid = getattr(n, "uuid", None)
+                    if isinstance(uuid, str) and isinstance(prov, str) and prov:
+                        provenance_by_episode[uuid] = prov
+            except Exception as exc:  # noqa: BLE001
+                # Best-effort hydration. Falling back to empty provenance
+                # keeps the retrieval path itself functional; the corpus
+                # filter in ``/api/gnosis/query`` becomes a no-match, which
+                # is preferable to failing the whole request.
+                log.warning(
+                    "GraphitiTemporalIndex episode hydration failed: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+
         hits: list[MemoryHit] = []
-        for edge in raw or []:
+        for edge in raw_edges:
             valid_at = getattr(edge, "valid_at", None)
             if as_of is not None and valid_at is not None and valid_at > as_of:
                 continue
+            provenances: list[str] = []
+            for eid in getattr(edge, "episodes", None) or []:
+                prov = provenance_by_episode.get(eid)
+                if prov and prov not in provenances:
+                    provenances.append(prov)
+            payload: dict[str, Any] = {
+                "fact": getattr(edge, "fact", None),
+                "valid_at": valid_at.isoformat() if valid_at else None,
+            }
+            if provenances:
+                # ``provenance`` (singular) preserves the pre-6.5.7 payload
+                # shape by exposing the first source; ``provenances`` (plural)
+                # is the authoritative set for corpus filtering.
+                payload["provenance"] = provenances[0]
+                payload["provenances"] = provenances
             hits.append(
                 MemoryHit(
                     id=str(getattr(edge, "uuid", "")),
-                    payload={
-                        "fact": getattr(edge, "fact", None),
-                        "valid_at": valid_at.isoformat() if valid_at else None,
-                    },
+                    payload=payload,
                     score=1.0,
                     as_of=valid_at,
                 )

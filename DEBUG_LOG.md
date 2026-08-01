@@ -458,3 +458,34 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Rewrote `_dataclass_to_dict` to check `dataclasses.is_dataclass(obj)` **first** and use `dataclasses.fields(obj)` + `getattr(obj, f.name)` for extraction. Added `Decimal` → `str` coercion (money/resource amounts) and tightened enum detection to require both `.value` and `.name` (avoiding false positives on `Decimal` and str-enum ambiguity).
 - **Files changed:** `kernel/app.py`
 - **Related BUILD_LOG entry:** 2026-08-01 01:24 EDT
+
+## 2026-08-01 03:15 EDT — NameError: name 'os' is not defined in Gnosis boot seeder
+
+- **Symptom:** `NameError: name 'os' is not defined. Did you forget to import 'os'` at `kernel/app.py:386` when either (a) `TestClient(app)` fires the lifespan on any Stage 6.5.7 test — 18 of 21 tests error at setup — or (b) `uvicorn kernel.app:app` starts with `KOSMOS_GNOSIS_SEED=1` set. Application startup fails; server exits with code 3. Live smoke `curl /api/gnosis/*` returns empty responses because the process never bound the port.
+- **Affected stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · Gnosis boot seeder (ADR-064)
+- **Root cause:** `kernel/app.py` uses `os.environ.get(...)` at two scopes — inside the `_boot_memory()` closure (line 317, has a local `import os`) and inside the new Gnosis boot seeder block at `create_app()` scope (line 386, no `os` in scope). The seeder block references `os` from the enclosing `create_app` frame, but `os` was never imported at module top or in the `create_app` closure — it was only imported inside `_boot_memory()`. The seeder inherits nothing from that sibling function.
+- **Fix applied:** Hoisted `import os` to module-top imports (line 57, alphabetical position between `import json` and `import uuid`). Removed no code — the pre-existing `import os` inside `_boot_memory()` is now redundant but harmless. Left it in place to keep the hotfix diff to a single line and avoid touching an unrelated closure.
+- **Files changed:**
+  - `kernel/app.py` (added `import os` at module top)
+- **Related BUILD_LOG entry:** 2026-08-01 03:05 EDT
+
+## 2026-08-01 03:32 EDT — Stage 6.5.7 pytest hang: TestClient lifespan boots real DozerDB + Ollama
+
+- **Symptom:** `pytest tests/kernel/test_stage_6_5_7_gnosis_retrieval.py -v` hangs indefinitely after `collected 21 items` (>20 min observed on Colossus, GPU visibly active). No test rows print. No traceback. Kill required.
+- **Affected stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · MemoryPort test fixtures
+- **Root cause:** `kernel.app` builds the FastAPI application at import time (module-level `app = create_app()`). The Stage 6.5.7 test file imports that module-level singleton (`from kernel.app import ..., app`) and wraps it in `TestClient(app)`. `TestClient`'s context-manager form runs the FastAPI lifespan, which executes the full boot sequence — including `_boot_memory` (respecting `KOSMOS_MEMORY_BACKEND`) and the new Gnosis seeder (respecting `KOSMOS_GNOSIS_SEED`). If the developer shell still has `KOSMOS_MEMORY_BACKEND=dozerdb` + `KOSMOS_GNOSIS_SEED=1` exported from a prior live-smoke session, the lifespan tries to open real Bolt sessions to DozerDB and real Ollama HTTP calls for embeddings, then seed ~40 corpus facts through the real adapter. The fake `_FakeMemoryPort` swap in the `fake_memory` fixture only runs **after** the lifespan finishes, so it cannot short-circuit the real boot. Net result: the process blocks in the lifespan retrying real backends before any test body ever runs.
+- **Fix applied:** Added an env preamble at the top of `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` — pins `KOSMOS_MEMORY_BACKEND=in_memory` and `KOSMOS_GNOSIS_SEED=0` **before** the `from kernel.app import ...` statement. The `# noqa: E402` markers cover the intentional post-env imports. Deterministic in-memory boot regardless of shell state; module-level `app` singleton preserved.
+- **Files changed:**
+  - `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (env preamble + noqa markers)
+- **Related BUILD_LOG entry:** 2026-08-01 03:32 EDT
+
+## 2026-08-01 03:55 EDT — Gnosis corpus filter always returns empty; provenance not surfaced by Graphiti adapter
+
+- **Symptom:** `GET /api/gnosis/query?q=Rigpa&corpus=rigpa-export&limit=5` returns `{"hits": []}` on real DozerDB even though the unfiltered `GET /api/gnosis/query?q=Rigpa&limit=5` returns 5 hits, some of which came from the `rigpa-export` corpus. All corpus-filtered variants (`rigpa-export`, `humanities-bilara`, etc.) return empty. Unknown-corpus rejection (`corpus=nonexistent`) correctly returns 400.
+- **Affected stage / plugin / port:** Stage 6.5.7 · Gnosis retrieval surrogate · `/api/gnosis/query` corpus filter (ADR-064) · `adapters/memory/dozerdb/graphiti_temporal_index.py`
+- **Root cause:** `GraphitiTemporalIndex.query_temporal` constructed `MemoryHit.payload` from raw `EntityEdge` fields only (`fact`, `valid_at`) and dropped every source-side attribute stored on the backing `EpisodicNode`. Graphiti's `EntityEdge.attributes` is empty by design — the adapter's `record_event` stores provenance as `source_description` on the `EpisodicNode` (line 88 of graphiti_temporal_index.py). The kernel's corpus filter compares `payload.get("provenance") == provenance_filter`, but that key was never populated, so every filtered query short-circuited to empty. Additionally, Graphiti dedupes entity edges across episodes: the same fact ("R.M. Holston founded the Rigpa-LMS project.") was seeded by both the `synthetic-lifeline` and `rigpa-export` corpora, so its edge's `episodes` list spans multiple source corpora — a scalar `provenance` cannot represent the union.
+- **Fix applied:** Reworked `GraphitiTemporalIndex.query_temporal` to batch-hydrate `EpisodicNode`s for all returned edges in one `EpisodicNode.get_by_uuids(driver, uuids)` call (no LLM, single Bolt round-trip), build an `episode_uuid → source_description` map, and inject **both** `payload["provenance"]` (singular, first source — preserves the pre-6.5.7 payload shape) and `payload["provenances"]` (plural, ordered union) on each `MemoryHit`. Hydration failures are best-effort (logged, filter falls back to no-match). Also widened the kernel's `raw_limit` when a corpus filter is set from `limit * 5` to `min(100, max(limit * 10, 50))` so semantically-weaker corpus hits still page through. Kernel filter now accepts membership in the plural set OR equality to the singular field.
+- **Files changed:**
+  - `adapters/memory/dozerdb/graphiti_temporal_index.py` (batch EpisodicNode hydration + payload provenance injection)
+  - `kernel/app.py` (filter uses `provenances` set membership; wider `raw_limit`)
+- **Related BUILD_LOG entry:** 2026-08-01 03:55 EDT

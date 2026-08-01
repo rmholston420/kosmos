@@ -1,4 +1,4 @@
-"""Kosmos kernel FastAPI app (Stage 6.5.6 — Tektos kernel mount + turn endpoint).
+"""Kosmos kernel FastAPI app (Stage 6.5.7 — Gnosis retrieval surrogate mount).
 
 Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
 
@@ -29,6 +29,24 @@ Kernel HTTP endpoints (6.5.5):
 - ``POST /api/tektos/turn`` — drives one ``TektosAgent`` iteration
   (ADR-063) over the kernel-owned ``LLMPort`` + ``MemoryPort``
   adapters; returns the resulting ``TektosStep``.
+- ``GET /api/gnosis/query`` — Gnosis retrieval surrogate over
+  ``MemoryPort.query_temporal`` (ADR-064). Optional ``as_of`` ISO-8601
+  filter, ``limit`` bounded to ``[1, 100]`` (default 20), optional
+  ``corpus`` name filter that restricts hits to a manifest provenance.
+- ``GET /api/gnosis/corpora`` — manifest of the five landed corpora
+  (ADR-064) — ``synthetic-lifeline``, ``humanities-cidoc-sample``,
+  ``rigpa-export``, ``superpowers``, ``humanities-bilara`` — augmented
+  with live ``fact_count`` and ``last_ingested_at`` from the boot seeder.
+- ``GET /api/gnosis/stats`` — top-line dashboard numbers computed from
+  the static ``ALL_CORPORA`` tuple (ADR-064).
+- ``GET /api/gnosis/event/{event_id}`` — single hit lookup by
+  ``event_id`` via ``MemoryPort.query_temporal`` (ADR-064).
+
+Boot env vars (ADR-064):
+
+- ``KOSMOS_GNOSIS_SEED=1`` — ingest ``ALL_CORPORA`` into ``MemoryPort``
+  at startup (default off; safe no-op on populated DBs via class-name
+  idempotency matching).
 """
 
 from __future__ import annotations
@@ -36,6 +54,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import os
 import uuid
 from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
@@ -74,6 +93,13 @@ class _BootRegistry:
         self.tektos: Any = None
         self.tektos_agent: Any = None
         self.tektos_agent_lock: Any = None
+        # Stage 6.5.7 (ADR-064): Gnosis seeder state. ``gnosis_corpus_counts``
+        # maps corpus name -> number of facts successfully written this boot
+        # (``0`` when the seeder didn't run or write-blocked every fact).
+        # ``gnosis_last_seeded_at`` is the UTC ISO timestamp of the last
+        # successful seeder run, or ``None`` when the seeder didn't run.
+        self.gnosis_corpus_counts: dict[str, int] = {}
+        self.gnosis_last_seeded_at: str | None = None
 
 
 registry = _BootRegistry()
@@ -352,6 +378,55 @@ async def lifespan(app: FastAPI):
 
     registry.memory = _boot_memory
 
+    # --- Gnosis boot seeder (ADR-064) ----------------------------------------
+    # Env-gated by ``KOSMOS_GNOSIS_SEED=1``. Iterates ``ALL_CORPORA`` and
+    # writes every fact through ``MemoryPort.write_event``. Idempotent
+    # (re-runs on a populated DB are no-ops via class-name matching).
+    # Best-effort: seeder failures do not block boot; Gnosis routes
+    # remain functional against whatever facts the graph already contains.
+    if os.environ.get("KOSMOS_GNOSIS_SEED", "0") == "1":
+        if registry.memory is None:
+            registry.errors["gnosis_seed"] = (
+                "skipped: memory subsystem is None"
+            )
+        else:
+            try:
+                from adapters.memory.dozerdb.corpora import ALL_CORPORA
+                from datetime import datetime as _dt, timezone as _tz
+
+                counts: dict[str, int] = {}
+                for corpus in ALL_CORPORA:
+                    seeded = 0
+                    for fact in corpus.facts:
+                        try:
+                            await registry.memory.write_event(
+                                fact.subject,
+                                fact.predicate,
+                                fact.object_,
+                                provenance=fact.provenance,
+                                confidence=fact.confidence,
+                                attributes={
+                                    **fact.attributes,
+                                    "corpus_name": corpus.name,
+                                    "corpus_event_id": fact.event_id,
+                                    "as_of": fact.as_of.isoformat(),
+                                },
+                            )
+                            seeded += 1
+                        except Exception as exc:  # noqa: BLE001
+                            # Idempotent by class-name matching
+                            # (ADR-007). Anything else is a real error.
+                            if type(exc).__name__ in _GNOSIS_SEED_IGNORABLE:
+                                continue
+                            raise
+                    counts[corpus.name] = seeded
+                registry.gnosis_corpus_counts = counts
+                registry.gnosis_last_seeded_at = _dt.now(_tz.utc).isoformat()
+            except Exception as exc:  # noqa: BLE001
+                registry.errors["gnosis_seed"] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+
     # --- Zetesis plugin mount (ADR-058) ---------------------------------------
     # Depends on frontend_contract having booted; reuses the same
     # KernelFrontendContractAdapter, event_bus, resource, and notification
@@ -464,7 +539,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.6", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.7", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -763,6 +838,287 @@ async def tektos_turn(request: Request) -> dict[str, Any]:
             raise HTTPException(502, detail=f"{name}: {exc}") from exc
 
     return _dataclass_to_dict(step)
+
+
+# ---------------------------------------------------------------------------
+# Gnosis retrieval surrogate — ADR-064
+#
+# Three read-only routes projecting the kernel-owned ``MemoryPort``
+# retrieval surface as ``/api/gnosis/*``. The Gnosis plugin does not
+# exist yet (Phase 3 territory); ADR-051 blessed the surrogate pattern
+# at the adapter layer and ADR-064 extends it to an HTTP surface so the
+# GUI Gnosis tab can render corpus facts + provenance + timestamps
+# against real data ahead of ``plugins/gnosis/`` landing.
+# ---------------------------------------------------------------------------
+
+import re as _gnosis_re
+
+_GNOSIS_EVENT_ID_RE = _gnosis_re.compile(r"^[A-Za-z0-9._:\-]+$")
+
+# Static manifest of landed corpora. ADR-051 locates corpus loading at
+# the adapter fixtures layer, not at a live registry, so the router
+# enumerates them here. Updates require the same-day edit to this
+# constant when a new corpus lands under ``adapters/memory/dozerdb/corpora/``.
+GNOSIS_CORPORA_MANIFEST: list[dict[str, Any]] = [
+    {
+        "name": "synthetic-lifeline",
+        "provenance_predicate": "synthetic-lifeline-v1",
+        "summary": "10 hand-authored R.M. Holston lifeline facts (Stage 4.2 DoD anchor).",
+        "stage": "4.2",
+    },
+    {
+        "name": "humanities-cidoc-sample",
+        "provenance_predicate": "humanities-cidoc-sample-v1",
+        "summary": "5 CIDOC-CRM Buddhist text facts; illustrative not scholarly.",
+        "stage": "4.2",
+    },
+    {
+        "name": "rigpa-export",
+        "provenance_predicate": "rigpa-export-fixture-v1",
+        "summary": "Rigpa-LMS JSONL export (fixtures fallback: 20 events 2024-05→2024-12); env-gated by KOSMOS_RIGPA_EXPORT_PATH.",
+        "stage": "4.2",
+    },
+    {
+        "name": "superpowers",
+        "provenance_predicate": "superpowers-kb",
+        "summary": "github.com/obra/superpowers skills at pinned SHA; MIT.",
+        "stage": "4.4",
+    },
+    {
+        "name": "humanities-bilara",
+        "provenance_predicate": "humanities-bilara",
+        "summary": "github.com/suttacentral/bilara-data translations + Pali roots + actors at pinned SHA; CC0-1.0 + public-domain.",
+        "stage": "4.5",
+    },
+]
+
+# Fast lookup: corpus name -> provenance predicate. Used by the query
+# route to translate the ``corpus`` filter into a payload-side match.
+_GNOSIS_CORPUS_BY_NAME: dict[str, dict[str, Any]] = {
+    c["name"]: c for c in GNOSIS_CORPORA_MANIFEST
+}
+
+# Idempotent-write error class names (ADR-007 class-name matching).
+# ``MemoryWriteBlocked`` is the AMG guard rejection; the neo4j driver
+# raises ``ClientError`` for constraint violations. Anything else
+# indicates a real seeder failure and gets recorded.
+_GNOSIS_SEED_IGNORABLE = frozenset(
+    {
+        "MemoryWriteBlocked",
+        "ClientError",
+        "ConstraintValidationFailed",
+    }
+)
+
+
+def _gnosis_hit_to_dict(hit: Any) -> dict[str, Any]:
+    """Serialize a ``MemoryHit`` for the wire.
+
+    ``as_of`` becomes ISO-8601 or ``None``. Payload is passed through
+    verbatim — the adapter layer already sanitizes nested maps via the
+    Stage 6.5.6 backend fix.
+    """
+    as_of = getattr(hit, "as_of", None)
+    return {
+        "id": getattr(hit, "id", None),
+        "payload": getattr(hit, "payload", None),
+        "score": getattr(hit, "score", None),
+        "as_of": as_of.isoformat() if as_of is not None else None,
+    }
+
+
+@app.get("/api/gnosis/query")
+async def gnosis_query(
+    q: str,
+    as_of: str | None = None,
+    limit: int = 20,
+    corpus: str | None = None,
+) -> dict[str, Any]:
+    """Query the temporal graph via ``MemoryPort.query_temporal``.
+
+    Query params:
+
+    - ``q`` — required, non-empty query text.
+    - ``as_of`` — optional ISO-8601 timestamp with timezone; when set,
+      hits with ``as_of > cutoff`` are filtered by the temporal index.
+    - ``limit`` — bounded to ``[1, 100]``; default 20.
+    - ``corpus`` — optional corpus name from the manifest; restricts
+      hits to facts whose payload ``provenance`` equals the manifest
+      ``provenance_predicate`` for that corpus.
+    """
+    if registry.memory is None:
+        raise HTTPException(503, detail=registry.errors.get("memory"))
+    if not isinstance(q, str) or not q.strip():
+        raise HTTPException(400, detail="'q' must be a non-empty string")
+    if not (1 <= limit <= 100):
+        raise HTTPException(400, detail="'limit' must be in [1, 100]")
+
+    provenance_filter: str | None = None
+    if corpus is not None:
+        entry = _GNOSIS_CORPUS_BY_NAME.get(corpus)
+        if entry is None:
+            raise HTTPException(
+                400,
+                detail=(
+                    f"unknown 'corpus' {corpus!r}; valid: "
+                    f"{sorted(_GNOSIS_CORPUS_BY_NAME.keys())}"
+                ),
+            )
+        provenance_filter = entry["provenance_predicate"]
+
+    parsed_as_of = None
+    if as_of is not None:
+        try:
+            from datetime import datetime as _dt
+
+            parsed_as_of = _dt.fromisoformat(as_of)
+        except ValueError as exc:
+            raise HTTPException(
+                400, detail=f"'as_of' must be ISO-8601: {exc}"
+            ) from exc
+        if parsed_as_of.tzinfo is None:
+            raise HTTPException(
+                400, detail="'as_of' must be timezone-aware"
+            )
+
+    try:
+        # When ``corpus`` is set we widen the raw limit aggressively so
+        # post-filtering still returns a full page even when the query
+        # text ranks a different corpus higher, then clip.
+        raw_limit = (
+            min(100, max(limit * 10, 50)) if provenance_filter else limit
+        )
+        hits = await registry.memory.query_temporal(
+            q, as_of=parsed_as_of, limit=raw_limit
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        # Upstream adapter failure (Graphiti unreachable, Cypher error).
+        # Class-name matching preserves ADR-007.
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    if provenance_filter is not None:
+        filtered = []
+        for h in hits:
+            payload = getattr(h, "payload", None) or {}
+            # Graphiti dedupes entity edges across episodes, so a hit
+            # may span multiple source corpora. Match membership in the
+            # plural ``provenances`` set surfaced by the adapter; fall
+            # back to the singular ``provenance`` field for adapters
+            # that only expose one source.
+            provenances = payload.get("provenances") or []
+            if not isinstance(provenances, (list, tuple, set)):
+                provenances = []
+            singular = payload.get("provenance")
+            if provenance_filter in provenances or singular == provenance_filter:
+                filtered.append(h)
+                if len(filtered) >= limit:
+                    break
+        hits = filtered
+
+    return {"hits": [_gnosis_hit_to_dict(h) for h in hits]}
+
+
+@app.get("/api/gnosis/corpora")
+async def gnosis_corpora() -> dict[str, Any]:
+    """Return the manifest of landed corpora with live fact counts (ADR-064).
+
+    ``fact_count`` prefers the seeder count for this boot; when the
+    seeder didn't run it degrades to the static corpus size.
+    ``last_ingested_at`` is the seeder's UTC ISO timestamp or ``None``.
+    """
+    # Static fallback counts — corpora sizes at build time.
+    try:
+        from adapters.memory.dozerdb.corpora import ALL_CORPORA
+
+        static_counts = {c.name: len(c.facts) for c in ALL_CORPORA}
+    except Exception:  # noqa: BLE001
+        static_counts = {}
+
+    seeded = registry.gnosis_corpus_counts
+    out: list[dict[str, Any]] = []
+    for entry in GNOSIS_CORPORA_MANIFEST:
+        row = dict(entry)
+        row["fact_count"] = seeded.get(
+            entry["name"], static_counts.get(entry["name"], 0)
+        )
+        row["last_ingested_at"] = registry.gnosis_last_seeded_at
+        out.append(row)
+    return {"corpora": out}
+
+
+@app.get("/api/gnosis/stats")
+async def gnosis_stats() -> dict[str, Any]:
+    """Return top-line Gnosis dashboard numbers (ADR-064).
+
+    Computed from the static ``ALL_CORPORA`` tuple — not a graph query.
+    Safe to call even when memory is down.
+    """
+    try:
+        from adapters.memory.dozerdb.corpora import ALL_CORPORA
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            500, detail=f"corpora import failed: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    subjects: set[str] = set()
+    predicates: set[str] = set()
+    earliest = None
+    latest = None
+    total = 0
+    for corpus in ALL_CORPORA:
+        for fact in corpus.facts:
+            total += 1
+            subjects.add(fact.subject)
+            predicates.add(fact.predicate)
+            if earliest is None or fact.as_of < earliest:
+                earliest = fact.as_of
+            if latest is None or fact.as_of > latest:
+                latest = fact.as_of
+
+    return {
+        "total_facts": total,
+        "corpora_count": len(ALL_CORPORA),
+        "distinct_subjects": len(subjects),
+        "distinct_predicates": len(predicates),
+        "earliest_as_of": earliest.isoformat() if earliest else None,
+        "latest_as_of": latest.isoformat() if latest else None,
+        "seeded_this_boot": dict(registry.gnosis_corpus_counts),
+        "last_seeded_at": registry.gnosis_last_seeded_at,
+    }
+
+
+@app.get("/api/gnosis/event/{event_id}")
+async def gnosis_event(event_id: str) -> dict[str, Any]:
+    """Fetch a single memory event by id.
+
+    ``event_id`` must match ``^[A-Za-z0-9._:-]+$``. Returns the hit's
+    ``id`` / ``payload`` / ``score`` / ``as_of`` on success, 404 on
+    miss, 400 on malformed id.
+    """
+    if registry.memory is None:
+        raise HTTPException(503, detail=registry.errors.get("memory"))
+    if not _GNOSIS_EVENT_ID_RE.match(event_id):
+        raise HTTPException(400, detail="malformed 'event_id'")
+
+    try:
+        hits = await registry.memory.query_temporal(
+            f"event_id:{event_id}", limit=1
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    for hit in hits:
+        if getattr(hit, "id", None) == event_id:
+            return _gnosis_hit_to_dict(hit)
+    raise HTTPException(404, detail=f"event {event_id!r} not found")
 
 
 # ---------------------------------------------------------------------------
