@@ -667,3 +667,12 @@ Entry format per `kosmos-log-maintenance` skill:
   - `plugins/zetesis/adapters/memory_stub.py::ZetesisMemoryStub` (real stub, kept in prod path but only used for wiring; degrades to `[]`, matches the "adapters MAY degrade" clause in the port docstring).
 - **Files changed:** `plugins/tektos/tests/test_openspec.py`; `plugins/tektos/tests/test_repomap.py`; `plugins/tektos/tests/test_tektos_agent.py`; `plugins/zetesis/adapters/memory_stub.py`
 - **Related BUILD_LOG entry:** 2026-08-01 11:52 EDT (Stage 1.6 Phase 2 D1–D5)
+
+## 2026-08-01 12:19 EDT — Zetesis research fails at start: `OpenAIError: Missing credentials`
+
+- **Symptom:** UI /zetesis Research button surfaces `Research failed: OpenAIError: Missing credentials. Please pass an api_key, workload_identity, admin_api_key, or set the OPENAI_API_KEY or OPENAI_ADMIN_KEY environment variable.` No inference ever reaches Ollama; no report emits; downstream `/gnosis/graph` stays empty because ADR-075 D3 fan-out has nothing to consume.
+- **Affected stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · `plugins/zetesis/research/odr.py` · downstream `/api/gnosis/graph/{nodes,edges}` (empty by cascade)
+- **Root cause:** `build_odr_config` in `plugins/zetesis/research/odr.py` populates four LangChain model slots (`research_model_config`, `summarization_model_config`, `final_report_model_config`, `compression_model_config`) with `base_url` + `temperature` but no `api_key`. Even though the endpoint targets Ollama's openai-compat surface (which ignores auth), the OpenAI SDK enforces a non-empty `api_key` at `AsyncOpenAI` client construction time. When no `OPENAI_API_KEY` env var is set (the local-first Colossus case), the client raises before any request leaves the process. ODR's `configurable_fields=("model", "max_tokens", "api_key")` explicitly documents `api_key` as a configurable field — Kosmos was never setting it.
+- **Fix applied:** Added `"api_key": "ollama"` sentinel to all four model_config dicts in `build_odr_config`. Added regression test `test_odr_config_supplies_api_key_on_every_model_slot` in `plugins/zetesis/research/tests/test_prompts.py` asserting every model slot carries a non-empty `api_key`.
+- **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
+- **Related BUILD_LOG entry:** —

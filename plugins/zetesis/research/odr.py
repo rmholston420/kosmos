@@ -186,24 +186,35 @@ def build_odr_config(
             # harness/prompts.py for the full contract.
             "mcp_prompt": KOSMOS_MCP_PROMPT,
             # Model slots — all pointed at Ollama via openai-compat.
+            # The OpenAI SDK enforces a non-empty ``api_key`` at client
+            # construction time even when the ``base_url`` targets a
+            # local Ollama endpoint that ignores auth. Pass a sentinel
+            # value on every slot so ``init_chat_model`` does not raise
+            # ``OpenAIError: Missing credentials`` when the user has no
+            # ``OPENAI_API_KEY`` env var set (the common local-first
+            # case on Colossus).
             "research_model": prefixed_model,
             "research_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.7,
             },
             "summarization_model": prefixed_model,
             "summarization_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.3,
             },
             "final_report_model": prefixed_model,
             "final_report_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.3,
             },
             "compression_model": prefixed_model,
             "compression_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.3,
             },
             # Environment knobs commonly needed for local models.

@@ -188,6 +188,32 @@ def test_odr_config_injects_kosmos_mcp_prompt() -> None:
     assert config["configurable"]["mcp_prompt"] is KOSMOS_MCP_PROMPT
 
 
+def test_odr_config_supplies_api_key_on_every_model_slot() -> None:
+    # Regression guard for `OpenAIError: Missing credentials` at
+    # Zetesis research start. The OpenAI SDK enforces a non-empty
+    # ``api_key`` at client construction time even when ``base_url``
+    # targets Ollama's openai-compat endpoint. Every ODR model slot
+    # must carry a sentinel key so ``init_chat_model`` does not raise
+    # when the operator has no ``OPENAI_API_KEY`` env var (the common
+    # local-first case on Colossus).
+    config = odr_module.build_odr_config(
+        ollama_base_url="http://127.0.0.1:11434/v1",
+        ollama_model="qwen2.5:32b-instruct-q4_K_M",
+        mcp_server_url="http://127.0.0.1:8000",
+    )
+    configurable = config["configurable"]
+    for slot in (
+        "research_model_config",
+        "summarization_model_config",
+        "final_report_model_config",
+        "compression_model_config",
+    ):
+        assert slot in configurable, f"missing slot {slot!r}"
+        assert (
+            configurable[slot].get("api_key")
+        ), f"{slot!r} missing non-empty api_key"
+
+
 def test_odr_module_imports_anchoring_functions() -> None:
     # Guard against a future refactor that reintroduces the pre-6.3.1 inline
     # placeholder prompt in odr.py.
