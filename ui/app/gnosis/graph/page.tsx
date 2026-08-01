@@ -56,8 +56,12 @@ interface GraphViewData {
   links: ForceGraphLink[];
 }
 
-const NODE_LIMIT = 250;
-const EDGE_LIMIT = 500;
+// Backend `_graph_validate_limit` in `kernel/app.py` rejects any
+// value outside [1, 100] with HTTP 400. Cap client requests to the
+// server ceiling. Larger graphs are Phase 2 tech debt (paginate via
+// `next_cursor`).
+const NODE_LIMIT = 100;
+const EDGE_LIMIT = 100;
 
 const KIND_COLOR: Record<GraphNode["kind"], string> = {
   subject: "var(--color-accent, #7dd3fc)",
