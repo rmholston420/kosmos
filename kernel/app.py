@@ -1,4 +1,4 @@
-"""Kosmos kernel FastAPI app (Stage 6.5.5 — approval resolve endpoints).
+"""Kosmos kernel FastAPI app (Stage 6.5.6 — Tektos kernel mount + turn endpoint).
 
 Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
 
@@ -26,6 +26,9 @@ Kernel HTTP endpoints (6.5.5):
 - ``POST /api/approvals/{approval_id}/approve`` and
   ``POST /api/approvals/{approval_id}/reject`` — approval resolve
   endpoints (ADR-062) over the existing ``ApprovalResolverPort``.
+- ``POST /api/tektos/turn`` — drives one ``TektosAgent`` iteration
+  (ADR-063) over the kernel-owned ``LLMPort`` + ``MemoryPort``
+  adapters; returns the resulting ``TektosStep``.
 """
 
 from __future__ import annotations
@@ -65,6 +68,12 @@ class _BootRegistry:
         self.event_bus: Any = None
         self.zetesis: Any = None
         self.trace_feed: Any = None
+        # Stage 6.5.6 additions (ADR-063).
+        self.llm: Any = None
+        self.memory: Any = None
+        self.tektos: Any = None
+        self.tektos_agent: Any = None
+        self.tektos_agent_lock: Any = None
 
 
 registry = _BootRegistry()
@@ -242,6 +251,107 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             registry.errors["phrouros"] = f"{type(exc).__name__}: {exc}"
 
+    # --- LLM (OllamaAdapter) --------------------------------------------------
+    # Stage 6.5.6 addition (ADR-063): kernel-owned LLMPort shared by Tektos
+    # and future plugins. Ollama endpoint + model overridable via env vars
+    # ``KOSMOS_OLLAMA_BASE_URL`` (native Ollama HTTP API root, *not* the
+    # ``/v1`` OpenAI-compat prefix — adapter posts to ``/api/generate``,
+    # ``/api/chat``, ``/api/embed``, etc.) and ``KOSMOS_OLLAMA_DEFAULT_MODEL``.
+    # Failure surfaces under ``registry.errors['llm']`` and cascades to
+    # Tektos boot below.
+    @_try("llm")
+    def _boot_llm():
+        from adapters.llm.ollama.adapter import OllamaAdapter
+
+        # OllamaAdapter reads ``KOSMOS_OLLAMA_BASE_URL`` and
+        # ``KOSMOS_OLLAMA_DEFAULT_MODEL`` itself when constructor args
+        # are omitted, so pass through with no kwargs.
+        return OllamaAdapter()
+
+    registry.llm = _boot_llm
+
+    # --- Memory (DozerDbMemoryAdapter, env-gated backends) --------------------
+    # Stage 6.5.6 addition (ADR-063): kernel-owned MemoryPort shared by
+    # Tektos and future plugins.
+    #
+    # ``KOSMOS_MEMORY_BACKEND`` selects the graph + temporal backends:
+    #   ``in_memory`` (default)  — InMemoryGraphBackend + InMemoryTemporalIndex
+    #                              + NoOpAmgPolicy. CI/test-safe, no external
+    #                              services required.
+    #   ``dozerdb``              — DozerDbGraphBackend + GraphitiTemporalIndex
+    #                              + AmgGuardPolicy(tiered). Requires
+    #                              ``KOSMOS_DOZERDB_URI``, ``_USER``,
+    #                              ``_PASSWORD`` (and optional ``_DATABASE``).
+    #                              Graphiti additionally uses
+    #                              ``KOSMOS_OLLAMA_BASE_URL``,
+    #                              ``KOSMOS_TEKTOS_MODEL`` (LLM) and
+    #                              ``KOSMOS_EMBED_MODEL`` (default
+    #                              ``nomic-embed-text``).
+    @_try("memory")
+    def _boot_memory():
+        import os
+
+        from adapters.memory.dozerdb.adapter import (
+            DozerDbMemoryAdapter,
+            InMemoryGraphBackend,
+            InMemoryTemporalIndex,
+            NoOpAmgPolicy,
+        )
+
+        backend = os.environ.get("KOSMOS_MEMORY_BACKEND", "in_memory").lower()
+
+        if backend == "dozerdb":
+            uri = os.environ["KOSMOS_DOZERDB_URI"]
+            user = os.environ["KOSMOS_DOZERDB_USER"]
+            password = os.environ["KOSMOS_DOZERDB_PASSWORD"]
+            database = os.environ.get("KOSMOS_DOZERDB_DATABASE", "neo4j")
+            # Graphiti calls Ollama via the OpenAI-compat ``/v1`` prefix,
+            # not the native Ollama HTTP API root that ``OllamaAdapter``
+            # uses. Separate env var so the two callers stay independent.
+            llm_url = os.environ.get(
+                "KOSMOS_GRAPHITI_LLM_URL", "http://127.0.0.1:11434/v1"
+            )
+            llm_model = os.environ.get(
+                "KOSMOS_OLLAMA_DEFAULT_MODEL", "qwen2.5:32b-instruct-q4_K_M"
+            )
+            embed_model = os.environ.get(
+                "KOSMOS_EMBED_MODEL", "nomic-embed-text"
+            )
+
+            from adapters.memory.dozerdb.amg_policy import AmgGuardPolicy
+            from adapters.memory.dozerdb.dozerdb_graph_backend import (
+                DozerDbGraphBackend,
+            )
+            from adapters.memory.dozerdb.graphiti_temporal_index import (
+                GraphitiTemporalIndex,
+            )
+
+            graph = DozerDbGraphBackend(
+                uri=uri,
+                user=user,
+                password=password,
+                database=database,
+            )
+            temporal = GraphitiTemporalIndex(
+                uri=uri,
+                user=user,
+                password=password,
+                llm_url=llm_url,
+                llm_model=llm_model,
+                embed_model=embed_model,
+            )
+            amg = AmgGuardPolicy(policy_preset="tiered")
+            return DozerDbMemoryAdapter(graph=graph, amg=amg, temporal=temporal)
+
+        # Default: in-memory (CI / test / cold-start safe).
+        return DozerDbMemoryAdapter(
+            graph=InMemoryGraphBackend(),
+            amg=NoOpAmgPolicy(),
+            temporal=InMemoryTemporalIndex(),
+        )
+
+    registry.memory = _boot_memory
+
     # --- Zetesis plugin mount (ADR-058) ---------------------------------------
     # Depends on frontend_contract having booted; reuses the same
     # KernelFrontendContractAdapter, event_bus, resource, and notification
@@ -268,9 +378,63 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             registry.errors["zetesis"] = f"{type(exc).__name__}: {exc}"
 
+    # --- Tektos plugin mount + agent singleton (ADR-063) ----------------------
+    # Depends on frontend_contract (descriptor registration), llm, memory.
+    # Failure of any dependency surfaces under ``registry.errors['tektos']``
+    # and returns ``tektos: false`` on ``/health.subsystems`` while keeping
+    # the kernel 200 on every other endpoint.
+    if (
+        registry.frontend_contract is None
+        or registry.llm is None
+        or registry.memory is None
+    ):
+        missing = [
+            name
+            for name, val in (
+                ("frontend_contract", registry.frontend_contract),
+                ("llm", registry.llm),
+                ("memory", registry.memory),
+            )
+            if val is None
+        ]
+        registry.errors["tektos"] = (
+            f"tektos depends on {missing}; one or more failed to boot"
+        )
+    else:
+        try:
+            import asyncio as _asyncio
+
+            from plugins.tektos.agent import TektosAgent
+            from plugins.tektos.plugin import TektosPlugin
+
+            tektos_plugin = TektosPlugin(
+                frontend_contract_port=registry.frontend_contract,
+            )
+            await tektos_plugin.start()
+            registry.tektos = tektos_plugin
+            registry.tektos_agent = TektosAgent(
+                llm=registry.llm,
+                memory=registry.memory,
+            )
+            registry.tektos_agent_lock = _asyncio.Lock()
+        except Exception as exc:  # noqa: BLE001
+            registry.errors["tektos"] = f"{type(exc).__name__}: {exc}"
+
     yield
 
     # Shutdown — stop plugins/engines then close the event bus.
+    if registry.tektos is not None:
+        try:
+            await registry.tektos.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
+    if registry.llm is not None:
+        try:
+            await registry.llm.close()
+        except Exception:  # noqa: BLE001
+            pass
+
     if registry.zetesis is not None:
         try:
             await registry.zetesis.stop()
@@ -300,7 +464,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.5", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.6", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -335,6 +499,9 @@ def health() -> dict[str, Any]:
             "approval": registry.approval is not None,
             "phrouros": registry.phrouros is not None,
             "zetesis": registry.zetesis is not None,
+            "llm": registry.llm is not None,
+            "memory": registry.memory is not None,
+            "tektos": registry.tektos is not None,
         },
     }
 
@@ -548,6 +715,54 @@ async def approval_reject(
             _resolve_error_status(exc), detail=str(exc)
         ) from exc
     return _dataclass_to_dict(record)
+
+
+# ---------------------------------------------------------------------------
+# Tektos — ADR-063
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/tektos/turn")
+async def tektos_turn(request: Request) -> dict[str, Any]:
+    """Drive one ``TektosAgent`` iteration.
+
+    Body: ``{"content": <non-empty str>}``. Returns the resulting
+    ``TektosStep`` as JSON. Serialized across concurrent requests via
+    ``registry.tektos_agent_lock`` so a caller never sees
+    ``TektosAgentAlreadyRunError`` from an overlapping request.
+    """
+    agent = registry.tektos_agent
+    lock = registry.tektos_agent_lock
+    if agent is None or lock is None:
+        raise HTTPException(503, detail=registry.errors.get("tektos"))
+
+    body = await _read_optional_json(request)
+    content = body.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise HTTPException(
+            400, detail="'content' must be a non-empty string"
+        )
+
+    async with lock:
+        try:
+            agent.send_message(content)
+            step = await agent.run()
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            # Bubble upstream adapter errors (Ollama unreachable, memory
+            # write failure) as 502; the kernel is up but a dependency
+            # failed. Class-name check keeps kernel-plugin decoupled.
+            name = type(exc).__name__
+            if name in {
+                "TektosAgentNotStartedError",
+                "TektosAgentAlreadyRunError",
+                "TektosInvalidConfidenceError",
+            }:
+                raise HTTPException(400, detail=str(exc)) from exc
+            raise HTTPException(502, detail=f"{name}: {exc}") from exc
+
+    return _dataclass_to_dict(step)
 
 
 # ---------------------------------------------------------------------------
