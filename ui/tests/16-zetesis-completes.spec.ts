@@ -24,6 +24,11 @@ test.describe("F6 · Zetesis SSE reaches event: completed", () => {
   test.describe.configure({ retries: 1 });
 
   test("POST /api/zetesis/research emits completed, not error", async ({ request }) => {
+    // The inner request timeout is 90s (real ODR SSE stream can take that
+    // long), but Playwright's default per-test cap is 30s and disposes the
+    // request context before the stream ends. Raise the test budget above
+    // the request timeout so the SSE stream can finish.
+    test.setTimeout(120_000);
     const res = await request.post("/api/zetesis/research", {
       data: { query: "smoke-test-adr-056-no-op" },
       headers: { "Content-Type": "application/json" },

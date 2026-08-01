@@ -25,6 +25,12 @@ test.describe("Zetesis research surface", () => {
   });
 
   test("submitting a query shows progress, then a report or an error", async ({ page }) => {
+    // Real ODR trials run ~540s (Stage 6.3.9b DoD baseline). Playwright's
+    // default 30s per-test cap kills the whole test long before the inner
+    // 600s wait on the report/error locator can complete. Raise the test
+    // budget above the inner wait so the intended 600s locator wait can
+    // actually elapse.
+    test.setTimeout(660_000);
     await page.goto("/zetesis");
     await page.getByTestId("zetesis-query-input").fill("What is the capital of France?");
     await page.getByTestId("zetesis-query-submit").click();

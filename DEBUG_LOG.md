@@ -900,3 +900,15 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Changed both stats-or-empty asserts in `ui/tests/20-gnosis-graph-viz.spec.ts` from `expect(stats.or(empty))` to `expect(stats.or(empty).first())`. Semantics preserved (at least one must be visible); strict-mode satisfied. The subsequent conditional `if (await stats.isVisible())` still gates the format check on the actual stats footer.
 - **Files changed:** ui/tests/20-gnosis-graph-viz.spec.ts
 - **Related BUILD_LOG entry:** 2026-08-01 19:40 EDT
+
+## 2026-08-01 19:45 EDT — ui specs 08 + 16 hit 30s Playwright default cap before Zetesis SSE completes
+
+- **Symptom (spec 08):** `08-zetesis-research.spec.ts:27` — `await expect(report.or(reportError).or(clientError)).toBeVisible({ timeout: 600_000 })` fails with `Test timeout of 30000ms exceeded` after ~30s. Inner locator wait is 600s but test never reaches it.
+- **Symptom (spec 16):** `16-zetesis-completes.spec.ts:27` — `request.post('/api/zetesis/research', ..., timeout: 90_000)` fails with `Test timeout of 30000ms exceeded` and `apiRequestContext.post: Request context disposed`. The 200 OK + `text/event-stream` handshake succeeds; the stream is torn down at the 30s cap before `event: completed` arrives.
+- **Affected stage / plugin / port:** Stage 6.3 / ADR-056 · zetesis (test-only)
+- **Root cause:** Neither test calls `test.setTimeout()`. `ui/playwright.config.ts` sets no `timeout` override, so Playwright's default 30s per-test cap applies. That cap is a hard test-scoped kill switch: it fires regardless of inner locator/request timeouts, disposing the page/request context. This is the same pattern that broke ui spec 03 before the Stage 3.14b step 3 fix.
+- **Fix applied:**
+  - `08-zetesis-research.spec.ts` — added `test.setTimeout(660_000)` (10s headroom above the 600s inner wait) at the top of the failing test.
+  - `16-zetesis-completes.spec.ts` — added `test.setTimeout(120_000)` (30s headroom above the 90s inner request timeout).
+- **Files changed:** ui/tests/08-zetesis-research.spec.ts, ui/tests/16-zetesis-completes.spec.ts
+- **Related BUILD_LOG entry:** 2026-08-01 19:45 EDT

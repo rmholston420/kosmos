@@ -3673,3 +3673,12 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —.
 - **Stop-condition status:** met (spec 20 flake fixed; not verified on Colossus this session — will confirm next spec run).
+
+## 2026-08-01 19:45 EDT — Add test.setTimeout to ui specs 08 + 16 (Zetesis SSE)
+
+- **Stage / plugin / port:** post-Stage-3.14b · UI test hygiene · zetesis specs
+- **What changed:** Added explicit `test.setTimeout()` at the top of both failing tests so Playwright's 30s default cap does not fire before the intended long-running inner waits (600s locator poll in spec 08; 90s SSE stream in spec 16).
+- **Files touched:** ui/tests/08-zetesis-research.spec.ts, ui/tests/16-zetesis-completes.spec.ts
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —.
+- **Stop-condition status:** met (specs unblocked; verify with next full spec run).
