@@ -7,7 +7,10 @@ export default function TektosIndex() {
   const [records, setRecords] = useState<ApprovalRecord[]>([]);
 
   useEffect(() => {
-    kernelClient.listPendingApprovals("tektos").then(setRecords).catch(() => setRecords([]));
+    kernelClient
+      .listPendingApprovals("tektos")
+      .then((r: unknown) => setRecords(Array.isArray(r) ? (r as ApprovalRecord[]) : []))
+      .catch(() => setRecords([]));
   }, []);
 
   return (

@@ -2324,3 +2324,13 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — awaiting Colossus re-run.
+
+## 2026-08-01 05:34 EDT — Stage 1 · GUI shell fixup #6 — harden list-fetch consumers against non-array responses
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · defensive typing.
+- **What changed:**
+  - `ui/components/panels/AgentTracePanel.tsx`, `ui/components/panels/ApprovalsQueuePanel.tsx`, `ui/app/tektos/page.tsx` — coerce `listAnomalies()`/`listPendingApprovals()` responses to arrays before `setState`. A non-array response (e.g. an error dict from a 503) made `anomalies.length` `undefined` so neither the empty-state paragraph nor the list rendered, breaking the Agent Trace panel test even after the race-condition gate.
+- **Files touched:** `ui/components/panels/AgentTracePanel.tsx`, `ui/components/panels/ApprovalsQueuePanel.tsx`, `ui/app/tektos/page.tsx`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run.

@@ -6,7 +6,10 @@ export default function AgentTracePanel({ panels }: { panels: Panel[] }) {
   const [anomalies, setAnomalies] = useState<AnomalyRecord[]>([]);
 
   useEffect(() => {
-    kernelClient.listAnomalies().then(setAnomalies).catch(() => setAnomalies([]));
+    kernelClient
+      .listAnomalies()
+      .then((r: unknown) => setAnomalies(Array.isArray(r) ? (r as AnomalyRecord[]) : []))
+      .catch(() => setAnomalies([]));
   }, []);
 
   return (

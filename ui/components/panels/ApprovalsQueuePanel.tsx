@@ -12,7 +12,7 @@ export default function ApprovalsQueuePanel({ panels }: { panels: Panel[] }) {
   const refresh = () => {
     kernelClient
       .listPendingApprovals(domainFilter || undefined)
-      .then(setRecords)
+      .then((r: unknown) => setRecords(Array.isArray(r) ? (r as ApprovalRecord[]) : []))
       .catch(() => setRecords([]));
   };
 

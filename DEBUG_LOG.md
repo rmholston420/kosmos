@@ -577,3 +577,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Added `await expect(list.or(empty)).toBeVisible()` before the branch, gating the entire assertion on the fetch completing.
 - **Files changed:** `ui/tests/04-agent-trace.spec.ts`.
 - **Related BUILD_LOG entry:** 2026-08-01 05:33 EDT.
+
+## 2026-08-01 05:34 EDT — Agent Trace panel: neither `agent-trace-list` nor `agent-trace-empty` ever renders
+
+- **Symptom:** `expect(list.or(empty)).toBeVisible()` times out even after adding the race gate. `panel-AGENT_TRACE` is visible but neither child appears.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell.
+- **Root cause:** `kernelClient.listAnomalies()` resolves with a non-array payload in the live-kernel case (e.g. a `{detail: ...}` dict when the phrouros registry entry is not what the endpoint expects). `setAnomalies(nonArray)` bypasses `.catch`, then `anomalies.length === 0` is `undefined === 0 → false`, so React tries `.map` on a non-array and throws mid-render — the panel body silently stops rendering.
+- **Fix applied:** Coerced fetch results to arrays with `Array.isArray(r) ? r : []` in AgentTracePanel, ApprovalsQueuePanel, and the Tektos index page. Kernel endpoint itself is unchanged.
+- **Files changed:** `ui/components/panels/AgentTracePanel.tsx`, `ui/components/panels/ApprovalsQueuePanel.tsx`, `ui/app/tektos/page.tsx`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:34 EDT.
