@@ -10,16 +10,13 @@ import type { Route } from "../lib/kernel-client";
 // manifest surfaced by FrontendContractPort — never hardcoded; the shell
 // resolves Route.path/label/icon from the live registry.
 //
-// /gnosis and /zetesis are still statically appended because neither has a
-// FrontendContractPort registration to derive them from yet. Gnosis's
-// Stage 4.6 gate never registers (adapter-level app, no plugin wrapper).
-// Zetesis's descriptor is locked to zero routes by a Stage 6.1 contract
-// test even though research() is functionally complete as of Stage 6.3
-// (see build spec "Second Audit Correction"). Remove each static entry
-// once the corresponding backend registers its own real Route.
+// /gnosis is still statically appended because it has no plugin wrapper —
+// Stage 4.6 gate lives at adapter level and never registers a FrontendContractPort
+// Route. Zetesis's descriptor now publishes `/zetesis` live (plugins/zetesis/plugin.py
+// ZETESIS_ROUTE_PATH); the Stage 6.1 zero-routes contract test was retired by
+// ADR-074/075 event-bus wiring. Duplicate sidebar entry removed 2026-08-01.
 const STATIC_ROUTES: Route[] = [
   { path: "/gnosis", label: "Gnosis (corpora)", icon: "database", lazy_module: "" },
-  { path: "/zetesis", label: "Zetesis (research)", icon: "search", lazy_module: "" },
 ];
 
 const JOB_ROUTES: { path: string; label: string; description: string }[] = [
@@ -41,7 +38,15 @@ function normalize(p: string | null): string {
 
 export default function Sidebar({ routes }: { routes: Route[] }) {
   const pathname = normalize(usePathname());
-  const pluginRoutes = [...routes, ...STATIC_ROUTES];
+  // De-dupe by path so a plugin that registers a route which also exists in
+  // STATIC_ROUTES only renders once. Live registry rows win; static entries
+  // are fallbacks for routes without a FrontendContractPort registration.
+  const seen = new Set<string>();
+  const pluginRoutes = [...routes, ...STATIC_ROUTES].filter((r) => {
+    if (seen.has(r.path)) return false;
+    seen.add(r.path);
+    return true;
+  });
 
   return (
     <nav data-testid="sidebar" aria-label="Kosmos navigation">

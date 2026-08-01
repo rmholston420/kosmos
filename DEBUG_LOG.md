@@ -695,6 +695,15 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
 - **Supersedes:** 2026-08-01 12:26 EDT
 
+## 2026-08-01 12:42 EDT — Zetesis listed twice in sidebar Plugins section
+
+- **Symptom:** GUI sidebar Plugins section renders two "Zetesis (research)" entries pointing to /zetesis
+- **Affected stage / plugin / port:** Stage 1.5 Wave F GUI · Sidebar · FrontendContractPort
+- **Root cause:** `ui/components/Sidebar.tsx` unions live `routes` (from FrontendContractPort) with `STATIC_ROUTES` fallback. Zetesis descriptor at `plugins/zetesis/plugin.py:286` publishes `path="/zetesis"` via `ZETESIS_ROUTE_PATH` (route registration was retired-then-restored during ADR-074/075 event-bus work). The `STATIC_ROUTES` `/zetesis` fallback comment claimed Stage 6.1 contract test locked the descriptor to zero routes, but that contract was retired. Result: duplicate row on every render.
+- **Fix applied:** Removed `/zetesis` from `STATIC_ROUTES` in `ui/components/Sidebar.tsx`; added path-based de-dupe on the merged list as a safety net for future divergence; added Playwright regression `01-shell-and-routes.spec.ts::sidebar de-dupes routes shared between live registry and static fallbacks` asserting exactly one `/zetesis` and one `/gnosis` link.
+- **Files changed:** ui/components/Sidebar.tsx; ui/tests/01-shell-and-routes.spec.ts
+- **Related BUILD_LOG entry:** —
+
 ## 2026-08-01 12:47 EDT — Gnosis 3D graph blank; nodes hard to see in 2D
 
 - **Symptom:** `/gnosis/graph` toggled to 3D renders an empty canvas; 2D shows nodes but they and their edges are nearly invisible against the dark background.

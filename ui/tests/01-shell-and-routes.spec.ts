@@ -13,6 +13,18 @@ test.describe("Shell: route manifest + panel priority", () => {
     }
   });
 
+  test("sidebar de-dupes routes shared between live registry and static fallbacks", async ({ page }) => {
+    // Regression for 2026-08-01: Zetesis registers `/zetesis` via
+    // FrontendContractPort AND STATIC_ROUTES previously hardcoded the same
+    // path, producing two identical sidebar entries. Sidebar now de-dupes
+    // by path and STATIC_ROUTES no longer includes `/zetesis`.
+    await page.goto("/");
+    const zetesisLinks = page.getByTestId("sidebar-plugins").locator('a[href="/zetesis"]');
+    await expect(zetesisLinks).toHaveCount(1);
+    const gnosisLinks = page.getByTestId("sidebar-plugins").locator('a[href="/gnosis"]');
+    await expect(gnosisLinks).toHaveCount(1);
+  });
+
   test("all nine PanelSlots render a card, populated or placeholder", async ({ page }) => {
     await page.goto("/");
     const slots = [
