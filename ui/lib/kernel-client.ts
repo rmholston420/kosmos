@@ -60,9 +60,27 @@ export interface QueuedRequest {
 
 const BASE = process.env.NEXT_PUBLIC_KERNEL_BASE ?? "";
 
+/**
+ * Structured kernel-HTTP error. Preserves the HTTP status code so callers
+ * can distinguish 4xx (bad request) from 5xx (kernel fault) from network
+ * failures (status === 0). Introduced for ADR-076 D2 error surface.
+ */
+export class KernelHttpError extends Error {
+  readonly status: number;
+  readonly method: string;
+  readonly path: string;
+  constructor(method: string, path: string, status: number, message?: string) {
+    super(message ?? `${method} ${path} -> ${status}`);
+    this.name = "KernelHttpError";
+    this.status = status;
+    this.method = method;
+    this.path = path;
+  }
+}
+
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
+  if (!res.ok) throw new KernelHttpError("GET", path, res.status);
   return res.json() as Promise<T>;
 }
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
@@ -71,7 +89,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`POST ${path} -> ${res.status}`);
+  if (!res.ok) throw new KernelHttpError("POST", path, res.status);
   return res.json() as Promise<T>;
 }
 

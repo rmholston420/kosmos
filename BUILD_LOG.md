@@ -3213,3 +3213,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (semantic path via SemanticMemoryPath) · VectorPort · RealQdrantBackend
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER.md +1 entry (Qdrant image · Apache-2.0 · ADR-076); ADR-076 D1 scope satisfied
 - **Stop-condition status:** in-progress — D1 test committed on branch and skips clean on fast tier; live-tier run pending on Colossus after `docker compose -f ops/compose/memory.yml up -d qdrant`. Waves D2–D7 land on this rolling branch.
+
+## 2026-08-01 14:20 EDT — Stage 1.6 Phase 3 · D2 semantic-search UI polish
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · UI · /memory/search (no port change)
+- **What changed:**
+  - `ui/lib/kernel-client.ts`: added exported `KernelHttpError extends Error` carrying `status` + `method` + `path`. `getJSON` / `postJSON` now throw it instead of a plain `Error`. Preserves the existing message shape for backwards compat.
+  - `ui/app/memory/search/page.tsx`: rewritten for ADR-076 D2 —
+    - Result highlighting: `<mark data-testid="search-highlight">` wraps query tokens ≥ 2 chars in each hit's rendered snippet (case-insensitive, longest-first). Pure client-side.
+    - Corpus selector converted from free-text input to `<select>` populated from `GET /api/gnosis/corpora`; "All corpora" default option sends `corpus: null`. Corpora surfaced by current hits (e.g. Zetesis-scoped names not in the manifest) are added as options dynamically.
+    - `<p data-testid="search-empty">No memory events match this query.</p>` renders when result is a non-degraded zero-hit response AND query non-empty.
+    - Error surface: `<p data-testid="search-error" data-kind="bad_request|kernel_fault|network" data-status="…" role="alert">` for HTTP 4xx / 5xx / network respectively, kept distinct from the existing degraded banner.
+    - `<ul data-testid="search-facets">` with one `<li data-testid="search-facet" data-corpus data-count>` per corpus surfaced in hits, formatted `<corpus>: <N> hit(s)`.
+  - `ui/tests/23-memory-search-polish.spec.ts`: 7 Playwright tests using `page.route()` to stub `/api/memory/search-semantic` + `/api/gnosis/corpora`. Covers highlighting, corpus:null request body, dynamic-corpus option addition, facet breakdown, empty state (with initial-load guard), 400/500 error kinds, and degraded banner isolation.
+  - `ui/tests/21-memory-search-semantic.spec.ts`: rebound `memory-search-empty` → `search-empty` and `memory-search-error` → `search-error` in the state selector to track the D2 rename.
+- **Files touched:**
+  - ui/lib/kernel-client.ts
+  - ui/app/memory/search/page.tsx
+  - ui/tests/21-memory-search-semantic.spec.ts
+  - ui/tests/23-memory-search-polish.spec.ts (new)
+  - BUILD_LOG.md
+- **Ports / adapters affected:** none — UI-only slice; kernel routes unchanged.
+- **PORTING_LEDGER / ADR updated:** — (ADR-076 D2 scope; no new vendored code)
+- **Stop-condition status:** in-progress — D2 committed on `stage-1-6-p3-code`; awaiting `pnpm playwright test tests/23-memory-search-polish.spec.ts` on Colossus. Waves D3–D7 to follow on the same branch.

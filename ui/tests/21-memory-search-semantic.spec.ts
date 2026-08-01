@@ -45,9 +45,12 @@ test.describe("Memory semantic search (ADR-075 D2)", () => {
     await page.getByTestId("memory-search-submit").click();
 
     const hits = page.getByTestId("memory-search-hits");
-    const empty = page.getByTestId("memory-search-empty");
+    // ADR-076 D2 renamed the empty-state testid from
+    // `memory-search-empty` → `search-empty` and the error surface
+    // from `memory-search-error` → `search-error`.
+    const empty = page.getByTestId("search-empty");
     const degraded = page.getByTestId("memory-search-degraded");
-    const err = page.getByTestId("memory-search-error");
+    const err = page.getByTestId("search-error");
 
     // Any of these four states resolves the request. CI stacks with no
     // ingested corpus land on `empty` or `degraded`; a booted stack
