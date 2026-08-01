@@ -2367,3 +2367,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none (ADR-067 already ratified in prior commit).
 - **Stop-condition status:** met — awaiting `gh pr merge 11`.
+
+## 2026-08-01 06:15 EDT — ADR-068 authored (Stage 1.5 GUI realization scope + backend-gap ledger)
+
+- **Stage / plugin / port:** Stage 1.5 · GUI realization scope + backend deltas (no port change)
+- **What changed:** Authored `docs/adrs/ADR-068-stage-1-5-gui-realization-and-backend-gap-ledger.md` locking Stage 1.5 GUI realization to four sequential waves on branch `stage-1-5-gui-realized` with three additive backend deltas (D1 `GET /api/ollama/status`, D2 `GET /api/praxis/constitution`, D3 `GET /api/praxis/apex/policies`), hybrid IA (5 static job pages + preserved plugin routes), Tibetan Tailwind v4 `@theme` tokens hydrated from `/api/kernel/design-tokens`, and an explicit deferral list for `MEMORY_INTEGRITY` / `CONTEXT_PRESSURE` / `HARDWARE_RESILIENCE` / real `MODEL_SWAP_SLO` panels (each requires new port + Stage-TBD ADR). Backend audit against `kernel/app.py` v6.5.8 catalogued 22 HTTP endpoints, 2 WebSockets, `/gnosis-gate` HTML sub-app, `/tektos-ui` htmx sub-app. `/api/kernel/design-tokens` currently returns empty dict — no landed plugin registers non-empty `design_tokens`.
+- **Files touched:** `docs/adrs/ADR-068-stage-1-5-gui-realization-and-backend-gap-ledger.md` (new); `docs/adrs/README.md` (ADR-068 row inserted above ADR-067).
+- **Ports / adapters affected:** none (ADR is scope-only; port surface untouched).
+- **PORTING_LEDGER / ADR updated:** ADR-068 authored + indexed. PORTING_LEDGER unchanged this commit (Wave A commit will add `cmdk` VENDORED row; Wave D commit will add `cytoscape` VENDORED row).
+- **Stop-condition status:** met — ADR-068 lands as its own commit before Wave A code touches `kernel/app.py` or `ui/`.
