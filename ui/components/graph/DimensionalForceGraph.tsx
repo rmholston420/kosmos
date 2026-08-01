@@ -17,7 +17,7 @@
  */
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactElement } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import ForceGraph3D from "react-force-graph-3d";
 
@@ -53,6 +53,6 @@ export default function DimensionalForceGraph(
   const Graph = useMemo(
     () => (dimension === "3d" ? ForceGraph3D : ForceGraph2D),
     [dimension],
-  ) as unknown as (p: DimensionalForceGraphProps) => JSX.Element;
+  ) as unknown as (p: DimensionalForceGraphProps) => ReactElement;
   return <Graph {...props} />;
 }
