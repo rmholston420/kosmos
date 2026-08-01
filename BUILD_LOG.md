@@ -3634,3 +3634,13 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none (internal executor contract only).
 - **PORTING_LEDGER / ADR updated:** — (ADR-080 leaves `files_changed?` optional with no fixed type; list of paths is compatible).
 - **Stop-condition status:** met (unit tests to be verified on Colossus; integration test opt-in via `KOSMOS_TEKTOS_REAL_GIT=1` requires real git).
+
+## 2026-08-01 19:16 EDT — Widened Playwright execute-wait timeout for seeded e2e spec
+
+- **Stage / plugin / port:** Stage 3.14b step 3 · ui/tests/03-tektos-plan-workflow.spec.ts
+- **What changed:** `tektos-exec-result` visibility wait widened from 30s → 10min (`EXECUTE_TIMEOUT_MS`). Per-test timeout raised to `EXECUTE_TIMEOUT_MS + 60s` via `test.setTimeout`. Real Ollama-driven executor runs take ~30–120s per task LLM call plus git worktree ops; 30s was measuring nothing but "the loop hasn't returned yet."
+- **Files touched:**
+  - `ui/tests/03-tektos-plan-workflow.spec.ts`
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —.
+- **Stop-condition status:** unblocks the seeded e2e run. Not yet re-run on Colossus.

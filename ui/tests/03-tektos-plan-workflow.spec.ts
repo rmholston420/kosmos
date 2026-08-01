@@ -14,6 +14,11 @@ import { test, expect } from "@playwright/test";
 
 const seedId = process.env.KOSMOS_SEED_APPROVAL_ID;
 
+// A single seeded plan/execute round can run for minutes: TektosExecutorLoop
+// makes ~1–2 real Ollama call(s) per task at ~30–120s each on Colossus, plus
+// git worktree add/reset. The Playwright wait covers the entire loop end-to-end.
+const EXECUTE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 test.describe("Tektos Plan -> Approve -> Execute -> Diff (Stage 3.14b step 3)", () => {
   test.skip(!seedId, "KOSMOS_SEED_APPROVAL_ID not set — seed a pending Tektos approval first");
 
@@ -23,6 +28,10 @@ test.describe("Tektos Plan -> Approve -> Execute -> Diff (Stage 3.14b step 3)", 
   });
 
   test("full plan lifecycle: approve, execute, show diff", async ({ page }) => {
+    // Give the whole test enough headroom for a real Ollama execute cycle.
+    // Playwright's default per-test timeout (30s) is far too tight.
+    test.setTimeout(EXECUTE_TIMEOUT_MS + 60_000);
+
     await page.goto(`/tektos/detail?id=${encodeURIComponent(seedId!)}`);
     await expect(page.getByTestId("tektos-plan-id")).toHaveText(seedId!);
     await expect(page.getByTestId("tektos-plan-status")).toHaveText("PENDING");
@@ -42,7 +51,7 @@ test.describe("Tektos Plan -> Approve -> Execute -> Diff (Stage 3.14b step 3)", 
     await expect(page.getByTestId("tektos-plan-show-diff")).toBeDisabled();
 
     await page.getByTestId("tektos-plan-execute").click();
-    await expect(page.getByTestId("tektos-exec-result")).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId("tektos-exec-result")).toBeVisible({ timeout: EXECUTE_TIMEOUT_MS });
 
     // Execute response shape (ADR-080): execution_id = "<approval_id>::<change_id>".
     const execId = await page.getByTestId("tektos-exec-id").textContent();
