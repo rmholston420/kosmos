@@ -2503,3 +2503,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none. ADR-069 status can now be moved from `Proposed` to `Ratified` on Wave C merge.
 - **Stop-condition status:** MET. Wave C ready to merge. Wave D (Memory Integrity graph) unblocked.
+
+## 2026-08-01 07:11 EDT — Stage 1.5 Waves A+B+C · MERGED to main (PR #12) + ADR-069 Ratified
+
+- **Stage / plugin / port:** Stage 1.5 · GUI realization · Waves A+B+C
+- **What changed:**
+  - PR #12 squash-merged to `main` as commit `800a399`. Waves A (persistent shell + job-segmented sidebar + 5 job pages, ADR-068), B (governance surface wired to `/api/praxis/*`, ADR-068 D2/D3), and C (kernel kill-switch + soft-suspend middleware + Cmd+K plugins group, ADR-069) landed together after Colossus green validation.
+  - Branch `stage-1-5-gui-realized` reset to `origin/main` (post-merge) and retained for Wave D authoring.
+  - ADR-069 promoted from `Proposed` → `Ratified v25 (2026-08-01)` in both `docs/adrs/ADR-069-stage-1-5-kernel-kill-switch.md` and the `docs/adrs/README.md` index row.
+- **Files touched:**
+  - `docs/adrs/ADR-069-stage-1-5-kernel-kill-switch.md` (status line)
+  - `docs/adrs/README.md` (ADR-069 index row status)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** ADR-069 status Ratified.
+- **Stop-condition status:** MET for Stage 1.5 Waves A+B+C. Wave D (MEMORY_INTEGRITY graph via cytoscape.js + `/api/gnosis/graph/*`) is next.
