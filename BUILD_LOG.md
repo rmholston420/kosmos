@@ -3432,3 +3432,24 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** kernel registry now surfaces both `ApprovalGatewayPort` and `ApprovalResolverPort`. Same underlying `KernelChangeApprovalAdapter` engine.
 - **PORTING_LEDGER / ADR updated:** — (behavior aligns with ADR-037 §Q5 and ADR-045; no new decision needed).
 - **Stop-condition status:** met — submitting an intention on `/tektos` now proposes a plan card through APEX and returns the gated card.
+
+## 2026-08-01 16:50 EDT — Stage 3.13.1 · Tektos plan detail read surface + systemd drop-in
+
+- **Stage / plugin / port:** Stage 3.13.1 · kernel `/api/tektos/plan/{approval_id}` · ui `/tektos/detail` · deploy/systemd
+- **What changed:**
+  - Kernel: new `GET /api/tektos/plan/{approval_id}` returning `{approval, change_id, change_dir, files: {proposal_md, tasks_md}}`. 503 when resolver down; 404 for unknown id or non-tektos `proposing_domain`; `files` entries null on missing/oversize (>128 KiB). Path-traversal guard against `resolve_intention_root()`.
+  - UI: `/tektos/detail?id=<approval_id>` rewritten to render the record, PlanCard-shaped `delta`, `proposal.md`, `tasks.md`. Approve/Reject route through `kernelClient.resolveApproval` (`/api/approvals/{id}/{approve,reject}`). Execute + Show Diff render disabled with "Stage 3.14" labels.
+  - Deploy: shipped `deploy/systemd/kosmos-kernel.service.d/10-tektos-intention-root.conf` overriding `KOSMOS_TEKTOS_INTENTION_ROOT=/var/lib/kosmos/tektos/intentions` + `StateDirectory=kosmos/tektos/intentions` (mode 0750) so the scaffolder writes past `ProtectHome=read-only`.
+  - Tests: `tests/kernel/test_stage_3_13_1_tektos_plan_detail.py` (happy path, missing-files-null, unknown-id 404, non-tektos 404). `ui/tests/29-tektos-plan-detail.spec.ts` (missing-id error, unknown-id error state).
+  - ADR-077 D2a (Stage 3.13.1 DoD) + D2b (systemd deployment note) appended.
+- **Files touched:**
+  - kernel/app.py
+  - ui/lib/kernel-client.ts
+  - ui/app/tektos/detail/page.tsx
+  - deploy/systemd/kosmos-kernel.service.d/10-tektos-intention-root.conf
+  - docs/adrs/ADR-077-stage-3-13-3-14-3-15-tektos-intention-and-sandboxed-executor.md
+  - tests/kernel/test_stage_3_13_1_tektos_plan_detail.py
+  - ui/tests/29-tektos-plan-detail.spec.ts
+- **Ports / adapters affected:** ApprovalResolverPort read (get_by_id) — no new port. Existing `resolve_intention_root()` reused.
+- **PORTING_LEDGER / ADR updated:** ADR-077 D2a + D2b.
+- **Stop-condition status:** met on push — user pulls, restarts kernel, opens `/tektos/detail?id=<approval_id>` from the pending plan link, sees the record + PlanCard + proposal.md + tasks.md; approve/reject work; execute/diff visible but disabled.

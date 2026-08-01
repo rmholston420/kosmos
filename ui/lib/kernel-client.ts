@@ -61,6 +61,16 @@ export interface TektosIntentionResult {
   scaffolded_at: string;
   plan_card: PlanCard;
 }
+// Stage 3.13.1 (ADR-077). Mirrors GET /api/tektos/plan/{approval_id}.
+export interface TektosPlanDetail {
+  approval: ApprovalRecord;
+  change_id: string | null;
+  change_dir: string | null;
+  files: {
+    proposal_md: string | null;
+    tasks_md: string | null;
+  };
+}
 
 export interface DeliverySloReport {
   window: number; sample_count: number; p50_ms: number; p95_ms: number;
@@ -151,11 +161,16 @@ export const kernelClient = {
   submitTektosIntention: (intention: string) =>
     postJSON<TektosIntentionResult>("/api/tektos/intention", { intention }),
 
-  // ADR-067 D4: Tektos Plan→Approve→Execute→Diff route surface deferred to
-  // Stage 3.14. Kernel currently exposes POST /api/tektos/turn (ADR-063) and
-  // POST /api/tektos/intention (ADR-077, Stage 3.13). The four calls below
-  // will 404 until Stage 3.14 lands the sandbox-gated executor.
-  getPlanDetail: (approvalId: string) => getJSON<ApprovalRecord>(`/api/tektos/plan/${approvalId}`),
+  // Stage 3.13.1 (ADR-077): read-only plan detail — ApprovalRecord + the
+  // scaffolded proposal.md + tasks.md from the change dir. Landed ahead of
+  // Stage 3.14 so the detail page is usable while the sandboxed executor
+  // is still being built.
+  getPlanDetail: (approvalId: string) =>
+    getJSON<TektosPlanDetail>(`/api/tektos/plan/${approvalId}`),
+
+  // ADR-067 D4: Tektos plan approve/execute/diff routes still deferred to
+  // Stage 3.14. Approval resolution today routes through the existing
+  // /api/approvals/{id}/{approve,reject} surface — see resolveApproval above.
   approveTektosPlan: (approvalId: string) =>
     postJSON<ApprovalRecord>(`/api/tektos/plan/${approvalId}/approve`, {}),
   executeTektosPlan: (approvalId: string) =>

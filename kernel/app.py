@@ -1406,6 +1406,92 @@ async def tektos_intention(request: Request) -> dict[str, Any]:
     }
 
 
+# ADR-077 Stage 3.13.1 — read-only plan detail.
+#
+# Combines the APEX ApprovalRecord with the scaffolded OpenSpec change dir
+# contents (proposal.md + tasks.md). The four Tektos plan-execution routes
+# (approve/execute/diff) still land at 3.14; approval resolution today goes
+# through the existing ``/api/approvals/{id}/{approve,reject}`` surface.
+_TEKTOS_INTENTION_ID_PREFIX = "tektos.plan."
+_MAX_CHANGE_FILE_BYTES = 128 * 1024  # 128 KiB — scaffolded files are tiny
+
+
+@app.get("/api/tektos/plan/{approval_id}")
+async def tektos_plan_detail(approval_id: str) -> dict[str, Any]:
+    """Return APEX record + change dir files for one Tektos plan.
+
+    503 if the approval resolver is down.
+    404 if APEX has no such record.
+    200 with ``{approval, change_id, change_dir, files: {proposal_md, tasks_md}}``
+    on success. ``files`` entries are ``None`` when the file is missing or
+    unreadable (never raises — the plan card still renders).
+    """
+    resolver = registry.approval
+    if resolver is None:
+        raise HTTPException(503, detail=registry.errors.get("approval"))
+
+    try:
+        record = await resolver.get_by_id(approval_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, detail=str(exc)) from exc
+
+    if record.proposing_domain != "tektos":
+        raise HTTPException(
+            404,
+            detail=(
+                f"approval {approval_id!r} is not a Tektos plan "
+                f"(proposing_domain={record.proposing_domain!r})"
+            ),
+        )
+
+    intention_id = record.intention_id or ""
+    change_id: str | None = None
+    if intention_id.startswith(_TEKTOS_INTENTION_ID_PREFIX):
+        change_id = intention_id[len(_TEKTOS_INTENTION_ID_PREFIX):] or None
+    if not change_id:
+        delta = record.delta or {}
+        cand = delta.get("change_id")
+        if isinstance(cand, str) and cand:
+            change_id = cand
+
+    files: dict[str, str | None] = {"proposal_md": None, "tasks_md": None}
+    change_dir_str: str | None = None
+    if change_id:
+        try:
+            from plugins.tektos.intention import resolve_intention_root
+        except ImportError as exc:  # tektos not booted
+            raise HTTPException(
+                503, detail=f"tektos import failed: {exc}"
+            ) from exc
+        root = resolve_intention_root()
+        change_dir = (root / change_id).resolve()
+        # Path-traversal guard: change dir must live under the resolved root.
+        try:
+            change_dir.relative_to(root)
+        except ValueError:
+            raise HTTPException(
+                400,
+                detail=(
+                    f"resolved change dir {change_dir} escapes intention root {root}"
+                ),
+            ) from None
+        change_dir_str = str(change_dir)
+        for key, name in (("proposal_md", "proposal.md"), ("tasks_md", "tasks.md")):
+            path = change_dir / name
+            try:
+                if path.is_file() and path.stat().st_size <= _MAX_CHANGE_FILE_BYTES:
+                    files[key] = path.read_text(encoding="utf-8")
+            except OSError:
+                files[key] = None
+
+    return {
+        "approval": _dataclass_to_dict(record),
+        "change_id": change_id,
+        "change_dir": change_dir_str,
+        "files": files,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Gnosis retrieval surrogate — ADR-064
 #

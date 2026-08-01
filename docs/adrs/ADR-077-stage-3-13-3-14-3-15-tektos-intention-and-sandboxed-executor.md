@@ -89,6 +89,50 @@ numbers stay; ADR-077 is the authority until then.
   `/tektos`, types an intention, sees a gated `PlanCard` on
   `/tektos/detail?id=<approval_id>`. **No code execution.**
 
+### D2a. Stage 3.13.1 DoD — plan detail read surface (follow-up)
+
+Minimal read surface for a scaffolded plan, landed on the same branch
+after D2. **No new execution surface.**
+
+- New kernel endpoint `GET /api/tektos/plan/{approval_id}` returning
+  `{approval, change_id, change_dir, files: {proposal_md, tasks_md}}`.
+  - 503 if approval resolver unavailable.
+  - 404 if APEX has no such approval, or the record's `proposing_domain`
+    is not `"tektos"`.
+  - `files` entries are `null` when the file is missing / unreadable /
+    over 128 KiB — endpoint never raises on filesystem edge cases.
+  - Path-traversal guard: resolved `change_dir` must live under
+    `resolve_intention_root()`.
+- Updated `/tektos/detail?id=<approval_id>` page renders the record,
+  the `PlanCard`-shaped `delta`, `proposal.md`, and `tasks.md`.
+  Approve / Reject route through the existing
+  `/api/approvals/{id}/{approve,reject}` surface (`kernelClient.resolveApproval`).
+  Execute + Show Diff buttons remain visible but disabled, labeled
+  “Stage 3.14”.
+
+### D2b. Deployment — systemd drop-in (kosmos-kernel)
+
+The scaffolder's default resolution is
+`$XDG_STATE_HOME/kosmos/tektos/intentions` (or
+`~/.local/state/kosmos/tektos/intentions`). The Colossus
+`kosmos-kernel` unit runs with `ProtectHome=read-only`, which makes
+both defaults unwritable at runtime. The repo ships a drop-in at
+
+    deploy/systemd/kosmos-kernel.service.d/10-tektos-intention-root.conf
+
+that overrides `KOSMOS_TEKTOS_INTENTION_ROOT` to
+`/var/lib/kosmos/tektos/intentions` and asks systemd to auto-create
+that directory via `StateDirectory=kosmos/tektos/intentions` +
+`StateDirectoryMode=0750`. `StateDirectory` is added to
+`ReadWritePaths` automatically under `ProtectSystem=strict`.
+
+Deploy on Colossus:
+
+    sudo mkdir -p /etc/systemd/system/kosmos-kernel.service.d
+    sudo cp deploy/systemd/kosmos-kernel.service.d/10-tektos-intention-root.conf \
+      /etc/systemd/system/kosmos-kernel.service.d/
+    sudo systemctl daemon-reload && sudo systemctl restart kosmos-kernel
+
 ### D3. Stage 3.14 DoD — sandbox executor (deferred, do not build)
 
 - New port `SandboxProvider` (kernel/ports) with `git worktree`-backed
