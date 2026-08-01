@@ -1,6 +1,6 @@
 # ADR-073 — EmbeddingsPort: split embed() out of LLMPort, Ollama nomic-embed-text primary adapter
 
-**Status:** Proposed
+**Status:** Ratified v25 (2026-08-01)
 **Lock-in phase:** Stage 1.6 · Phase 0 (port-surface lockdown before Stage 1.6 semantic-memory work begins)
 **Supersedes:** —
 

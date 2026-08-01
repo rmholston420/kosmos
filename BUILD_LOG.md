@@ -2870,3 +2870,14 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none this commit; ADR names the surfaces
 - **PORTING_LEDGER / ADR updated:** ADR-073 authored as Proposed
 - **Stop-condition status:** in-progress — awaits user ratification of ADR-073 before code PR lands.
+
+## 2026-08-01 10:29 EDT — ADR-073 ratified (Proposed → Ratified v25)
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 0 · EmbeddingsPort
+- **What changed:** Flipped ADR-073 status Proposed → Ratified v25 in ADR body and index README, on user approval.
+- **Files touched:**
+  - `docs/adrs/ADR-073-embeddings-port.md` (status line)
+  - `docs/adrs/README.md` (index row status column)
+- **Ports / adapters affected:** none this commit (ratification-only)
+- **PORTING_LEDGER / ADR updated:** ADR-073 status flipped
+- **Stop-condition status:** met for ADR ratification. Next: code PR lands ports/embeddings.py + Ollama adapter + Graphiti migration + kernel version 6.9.0 → 6.10.0.
