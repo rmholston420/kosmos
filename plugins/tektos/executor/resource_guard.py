@@ -48,6 +48,12 @@ __all__ = [
     "SKIP_ENV_VAR",
 ]
 
+_AUTO_DETECT = object()
+"""Sentinel default for :class:`ColossusResourceGuard`'s
+``nvidia_smi_bin`` argument. Distinguishes "caller didn't pass
+anything, discover via ``shutil.which``" from an explicit
+``nvidia_smi_bin=None`` meaning "binary is known to be missing"."""
+
 
 # ── Constants ─────────────────────────────────────────────────────────
 
@@ -159,17 +165,20 @@ class ColossusResourceGuard:
         *,
         vram_floor_mib: int = TEKTOS_EXECUTOR_VRAM_FLOOR_MIB,
         ram_floor_mib: int = TEKTOS_EXECUTOR_RAM_FLOOR_MIB,
-        nvidia_smi_bin: str | None = None,
+        nvidia_smi_bin: str | None = _AUTO_DETECT,  # type: ignore[assignment]
         meminfo_path: Path = _MEMINFO_PATH,
         env: dict[str, str] | os._Environ[str] | None = None,
     ) -> None:
         self._vram_floor = vram_floor_mib
         self._ram_floor = ram_floor_mib
-        self._nvidia_smi_bin = (
-            nvidia_smi_bin
-            if nvidia_smi_bin is not None
-            else shutil.which("nvidia-smi")
-        )
+        # Sentinel: only auto-detect when the caller passed nothing.
+        # Explicit ``None`` means "binary is missing" and must be
+        # honored so tests can force the UNAVAILABLE branch even on a
+        # host where ``nvidia-smi`` is on PATH.
+        if nvidia_smi_bin is _AUTO_DETECT:
+            self._nvidia_smi_bin = shutil.which("nvidia-smi")
+        else:
+            self._nvidia_smi_bin = nvidia_smi_bin
         self._meminfo_path = meminfo_path
         self._env = env if env is not None else os.environ
 

@@ -843,3 +843,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:**
   - `plugins/praxis/apex/storage.py` — dropped `MappingProxyType` import; `_json_load` returns `dict[str, Any]`; comment explains the FastAPI/pydantic constraint.
 - **Related BUILD_LOG entry:** 2026-08-01 17:12 EDT (Stage 3.13.2 landing — this fix ships as the follow-up push on the same slice).
+
+## 2026-08-01 17:51 EDT — resource_guard test_nvidia_smi_missing false-negative on hosts with real nvidia-smi
+
+- **Symptom:** `plugins/tektos/executor/tests/test_resource_guard.py::test_nvidia_smi_missing` failed on Colossus with `assert <GuardVerdict.OK: 'ok'> is <GuardVerdict.UNAVAILABLE: 'unavailable'>`. Passed in the agent sandbox (no nvidia-smi on PATH), failed on Colossus (nvidia-smi at `/usr/bin/nvidia-smi`).
+- **Affected stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` · `resource_guard.ColossusResourceGuard.__init__`
+- **Root cause:** `__init__` used `nvidia_smi_bin: str | None = None` and treated a `None` argument the same as "no argument given" — falling back to `shutil.which("nvidia-smi")`. The test passed `nvidia_smi_bin=None` intending "binary is missing"; the constructor auto-discovered the real `/usr/bin/nvidia-smi` on Colossus, the fake subprocess.run returned `"24000"`, and the VRAM query succeeded when it was supposed to be unavailable.
+- **Fix applied:** Introduced a module-level `_AUTO_DETECT = object()` sentinel. `__init__` now only auto-discovers when the argument identity is `_AUTO_DETECT`; an explicit `None` means "binary is missing" and is honored, so tests can force the UNAVAILABLE branch on any host. No callers outside the tests currently pass this argument, so no production callers are affected.
+- **Files changed:** `plugins/tektos/executor/resource_guard.py` (sentinel + branching in `__init__`).
+- **Related BUILD_LOG entry:** 2026-08-01 17:47 EDT (step 2a landing).
