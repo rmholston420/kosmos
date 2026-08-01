@@ -2150,3 +2150,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** `TemporalIndex` (payload shape widened — additive, no breaking change).
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest of corpus filter.
+
+## 2026-08-01 04:04 EDT — Stage 6.5.8 · Tektos UI kernel mount (ADR-065)
+
+- **Stage / plugin / port:** Stage 6.5.8 · Tektos UI · kernel mount at `/tektos-ui/*` (ADR-065)
+- **What changed:**
+  - New ADR-065 ratifies mounting `plugins.tektos.ui.server.build_tektos_ui_app` as a sub-app at `/tektos-ui` inside `kernel/app.py` lifespan.
+  - **Option B independent mount:** UI depends only on `registry.approval` (ADR-062) + `registry.memory` (ADR-063), NOT on `registry.tektos` (the agent plugin). Rationale: the change-approval UI stays reachable during LLM/agent outages so users can triage stuck plans. ADR-007 spirit — the UI only needs the two ports, so any cross-plugin dependency would be fabricated.
+  - `_BootRegistry` gains `tektos_ui: FastAPI | None` and `tektos_ui_executor: ExecutorPort | None`.
+  - New boot block after the existing tektos-agent block: gates on `registry.approval` + `registry.memory`, records `registry.errors['tektos_ui']` if either is None, else instantiates `NopExecutor` + `build_tektos_ui_app(...)` and `app.mount('/tektos-ui', sub_app)`.
+  - `/health.subsystems` gains `tektos_ui: bool`.
+  - `kernel/app.py` version 6.5.7 → 6.5.8.
+  - `NopExecutor` bound at 6.5.8; Stage 3.12 will swap it for a real `GitWorktreeExecutor` + `RootlessContainerExecutor` behind the same `ExecutorPort` protocol — zero kernel change required.
+  - New test file `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py` covers three tiers: kernel-boot (real registry via `TestClient(app)`), sub-app contract (direct `build_tektos_ui_app` with fake ports so per-request memory writes are observable), boot-degradation (simulated boot block with missing dependencies).
+- **Files touched:**
+  - `docs/adrs/ADR-065-stage-6-5-8-tektos-ui-kernel-mount.md` (new)
+  - `docs/adrs/README.md` (row inserted above ADR-064)
+  - `kernel/app.py` (two registry fields, one boot block, one `/health` key, one mount, version bump)
+  - `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py` (new, 12 tests)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten with 6.5.8 state)
+- **Ports / adapters affected:** none (zero new ports; reuses `ApprovalResolverPort`, `MemoryPort`, `ExecutorPort` — all pre-existing).
+- **PORTING_LEDGER / ADR updated:** ADR-065 authored + ratified.
+- **Stop-condition status:** in-progress — PR #9 opened, awaiting Colossus retest.
