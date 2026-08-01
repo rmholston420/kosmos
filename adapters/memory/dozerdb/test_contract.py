@@ -557,3 +557,82 @@ async def test_reject_quarantined_missing_raises() -> None:
         await adapter.reject_quarantined(
             handle, reviewer="me", reason="test"
         )
+
+
+# ── ADR-076 D5: provenance chain ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_unknown_raises_lookup() -> None:
+    adapter = _fresh_adapter()
+    with pytest.raises(LookupError):
+        await adapter.provenance_chain("does-not-exist")
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_no_predecessors_returns_empty_list() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph)
+    written = await adapter.write_event(
+        "s", "p", "o", provenance="unit-test", confidence=0.75
+    )
+    chain = await adapter.provenance_chain(written.id)
+    assert chain.event_id == written.id
+    assert chain.source == "unit-test"
+    assert chain.confidence == 0.75
+    assert chain.predecessors == []
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_walks_two_hop_chain() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph)
+    root = await adapter.write_event(
+        "root", "p", "o", provenance="root-src", confidence=0.95
+    )
+    mid = await adapter.write_event(
+        "mid", "p", "o", provenance="mid-src", confidence=0.6
+    )
+    tail = await adapter.write_event(
+        "tail", "p", "o", provenance="tail-src", confidence=0.4
+    )
+    # Wire :PROVENANCE_OF edges: root <- mid <- tail
+    await graph.add_edge(mid.id, root.id, "PROVENANCE_OF", {"kind": "derives_from"})
+    await graph.add_edge(tail.id, mid.id, "PROVENANCE_OF", {"kind": "cites"})
+
+    chain = await adapter.provenance_chain(root.id)
+    assert chain.event_id == root.id
+    ids = [p.event_id for p in chain.predecessors]
+    assert mid.id in ids
+    assert tail.id in ids
+    depths = {p.event_id: p.depth for p in chain.predecessors}
+    assert depths[mid.id] == 1
+    assert depths[tail.id] == 2
+    kinds = {p.event_id: p.edge_kind for p in chain.predecessors}
+    assert kinds[mid.id] == "derives_from"
+    assert kinds[tail.id] == "cites"
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_respects_max_depth() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph)
+    a = await adapter.write_event("a", "p", "o", provenance="src", confidence=0.5)
+    b = await adapter.write_event("b", "p", "o", provenance="src", confidence=0.5)
+    c = await adapter.write_event("c", "p", "o", provenance="src", confidence=0.5)
+    await graph.add_edge(b.id, a.id, "PROVENANCE_OF", {"kind": "x"})
+    await graph.add_edge(c.id, b.id, "PROVENANCE_OF", {"kind": "y"})
+
+    chain = await adapter.provenance_chain(a.id, max_depth=1)
+    ids = [p.event_id for p in chain.predecessors]
+    assert b.id in ids
+    assert c.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_bad_input_raises() -> None:
+    adapter = _fresh_adapter()
+    with pytest.raises(ValueError):
+        await adapter.provenance_chain("")
+    with pytest.raises(ValueError):
+        await adapter.provenance_chain("x", max_depth=-1)

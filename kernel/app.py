@@ -2372,6 +2372,49 @@ async def memory_quarantined_reject(
 
 
 # ---------------------------------------------------------------------------
+# ADR-076 D5 — Provenance chain surface.
+# GET /api/memory/provenance/{event_id} — walks :PROVENANCE_OF up to
+# MAX_DEPTH = 10 hops. 404 unknown, 200 with empty predecessors when known
+# but no chain, 503 when memory unavailable.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/memory/provenance/{event_id}")
+async def memory_provenance(event_id: str) -> dict[str, Any]:
+    """Return the ADR-076 D5 provenance chain for ``event_id``."""
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        raise HTTPException(503, detail="memory unavailable")
+
+    try:
+        chain = await memory.provenance_chain(event_id, max_depth=10)
+    except LookupError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {
+        "event_id": chain.event_id,
+        "source": chain.source,
+        "timestamp": chain.timestamp.isoformat(),
+        "confidence": chain.confidence,
+        "predecessors": [
+            {
+                "event_id": p.event_id,
+                "source": p.source,
+                "edge_kind": p.edge_kind,
+                "depth": p.depth,
+            }
+            for p in chain.predecessors
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Ollama status (ADR-068 D1) — passthrough to Ollama /api/ps for the top-bar
 # model-swap indicator. Hardcoded ``vram_capacity_bytes`` reflects Colossus's
 # RTX 5090 (32 GiB). Never fabricates a shape when Ollama is unreachable —

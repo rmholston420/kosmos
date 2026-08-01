@@ -182,6 +182,22 @@ class DozerDbGraphBackend:
             )
             rows = await self._run(real, {"substr": substr, **(params or {})})
             return [dict(r["n"]) if hasattr(r["n"], "items") else r["n"] for r in rows]
+        if stripped.startswith("edges_in:"):
+            _, node_id, rel_type = stripped.split(":", 2)
+            if not rel_type.replace("_", "").isalnum():
+                raise ValueError(f"invalid rel_type in pseudo-cypher: {rel_type!r}")
+            real = (
+                f"MATCH (pred)-[r:`{rel_type}`]->(n {{id: $nid}}) "
+                "RETURN pred, r.kind AS edge_kind"
+            )
+            rows = await self._run(real, {"nid": node_id, **(params or {})})
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                pred = r["pred"]
+                merged = dict(pred) if hasattr(pred, "items") else dict(pred or {})
+                merged["_edge_kind"] = str(r.get("edge_kind") or "")
+                out.append(merged)
+            return out
         return await self._run(cypher, params or {})
 
     async def delete_node(self, node_id: str) -> None:

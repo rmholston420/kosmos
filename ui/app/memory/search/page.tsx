@@ -406,12 +406,17 @@ export default function MemorySearchPage() {
                     marginBottom: "var(--space-1)",
                   }}
                 >
-                  <code
-                    data-testid="memory-search-hit-id"
-                    style={{ opacity: 0.85 }}
+                  <Link
+                    data-testid="memory-search-hit-provenance-link"
+                    href={`/memory/provenance/${encodeURIComponent(h.id)}`}
                   >
-                    {h.id}
-                  </code>
+                    <code
+                      data-testid="memory-search-hit-id"
+                      style={{ opacity: 0.85 }}
+                    >
+                      {h.id}
+                    </code>
+                  </Link>
                   {h.score != null && (
                     <span data-testid="memory-search-hit-score">
                       {h.score.toFixed(3)}

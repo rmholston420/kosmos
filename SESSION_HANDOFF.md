@@ -1,44 +1,44 @@
-# Kosmos Session Handoff — 2026-08-01 14:45 EDT
+# Session Handoff — Stage 1.6 Phase 3
 
-## Current build-sequencing position
-- **Stage / phase:** Stage 1.6 Phase 3 (ADR-076)
-- **Plugin / kernel component:** MemoryPort · UI memory surfaces
-- **Branch:** `stage-1-6-p3-code` (rolling, PR #34 OPEN)
-- **Latest commit:** pending — D4 changes staged locally in `/home/user/workspace/kosmos`, ready to `git push`.
+## Current stage/plugin/port
+Stage 1.6 Phase 3 — kernel + memory port. Sequence: D4 (COMPLETE) → **D5 (CODE LANDED, verify pending)** → D6.5 → D6 → 3.12 real executor.
 
 ## Completed this session
-- **D4 — Quarantine port + routes + UI (ADR-076 §D4). See BUILD_LOG.md 2026-08-01 14:45 EDT entry for detail.**
-  - `ports/memory.py`: `QuarantinedEntry`, `QuarantinedPage`, `list_quarantined`, `approve_quarantined`, `reject_quarantined` on `MemoryPort`.
-  - `adapters/memory/dozerdb/adapter.py`: three methods + base64 cursor helpers + tombstone-filtered list.
-  - `kernel/app.py`: `GET /api/kernel/identity` + `GET /api/memory/quarantined` + `POST /api/memory/quarantined/{id}/approve` + `POST /api/memory/quarantined/{id}/reject`. Publishes `memory.quarantine.approved` / `memory.quarantine.rejected`. Degrades to 200 `{entries: [], degraded: true}` when memory port not booted.
-  - `ui/lib/kernel-client.ts` + `ui/app/memory/quarantine/page.tsx` + `ui/app/memory/page.tsx` nav link.
-  - Fast-tier: 8 new pytest cases in `adapters/memory/dozerdb/test_contract.py`.
-  - Live-tier: `tests/integration/test_quarantine_live.py` (3 tests, `KOSMOS_STAGE_16_LIVE=1`).
-  - Playwright: `ui/tests/24-memory-quarantine-review.spec.ts` (4 smokes).
+- **D4 live-tier bug fixed:** `DozerDbGraphBackend.query_cypher` now translates the `label:` and `contains:` pseudo-cypher shorthands to real Cypher (commit `31d593e`). Live-tier all 3 tests green on Colossus.
+- **D5 code landed** on `stage-1-6-p3-code`:
+  - Port: `ProvenanceLink`, `ProvenanceChain` dataclasses + `provenance_chain` method
+  - Adapter: BFS walk via new `edges_in:` pseudo-cypher (taught to both graph backends)
+  - Kernel: `GET /api/memory/provenance/{event_id}` (404 / 503 / 200 empty-predecessors semantics)
+  - UI: `/memory/provenance/[event_id]` page with confidence pill; search hits deep-link
+  - Tests: 5 fast-tier + 3 Playwright + 2 live-tier
+- **BUILD_LOG.md** appended with D5 entry.
 
-## Two-lane Zetesis memory writes (unchanged from D3)
-1. **Plugin direct** (plugin.py:580): `provenance="zetesis_research"`, `confidence=0.75`, no `corpus_name` → default corpus.
-2. **Kernel fan-out** (kernel/app.py:612): `provenance="zetesis.event_bus"`, `confidence=1.0`, `corpus_name="zetesis-reports"`.
-
-## Remaining before current Definition of Done
-- **D5** — Provenance route + UI (ADR-076 §D5)
-- **D6** — AMG status route + pill (ADR-076 §D6)
-- **D6.5 (proposed, awaiting user)** — Phrouros anomalies table on /observe
-- **D7** — Kernel version bump + Qdrant image 1.12 → 1.15+ + PORT_CONTRACTS audit
-
-## Open questions / awaiting user answer
-- **Post-D4 next work item (per user 2026-08-01):** 3.12 real executor vs 6.5.9 praxis governance mount vs other candidate (D6.5 Phrouros anomalies). Decision matrix to be presented at session end.
-
-## Verification commands (Colossus)
-```
-cd /home/rmholston420/dev/kosmos
+## Remaining before D5 DoD
+Colossus verify:
+```bash
+cd ~/dev/kosmos
 git fetch origin stage-1-6-p3-code && git checkout stage-1-6-p3-code && git pull
-pytest adapters/memory/dozerdb/test_contract.py -k quarantined -q
-KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_quarantine_live.py -q
-cd ui && npm run build && npx playwright test 24-memory-quarantine-review
+sudo systemctl restart kosmos-kernel
+sleep 3
+pytest adapters/memory/dozerdb/test_contract.py -k provenance -q
+(cd ui && npm run build && npx playwright test 25-memory-provenance)
+KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_provenance_live.py -q
 ```
 
-## Exact next action
-1. Push D4 commit to origin `stage-1-6-p3-code`.
-2. Run verification block above on Colossus.
-3. Decide next work item (Praxis governance mount 6.5.9 vs Tektos 3.12 real executor vs D6.5 Phrouros anomalies UI).
+## Open questions
+None. All 4 D5 ambiguities resolved with "make optimal choice":
+1. Fresh port-level dataclasses (gate/models.py has incompatible shape).
+2. Walk existing `:PROVENANCE_OF` edges; empty list when none. Edge-writing deferred.
+3. Wrap `event_id` code span in `<Link>`.
+4. FastAPI default `{"detail": ...}` for 404.
+
+## Next action
+Once verify is green on Colossus, begin **D6.5 — Phrouros anomalies table on /observe**:
+- Replace placeholder in `ui/components/panels/GovernancePanel.tsx:108-109`
+- Backend `GET /api/phrouros/anomalies` + `phrouros.anomaly.detected` WS event already live on Colossus
+- UI: anomaly table + WS live-invalidate + filter by detector kind + toast on new arrival
+
+## Git state
+- Branch: `stage-1-6-p3-code`
+- Latest commit (to be pushed): D5 code
+- Previous: `31d593e` (D4 pseudo-cypher fix), `c52be79` (D4), `30ade19` (D3 live green)

@@ -18,7 +18,7 @@ Canonical pattern (matches ADR-022/023/024/025/026):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from numbers import Real
 from typing import Any, Protocol, runtime_checkable
@@ -92,6 +92,38 @@ class QuarantinedPage:
 
     entries: list[QuarantinedEntry]
     next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProvenanceLink:
+    """One `:PROVENANCE_OF` edge (ADR-076 D5).
+
+    Points at a predecessor ``:MemoryEvent``. ``edge_kind`` is the
+    literal value stored on the edge (e.g. ``"derives_from"``,
+    ``"cites"``). Depth is 1-based hops from the root event.
+    """
+
+    event_id: str
+    source: str
+    edge_kind: str
+    depth: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProvenanceChain:
+    """Full provenance chain rooted at ``event_id`` (ADR-076 D5).
+
+    ``predecessors`` is depth-ordered (nearest first), bounded by
+    ``MemoryPort.provenance_chain(max_depth=...)`` (default 10, mirrors
+    ADR-075 D4's ``MAX_PAGES = 10`` philosophy). Empty list is valid
+    and means "the event exists but has no recorded predecessors".
+    """
+
+    event_id: str
+    source: str
+    timestamp: datetime
+    confidence: float
+    predecessors: list[ProvenanceLink] = field(default_factory=list)
 
 
 class MemoryWriteBlocked(RuntimeError):
@@ -310,6 +342,23 @@ class MemoryPort(Protocol):
         ``EmbeddingsPort`` or ``VectorPort`` is not booted; they MUST
         NOT swallow port-level guard failures (``ValueError`` is
         re-raised so callers see the bug immediately).
+        """
+        ...
+
+    # ── ADR-076 D5: provenance chain ────────────────────────────────────
+
+    async def provenance_chain(
+        self,
+        event_id: str,
+        *,
+        max_depth: int = 10,
+    ) -> "ProvenanceChain":
+        """Walk `:PROVENANCE_OF` edges up to ``max_depth`` hops.
+
+        Raises ``LookupError`` when ``event_id`` is not a known
+        ``:MemoryEvent`` node (kernel maps to 404). Returns a chain
+        with empty ``predecessors`` when the event exists but has no
+        provenance edges.
         """
         ...
 

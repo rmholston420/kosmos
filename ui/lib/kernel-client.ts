@@ -218,7 +218,32 @@ export const kernelClient = {
       `/api/memory/quarantined/${encodeURIComponent(eventId)}/reject`,
       body,
     ),
+
+  // ADR-076 D5 Stage 1.6 Phase 3 — provenance chain surface.
+  getProvenanceChain: (eventId: string) =>
+    getJSON<ProvenanceChain>(
+      `/api/memory/provenance/${encodeURIComponent(eventId)}`,
+    ),
 };
+
+// --- ADR-076 D5: /api/memory/provenance/{event_id} ---
+export interface ProvenanceLink {
+  event_id: string;
+  source: string;
+  edge_kind: string;
+  depth: number;
+}
+export interface ProvenanceChain {
+  event_id: string;
+  source: string;
+  timestamp: string;
+  confidence: number;
+  predecessors: ProvenanceLink[];
+}
+
+// --- ADR-076 D4 (below) ---
+const _ADR076_D4_TYPES_BELOW = true;
+void _ADR076_D4_TYPES_BELOW;
 
 // --- ADR-076 D4: /api/kernel/identity + /api/memory/quarantined/* ---
 export interface KernelIdentity {

@@ -3321,3 +3321,23 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Event publish location:** kernel route publishes `memory.quarantine.rejected` / `memory.quarantine.approved`; adapter stays event-bus-agnostic (no DI churn).
 - **Atomicity:** compensating delete — approve writes via `write_event` first, then best-effort deletes the `:Quarantined` node. `list_quarantined` filters rows whose id already exists in `:MemoryEvent.attributes.original_event_id` (tombstone-safe).
 - **Cursor:** base64 URL-safe JSON `{q: quarantined_at, i: event_id}`; server-side Python sort + slice (quarantine lane is human-review-bounded, not millions of rows).
+
+## 2026-08-01 15:00 EDT — Stage 1.6 Phase 3 D5 (Provenance route + UI)
+
+Landed ADR-076 §D5 provenance chain surface end-to-end.
+
+- **Stage/plugin/port:** Stage 1.6 Phase 3, kernel + memory port
+- **Files touched:**
+  - `ports/memory.py` — new `ProvenanceLink`, `ProvenanceChain` frozen dataclasses; `MemoryPort.provenance_chain(event_id, *, max_depth=10) -> ProvenanceChain`
+  - `adapters/memory/dozerdb/adapter.py` — `provenance_chain` BFS walk via `edges_in:<id>:PROVENANCE_OF` pseudo-cypher; taught `InMemoryGraphBackend.query_cypher` the `edges_in:` shorthand
+  - `adapters/memory/dozerdb/dozerdb_graph_backend.py` — dual translation of `edges_in:` to real Cypher (`MATCH (pred)-[r:PROVENANCE_OF]->(n {id:$nid}) RETURN pred, r.kind`)
+  - `kernel/app.py` — `GET /api/memory/provenance/{event_id}` (404 unknown, 503 memory unavailable, 200 with empty predecessors when known)
+  - `ui/lib/kernel-client.ts` — `getProvenanceChain` + `ProvenanceLink`/`ProvenanceChain` types
+  - `ui/app/memory/provenance/[event_id]/page.tsx` — new (root card + depth-ordered predecessor cards, Stage-4.6 confidence pill palette green ≥0.9 / yellow ≥0.5 / red <0.5)
+  - `ui/app/memory/search/page.tsx` — search hit `event_id` wrapped in `<Link>` to `/memory/provenance/[event_id]`
+- **Tests:**
+  - `adapters/memory/dozerdb/test_contract.py` — 5 new async pytest cases (unknown raises LookupError, empty predecessors, two-hop walk, max_depth honored, bad-input ValueError)
+  - `ui/tests/25-memory-provenance.spec.ts` — 3 Playwright smokes (search-page link presence, scaffold, terminal-state resolution)
+  - `tests/integration/test_provenance_live.py` — 2 live-tier tests (unknown → 404/503, route registered in openapi)
+- **Decisions:** Option A across the board (fresh port-level dataclasses since ADR-076 D5 shape does NOT match gate/models.py; edges-in pseudo-cypher taught to both graph backends; wrap `event_id` `<code>` in `<Link>`; FastAPI default 404 body).
+- **Stop condition:** ADR-076 D5 DoD — route surface + UI page + deep-link + fast-tier tests all live in one branch. Live-tier Colossus verify pending.

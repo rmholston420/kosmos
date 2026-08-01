@@ -198,6 +198,23 @@ class InMemoryGraphBackend:
         if needle.startswith("contains:"):
             frag = needle.split(":", 1)[1].strip().lower()
             return [n for n in self._nodes.values() if frag in str(n).lower()]
+        # ADR-076 D5: incoming-edges lookup.
+        # "edges_in:<node_id>:<rel_type>" -> list of predecessor nodes
+        # (dict) each carrying an ``_edge_kind`` synthetic key holding the
+        # edge's ``kind`` prop (or empty string when unset).
+        if needle.startswith("edges_in:"):
+            _, node_id, rel_type = needle.split(":", 2)
+            out: list[dict[str, Any]] = []
+            for e in self._edges:
+                if e["to"] != node_id or e["rel_type"] != rel_type:
+                    continue
+                pred = self._nodes.get(e["from"])
+                if pred is None:
+                    continue
+                merged = dict(pred)
+                merged["_edge_kind"] = str(e["props"].get("kind", ""))
+                out.append(merged)
+            return out
         return list(self._nodes.values())
 
     async def delete_node(self, node_id: str) -> None:
@@ -680,6 +697,95 @@ class DozerDbMemoryAdapter:
         eid = event_id.id if isinstance(event_id, MemoryEventId) else str(event_id)
         await self._load_quarantined_row(eid)
         await self._graph.delete_node(eid)
+
+    # ── ADR-076 D5: provenance chain ────────────────────────────────────
+
+    async def provenance_chain(
+        self,
+        event_id: str,
+        *,
+        max_depth: int = 10,
+    ) -> "ProvenanceChain":
+        from ports.memory import ProvenanceChain, ProvenanceLink
+
+        if not isinstance(event_id, str) or not event_id:
+            raise ValueError("provenance_chain requires non-empty event_id")
+        if not isinstance(max_depth, int) or max_depth < 0:
+            raise ValueError("provenance_chain requires max_depth >= 0")
+
+        # Load the root :MemoryEvent node.
+        events = await self._graph.query_cypher("label:MemoryEvent")
+        root: dict[str, Any] | None = None
+        for n in events:
+            if n.get("id") == event_id:
+                root = n
+                break
+        if root is None:
+            raise LookupError(f"MemoryEvent not found: {event_id!r}")
+
+        def _ts(node: dict[str, Any]) -> datetime:
+            raw = node.get("as_of") or node.get("written_at") or node.get("timestamp")
+            if isinstance(raw, datetime):
+                return raw
+            if isinstance(raw, str):
+                try:
+                    return datetime.fromisoformat(raw)
+                except ValueError:
+                    pass
+            return datetime.fromtimestamp(0, tz=timezone.utc)
+
+        def _source(node: dict[str, Any]) -> str:
+            return str(node.get("provenance") or node.get("source") or "")
+
+        def _conf(node: dict[str, Any]) -> float:
+            raw = node.get("confidence")
+            try:
+                return float(raw) if raw is not None else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        predecessors: list[ProvenanceLink] = []
+        if max_depth == 0:
+            return ProvenanceChain(
+                event_id=event_id,
+                source=_source(root),
+                timestamp=_ts(root),
+                confidence=_conf(root),
+                predecessors=predecessors,
+            )
+
+        # BFS one hop at a time via edges_in pseudo-cypher.
+        seen: set[str] = {event_id}
+        frontier: list[tuple[str, int]] = [(event_id, 0)]
+        while frontier:
+            node_id, depth = frontier.pop(0)
+            if depth >= max_depth:
+                continue
+            preds = await self._graph.query_cypher(
+                f"edges_in:{node_id}:PROVENANCE_OF"
+            )
+            for p in preds:
+                pid = str(p.get("id") or "")
+                if not pid or pid in seen:
+                    continue
+                seen.add(pid)
+                predecessors.append(
+                    ProvenanceLink(
+                        event_id=pid,
+                        source=_source(p),
+                        edge_kind=str(p.get("_edge_kind") or ""),
+                        depth=depth + 1,
+                    )
+                )
+                frontier.append((pid, depth + 1))
+
+        return ProvenanceChain(
+            event_id=event_id,
+            source=_source(root),
+            timestamp=_ts(root),
+            confidence=_conf(root),
+            predecessors=predecessors,
+        )
 
     # ── reads ───────────────────────────────────────────────────────────
 
