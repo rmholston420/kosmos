@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import sys
 import time
@@ -25,8 +26,21 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from ops.benchmarks.adr_010.metrics import TrialMetrics
-from . import (
+# Local-first Ollama sentinel for OpenAI SDK. ODR's ``get_api_key_for_model``
+# (vendor/adr_010/open_deep_research/src/open_deep_research/utils.py:892)
+# reads ``OPENAI_API_KEY`` straight from ``os.getenv`` for any ``openai:``
+# prefixed model tag, then hands it to LangChain's ``init_chat_model``.
+# The OpenAI SDK's ``AsyncOpenAI`` client raises ``OpenAIError: Missing
+# credentials`` at construction time when ``api_key`` is ``None``/empty,
+# even when ``base_url`` targets Ollama's openai-compat endpoint that
+# ignores auth. Colossus is a local-first workstation with no
+# ``OPENAI_API_KEY`` set. Seed a sentinel here at import time so the SDK
+# accepts the client. We only set it if the operator has not already set
+# one (e.g. a mixed local + hosted setup elsewhere in the process).
+os.environ.setdefault("OPENAI_API_KEY", "ollama")
+
+from ops.benchmarks.adr_010.metrics import TrialMetrics  # noqa: E402
+from . import (  # noqa: E402
     claim_support,
     cove,
     enterprise_license_grounding,
@@ -35,13 +49,13 @@ from . import (
     rubric_critique,
     structural_finalize,
 )
-from .prompts import (
+from .prompts import (  # noqa: E402
     KOSMOS_MCP_PROMPT,
     build_anchored_user_turn,
     build_fact_check_correction_directive,
 )
-from .search_backend import unique_domain_count
-from .url_verify import extract_urls, verify_urls
+from .search_backend import unique_domain_count  # noqa: E402
+from .url_verify import extract_urls, verify_urls  # noqa: E402
 
 
 class ThermalAbort(RuntimeError):
@@ -186,13 +200,10 @@ def build_odr_config(
             # harness/prompts.py for the full contract.
             "mcp_prompt": KOSMOS_MCP_PROMPT,
             # Model slots — all pointed at Ollama via openai-compat.
-            # The OpenAI SDK enforces a non-empty ``api_key`` at client
-            # construction time even when the ``base_url`` targets a
-            # local Ollama endpoint that ignores auth. Pass a sentinel
-            # value on every slot so ``init_chat_model`` does not raise
-            # ``OpenAIError: Missing credentials`` when the user has no
-            # ``OPENAI_API_KEY`` env var set (the common local-first
-            # case on Colossus).
+            # ``api_key`` is sourced from the ``OPENAI_API_KEY`` env var
+            # by ODR's ``get_api_key_for_model`` (module-level sentinel
+            # seeded at the top of this file). ``base_url`` + sampling
+            # params are model-slot local and set here.
             "research_model": prefixed_model,
             "research_model_config": {
                 "base_url": ollama_base_url,

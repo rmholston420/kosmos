@@ -214,6 +214,21 @@ def test_odr_config_supplies_api_key_on_every_model_slot() -> None:
         ), f"{slot!r} missing non-empty api_key"
 
 
+def test_odr_module_seeds_openai_api_key_env_var() -> None:
+    # ODR's ``get_api_key_for_model`` in
+    # ``vendor/adr_010/open_deep_research/src/open_deep_research/utils.py``
+    # reads ``OPENAI_API_KEY`` from ``os.getenv`` (not from any
+    # ``configurable.*.api_key`` slot) for every ``openai:`` prefixed
+    # model tag. The odr module must seed a sentinel at import time so
+    # the OpenAI SDK does not raise ``OpenAIError: Missing credentials``
+    # on Colossus (local-first, no OPENAI_API_KEY exported).
+    import os as _os
+    assert _os.environ.get("OPENAI_API_KEY"), (
+        "OPENAI_API_KEY not seeded by plugins.zetesis.research.odr; "
+        "AsyncOpenAI would raise at client construction on Colossus"
+    )
+
+
 def test_odr_module_imports_anchoring_functions() -> None:
     # Guard against a future refactor that reintroduces the pre-6.3.1 inline
     # placeholder prompt in odr.py.

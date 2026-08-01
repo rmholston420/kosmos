@@ -676,3 +676,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Added `"api_key": "ollama"` sentinel to all four model_config dicts in `build_odr_config`. Added regression test `test_odr_config_supplies_api_key_on_every_model_slot` in `plugins/zetesis/research/tests/test_prompts.py` asserting every model slot carries a non-empty `api_key`.
 - **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
 - **Related BUILD_LOG entry:** —
+
+## 2026-08-01 12:26 EDT — Zetesis research still fails after configurable api_key fix: root cause is ODR reads os.getenv, not the config dict
+
+- **Symptom:** After hotfix commit 67b93e8 added ``"api_key": "ollama"`` to all four ``build_odr_config`` model_config dicts, Zetesis Research still surfaces ``OpenAIError: Missing credentials`` on Colossus.
+- **Affected stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · ``plugins/zetesis/research/odr.py`` + ``vendor/adr_010/open_deep_research/src/open_deep_research/utils.py``
+- **Root cause:** ODR's ``get_api_key_for_model`` at ``vendor/adr_010/open_deep_research/src/open_deep_research/utils.py:892`` reads ``OPENAI_API_KEY`` from ``os.getenv`` on the default path (``GET_API_KEYS_FROM_CONFIG != "true"``). It does **not** read ``configurable.<slot>_config.api_key``. Even with the model_config dict correctly populated, the SDK client is constructed with ``api_key=None`` because ``os.getenv("OPENAI_API_KEY")`` returns ``None`` on Colossus. Prior audit at 12:19 EDT missed this — the ``configurable_fields=("model", "max_tokens", "api_key")`` comment misled me; that tuple lists which top-level fields the *configurable model* accepts at bind time, not what ODR internally reads for auth.
+- **Fix applied:** Seed ``os.environ.setdefault("OPENAI_API_KEY", "ollama")`` at ``plugins/zetesis/research/odr.py`` module import. ``setdefault`` (not assignment) so a real key set elsewhere in the process is not clobbered. The four ``api_key`` model_config slots stay in place — they are correct-shape config and future-proof if ODR upstream ever reads them.
+- **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
+- **Supersedes:** 2026-08-01 12:19 EDT
