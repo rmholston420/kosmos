@@ -3421,3 +3421,14 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** MemoryPort test doubles only.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met — `pytest plugins/tektos/tests/test_openspec.py::test_fake_memory_port_conforms_to_memoryport_protocol plugins/tektos/tests/test_tektos_agent.py::test_fake_memory_port_is_runtime_memoryport` passes 2/2.
+
+## 2026-08-01 16:40 EDT — Stage 3.13 fix: expose ApprovalGatewayPort on registry
+
+- **Stage / plugin / port:** Stage 3.13 · kernel · ApprovalGatewayPort exposure.
+- **What changed:** added `_BootRegistry.approval_gateway` field. `_boot_approval` now stores the raw `KernelChangeApprovalAdapter` engine on `registry.approval_gateway` (ApprovalGatewayPort — exposes `propose`) alongside the existing `registry.approval` (ApprovalResolverPort — read + resolve only). `/api/tektos/intention` reads `registry.approval_gateway` so `render_and_gate_plan_card` can call `propose()`.
+- **Files touched:**
+  - `kernel/app.py` (field + boot assignment + endpoint read site).
+  - `DEBUG_LOG.md` — see `2026-08-01 16:36 EDT` entry.
+- **Ports / adapters affected:** kernel registry now surfaces both `ApprovalGatewayPort` and `ApprovalResolverPort`. Same underlying `KernelChangeApprovalAdapter` engine.
+- **PORTING_LEDGER / ADR updated:** — (behavior aligns with ADR-037 §Q5 and ADR-045; no new decision needed).
+- **Stop-condition status:** met — submitting an intention on `/tektos` now proposes a plan card through APEX and returns the gated card.

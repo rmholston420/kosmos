@@ -91,6 +91,11 @@ class _BootRegistry:
         self.frontend_contract: Any = None
         self.resource: Any = None
         self.approval: Any = None
+        # Stage 3.13 (ADR-077): raw APEX engine (ApprovalGatewayPort surface,
+        # exposes ``propose``). Kept separate from ``self.approval`` — which
+        # is the narrower ApprovalResolverPort (read + resolve only). Both
+        # come from the same ``_boot_approval`` call.
+        self.approval_gateway: Any = None
         self.notification: Any = None
         self.phrouros: Any = None
         self.event_bus: Any = None
@@ -286,6 +291,10 @@ async def lifespan(app: FastAPI):
             event_bus=registry.event_bus,
             notification=registry.notification,
         )
+        # Stage 3.13 (ADR-077): also expose the raw engine as the
+        # ApprovalGatewayPort. The resolver adapter deliberately does
+        # not surface ``propose``; the intention endpoint needs it.
+        registry.approval_gateway = engine
         return PraxisApprovalResolverAdapter(engine=engine)
 
     registry.approval = _boot_approval
@@ -1327,10 +1336,12 @@ async def tektos_intention(request: Request) -> dict[str, Any]:
     routes for sandboxed execution + real-diff apply.
     """
     memory = registry.memory
-    approval = registry.approval
+    # ADR-077: intention scaffolder must use the ApprovalGatewayPort
+    # (``propose``), not the ApprovalResolverPort under ``registry.approval``.
+    approval = registry.approval_gateway
     if memory is None or approval is None:
         missing = [
-            n for n, v in (("memory", memory), ("approval", approval)) if v is None
+            n for n, v in (("memory", memory), ("approval_gateway", approval)) if v is None
         ]
         raise HTTPException(
             503,

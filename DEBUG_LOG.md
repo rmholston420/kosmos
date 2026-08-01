@@ -819,3 +819,13 @@ Entry format per `kosmos-log-maintenance` skill:
   - plugins/tektos/tests/test_tektos_agent.py
   - DEBUG_LOG.md
 - **Supersedes:** 2026-08-01 11:59 EDT (same class of bug, extended fix surface; leave the prior entry intact — it correctly diagnosed the mechanism against `search_semantic` alone).
+
+## 2026-08-01 16:36 EDT — /api/tektos/intention: `AttributeError: 'PraxisApprovalResolverAdapter' object has no attribute 'propose'`
+
+- **Symptom:** submitting an intention on `/tektos` (Stage 3.13) returned `AttributeError: 'PraxisApprovalResolverAdapter' object has no attribute 'propose'` from `plugins/tektos/renderer/project.py:162` (`approval.propose(...)`).
+- **Affected stage / plugin / port:** Stage 3.13 · kernel `/api/tektos/intention` · ApprovalGatewayPort vs ApprovalResolverPort.
+- **Root cause:** `registry.approval` is a `PraxisApprovalResolverAdapter` — the narrow ApprovalResolverPort (read + resolve). It intentionally hides `propose` (ADR-045 promoted the resolver surface, ADR-037 §Q5 keeps the gateway separate). `render_and_gate_plan_card` calls `ApprovalGatewayPort.propose`, which lives on the underlying `KernelChangeApprovalAdapter` engine. The intention endpoint was reaching through the wrong port.
+- **Fix applied:** added `registry.approval_gateway` alongside `registry.approval`. `_boot_approval` now stores the raw APEX engine on `registry.approval_gateway` before wrapping it in the resolver adapter. `/api/tektos/intention` reads `registry.approval_gateway` (the gateway port) instead of `registry.approval` (the resolver port). Preserves the resolver's deliberately narrow surface.
+- **Files changed:**
+  - `kernel/app.py` — new `_BootRegistry.approval_gateway` field; `_boot_approval` stores the engine; intention endpoint reads `approval_gateway`.
+- **Related BUILD_LOG entry:** 2026-08-01 16:40 EDT
