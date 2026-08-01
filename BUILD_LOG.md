@@ -2753,3 +2753,27 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (contract-level clarification only)
 - **PORTING_LEDGER / ADR updated:** ADR-056 (Ratified v25 — Amended 2026-08-01 twice)
 - **Stop-condition status:** amendment complete on branch. Awaits Colossus fast-tier run of the two new contract tests.
+
+## 2026-08-01 09:54 EDT — ADR-056 §D3 amendment · conftest _FakeFrontendContract signature fix
+
+- **Stage / plugin / port:** Stage 6.3 · Zetesis fast-tier fixtures · FrontendContractPort protocol conformance
+- **Symptom on Colossus:** `test_failure_semantics.py` tests failed at `plugin.start()` with `TypeError: _FakeFrontendContract.register_plugin() missing 1 required positional argument: 'spec'`.
+- **Root cause:** The `_FakeFrontendContract` in `plugins/zetesis/tests/conftest.py` had a stale 2-arg signature (`register_plugin(name, spec)`) predating the port-protocol change to `register_plugin(descriptor)`. Existing port-wiring tests never called `.start()`, so the bug was latent. `test_failure_semantics.py` is the first `conftest.make_zetesis_plugin` consumer that calls `.start()`.
+- **Fix:** Updated `_FakeFrontendContract` to full `FrontendContractPort` protocol conformance:
+  - `register_plugin(descriptor) -> PluginRegistration` (returns a real `PluginRegistration` with `UiParityStatus.IN_PROGRESS`).
+  - Adds `list_plugins`, `get_route_manifest`, `get_design_tokens`, `get_state_namespaces`, `get_panel_manifest`, `check_ui_parity` as trivial defaults.
+  - `render_kernel_schema` raises `NotImplementedError` (fixture stub; port-wiring tests never call it).
+- **Files touched:**
+  - `plugins/zetesis/tests/conftest.py` (`_FakeFrontendContract` updated; imports added)
+- **Ports / adapters affected:** none — test fixture only
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met on branch; awaits Colossus re-verify (target 2/2 GREEN for `test_failure_semantics.py`, no regression on other Zetesis fast-tier tests).
+
+## 2026-08-01 09:54 EDT — DEBUG_LOG entry · _FakeFrontendContract signature drift
+
+- **Symptom:** `TypeError: _FakeFrontendContract.register_plugin() missing 1 required positional argument: 'spec'` raised inside `ZetesisPlugin.start()` at `plugin.py:387`.
+- **Affected stage / plugin / port:** Stage 6.3 fast-tier test fixtures · FrontendContractPort.
+- **Root cause:** conftest fake predated port-protocol change; latent because no prior consumer called `.start()`.
+- **Fix applied:** conftest fake now implements the full protocol.
+- **Files changed:** `plugins/zetesis/tests/conftest.py`.
+- **Related BUILD_LOG entry:** 2026-08-01 09:54 EDT (this session).
