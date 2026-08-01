@@ -1,6 +1,6 @@
 # ADR-076 — Stage 1.6 Phase 3: Semantic Search Real-Qdrant DoD + Quarantine/Provenance Surfaces + AMG UI
 
-**Status:** Proposed
+**Status:** Ratified v25
 **Lock-in phase:** Stage 1.6 · Phase 3
 **Supersedes:** —
 

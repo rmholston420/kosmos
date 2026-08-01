@@ -3146,3 +3146,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (behavior fix under existing LLMPort/EventBusPort/MemoryPort surfaces)
 - **PORTING_LEDGER / ADR updated:** — (behavior fix; no port/decision surface change)
 - **Stop-condition status:** met — Zetesis /research returns a structured report; MemoryPort receives the event with provenance="zetesis.event_bus" + confidence=1.0 per ADR-075 D3.
+
+## 2026-08-01 12:38 EDT — ADR-076 ratified (v25): Stage 1.6 Phase 3 scope locked
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · MemoryPort · kernel routes · `/memory/*` UI · AMG surface
+- **What changed:** Flipped `docs/adrs/ADR-076-stage-1-6-phase-3.md` Status: Proposed → Ratified v25. Updated `docs/adrs/README.md` row 94 Proposed → Ratified v25. Seven decisions (D1–D7) now locked and code work unblocked.
+- **Files touched:** docs/adrs/ADR-076-stage-1-6-phase-3.md; docs/adrs/README.md; BUILD_LOG.md
+- **Ports / adapters affected:** none yet (ratification only; D1–D7 execution follows on `stage-1-6-p3-code`)
+- **PORTING_LEDGER / ADR updated:** ADR-076 Ratified v25
+- **Stop-condition status:** met for ratification; D1–D7 code execution begins next.
