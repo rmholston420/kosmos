@@ -2606,3 +2606,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort write path (via `write_event`, zero-trust guard exercised); EventBusPort (kernel subscribes as consumer)
 - **PORTING_LEDGER / ADR updated:** ADR-071 authored (Proposed); no new vendor ports
 - **Stop-condition status:** local Wave E pytest 23/23 GREEN + Wave C/D version-pin tests 2/2 GREEN. Awaiting Colossus full-suite (target ≥48/6/0).
+
+## 2026-08-01 08:16 EDT — Wave E merged + ADR-071 Ratified v25
+
+- **Stage / plugin / port:** Stage 1.5 · Wave E · `/api/gnosis/graph/{communities,annotate}` + `MemoryIntegrityPanel` + Zetesis event-bus subscriber
+- **What changed:**
+  - PR #16 squash-merged as `3b2c536` on main.
+  - Colossus DoD closed: full pytest 168/168 GREEN, full Playwright suite 49/6/0 GREEN, kernel `6.8.0` live.
+  - ADR-071 promoted `Proposed → Ratified v25 (2026-08-01)`; index row status updated.
+- **Files touched:**
+  - `docs/adrs/ADR-071-stage-1-5-wave-e-polish.md`
+  - `docs/adrs/README.md`
+- **Ports / adapters affected:** none (ratification only)
+- **PORTING_LEDGER / ADR updated:** ADR-071 ratified
+- **Stop-condition status:** met — Wave E DoD closed. Stage 1.5 GUI realization COMPLETE.
