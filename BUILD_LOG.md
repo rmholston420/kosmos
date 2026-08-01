@@ -2652,3 +2652,22 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** EventBusPort (kernel dispatch → WS consumer path exercised end-to-end); FrontendContractPort (four Operate slots switch from placeholder to kernel-backed).
 - **PORTING_LEDGER / ADR updated:** ADR-072 authored (Proposed); no new vendored components (`@tailwindcss/postcss` is a first-party Tailwind package, not a vendored port).
 - **Stop-condition status:** F0+F1+F2 slice **met**. Colossus Playwright `14-wave-f-operate-panels.spec.ts` 6/6 GREEN. PR #18 awaiting merge. F3+F4+F5 for PR #19 remain. Full Wave F Definition of Done (target ≥55/6/0 full suite, kernel `6.9.0` after ratification PR) still open.
+
+## 2026-08-01 09:28 EDT — Stage 1.5 Wave F · F6 · ADR-056 §D3 no-op search compliance
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Zetesis · VectorPort · QdrantVectorAdapter
+- **What changed:**
+  - Diagnosed live-kernel Zetesis SSE `event: error` payload `"query_vector must be a non-empty list of floats"` on Colossus after F0.7 landed. Kernel `/health` green (12/12 subsystems); `POST /api/zetesis/research` reached `event: started` then errored before `event: completed`.
+  - Root cause traced: `plugins/zetesis/plugin.py:557` intentionally calls `VectorPort.search(query_vector=[], limit=1)` per ADR-056 §D3 sub-slice 3 STATUS AMENDMENT (verbatim: "no-op wiring proof calls `search(collection=ZETESIS_STATE_NAMESPACE, query_vector=[], limit=1)` and **ignores the result**"). The Stage 6.5 factory (`plugins/zetesis/adapters/real/factory.py:194`) binds the real `QdrantVectorAdapter(backend=InMemoryQdrantBackend())`, which raised `ValueError` on the spec-mandated no-op.
+  - **Fix B chosen over factory-side stub swap:** loosen `QdrantVectorAdapter.search` to return `[]` on empty `query_vector` (spec-legal no-op) while still raising for non-list inputs. Preserves the Stage 6.5 factory's "full-real-adapter mount" honesty; unblocks Stage 6.4 EmbeddingsPort work (ADR-073, pending) without factory churn.
+  - Flipped `test_search_rejects_empty_query_vector` → `test_search_with_empty_vector_returns_empty_list`; added `test_search_rejects_non_list_query_vector` to preserve non-list rejection.
+  - Added Playwright regression `ui/tests/16-zetesis-completes.spec.ts` asserting `/api/zetesis/research` reaches `event: completed` without `event: error`, plus a `/health` subsystem cross-check.
+  - Amended ADR-056 with a 2026-08-01 STATUS AMENDMENT block covering the diagnosis, resolution, files touched, and rationale for adapter-side loosening over factory-side stub swap. Status line updated to `Ratified v25 — Completed 2026-07-30 — Amended 2026-08-01`.
+- **Files touched:**
+  - `adapters/vector/qdrant/adapter.py` (~10 lines: empty vector returns `[]`; non-list still raises)
+  - `adapters/vector/qdrant/test_contract.py` (flipped 1 test, added 1 test)
+  - `ui/tests/16-zetesis-completes.spec.ts` (new, 2 tests)
+  - `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (STATUS AMENDMENT prepended, status line updated)
+- **Ports / adapters affected:** VectorPort (semantics loosened at adapter boundary); Zetesis research call path now completes end-to-end on live Colossus.
+- **PORTING_LEDGER / ADR updated:** ADR-056 amended (2026-08-01). ADR-073 (EmbeddingsPort + Ollama nomic-embed-text) referenced in the amendment as the follow-on Stage 6.4 real-retrieval work; not yet authored.
+- **Stop-condition status:** F6 slice **met** on branch; awaiting Colossus verification (`git pull` + kernel restart + `curl /api/zetesis/research` + Playwright `16-zetesis-completes.spec.ts`). PR #19 scope now F3 + F4 + F5 + F6.
