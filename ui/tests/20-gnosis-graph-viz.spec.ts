@@ -32,10 +32,13 @@ test.describe("Gnosis graph visualization (ADR-074 D5)", () => {
 
     // Either the graph loaded stats OR the empty-state banner is up —
     // both are acceptable smoke outcomes (data availability depends on
-    // whether the kernel has ingested corpora).
+    // whether the kernel has ingested corpora). Under an empty corpus
+    // the footer stats can also render alongside the empty-state
+    // banner (footer shows "0 nodes / 0 edges"), so use .first() on
+    // the union to avoid strict-mode when both are present.
     const stats = page.getByTestId("graph-stats");
     const empty = page.getByTestId("graph-empty");
-    await expect(stats.or(empty)).toBeVisible({ timeout: 5000 });
+    await expect(stats.or(empty).first()).toBeVisible({ timeout: 5000 });
   });
 
   test("graph stats footer reports pagination pages counter (ADR-075 D4)", async ({
@@ -44,10 +47,12 @@ test.describe("Gnosis graph visualization (ADR-074 D5)", () => {
     await page.goto("/gnosis/graph");
     // Either data appeared (stats visible) or empty-state — but the
     // stats footer format must include the "pages" pagination counter
-    // when it is visible.
+    // when it is visible. Footer can also render alongside the empty
+    // banner (footer shows "0 nodes / 0 edges"), so use .first() on
+    // the union to avoid strict-mode when both are present.
     const stats = page.getByTestId("graph-stats");
     const empty = page.getByTestId("graph-empty");
-    await expect(stats.or(empty)).toBeVisible({ timeout: 5000 });
+    await expect(stats.or(empty).first()).toBeVisible({ timeout: 5000 });
     if (await stats.isVisible()) {
       await expect(stats).toContainText(/pages\s+\d+\/10/);
     }

@@ -891,3 +891,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Added an explicit `--bind <repo_root>/.git/worktrees/<slot> <repo_root>/.git/worktrees/<slot>` after the writable-worktree bind. Scope is a single slot — the parent `.git/worktrees/` and the rest of `.git/` remain read-only, so ADR-079 boundary invariants (no writes to main repo history, refs, hooks) hold.
 - **Files changed:** adapters/sandbox/gitworktree/adapter.py
 - **Related BUILD_LOG entry:** 2026-08-01 19:29 EDT (this commit)
+
+## 2026-08-01 19:40 EDT — gnosis-graph-viz Playwright strict-mode violation on stats-or-empty union
+
+- **Symptom:** `expect(stats.or(empty)).toBeVisible({ timeout: 5000 })` fails with `strict mode violation: getByTestId('graph-stats').or(getByTestId('graph-empty')) resolved to 2 elements` — both `graph-empty` and `graph-stats` are simultaneously in the DOM (empty corpus renders the empty banner and the footer stats bar showing 0 nodes/0 edges).
+- **Affected stage / plugin / port:** Stage 3 · UI · gnosis graph viz (ADR-074 D5 / ADR-075 D4) — pre-existing flake, out of scope for Stage 3.14b step 3.
+- **Root cause:** The graph page (ADR-074/075) renders `graph-empty` (empty banner) and `graph-stats` (footer) at the same time under an empty corpus. Test asserted the union was visible, which is fine intent-wise, but Playwright's strict-mode rejects unions that match >1 element when passed to `toBeVisible`.
+- **Fix applied:** Changed both stats-or-empty asserts in `ui/tests/20-gnosis-graph-viz.spec.ts` from `expect(stats.or(empty))` to `expect(stats.or(empty).first())`. Semantics preserved (at least one must be visible); strict-mode satisfied. The subsequent conditional `if (await stats.isVisible())` still gates the format check on the actual stats footer.
+- **Files changed:** ui/tests/20-gnosis-graph-viz.spec.ts
+- **Related BUILD_LOG entry:** 2026-08-01 19:40 EDT

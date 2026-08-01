@@ -3664,3 +3664,12 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —.
 - **Stop-condition status:** MET. Stage 3.14b step 3 closed. Remaining spec failures (01 sidebar dedupe, 08+16 zetesis SSE, 20 gnosis graph, 24 memory quarantine) are pre-existing and tracked in KNOWN_ISSUES.md — not in this stage's scope.
+
+## 2026-08-01 19:40 EDT — Fix ui spec 20 strict-mode violation on stats-or-empty union
+
+- **Stage / plugin / port:** post-Stage-3.14b-step-3 · UI test hygiene · gnosis graph viz spec
+- **What changed:** In `ui/tests/20-gnosis-graph-viz.spec.ts`, both `expect(stats.or(empty))` asserts now call `.first()` before `toBeVisible`, so the union does not violate Playwright strict-mode when the empty banner and the footer stats bar both render (empty-corpus baseline behavior).
+- **Files touched:** ui/tests/20-gnosis-graph-viz.spec.ts
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —.
+- **Stop-condition status:** met (spec 20 flake fixed; not verified on Colossus this session — will confirm next spec run).
