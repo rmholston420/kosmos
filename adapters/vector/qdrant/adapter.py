@@ -307,8 +307,15 @@ class QdrantVectorAdapter:
     ) -> list[VectorHit]:
         if limit <= 0:
             raise ValueError(f"limit must be positive; got {limit}")
-        if not isinstance(query_vector, (list, tuple)) or len(query_vector) == 0:
-            raise ValueError("query_vector must be a non-empty list of floats")
+        # ADR-056 §D3 (STATUS AMENDMENT 2026-08-01): empty query_vector is a
+        # spec-legal no-op that returns an empty result set. Zetesis Stage 6.3
+        # (proper) wiring calls search(collection=..., query_vector=[], limit=1)
+        # as a no-op binding proof and ignores the result. Real retrieval
+        # activates at Stage 6.4 via ADR-073 (EmbeddingsPort).
+        if not isinstance(query_vector, (list, tuple)):
+            raise ValueError("query_vector must be a list of floats")
+        if len(query_vector) == 0:
+            return []
         qv = [float(v) for v in query_vector]
         return await self._backend.search_points(collection, qv, limit, filter)
 

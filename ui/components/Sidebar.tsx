@@ -28,6 +28,7 @@ const JOB_ROUTES: { path: string; label: string; description: string }[] = [
   { path: "/govern", label: "Govern", description: "Constitution & policy ledger" },
   { path: "/observe", label: "Observe", description: "Traces, anomalies, telemetry" },
   { path: "/memory", label: "Memory", description: "Knowledge graph & provenance" },
+  { path: "/kernel", label: "Kernel", description: "Plugin registry & schema introspection" },
 ];
 
 // Normalize the current pathname so "/command/" (trailingSlash: true in

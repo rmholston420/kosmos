@@ -222,12 +222,30 @@ def test_search_rejects_zero_or_negative_limit() -> None:
     asyncio.run(_run())
 
 
-def test_search_rejects_empty_query_vector() -> None:
+def test_search_with_empty_vector_returns_empty_list() -> None:
+    """ADR-056 §D3 (STATUS AMENDMENT 2026-08-01): empty query_vector is a
+    spec-legal no-op that returns [] without raising.
+
+    Zetesis Stage 6.3 (proper) wiring calls
+    ``search(collection=..., query_vector=[], limit=1)`` as a no-op binding
+    proof and ignores the result. This test locks that behavior at the
+    adapter contract layer.
+    """
+    a = _adapter()
+
+    async def _run() -> None:
+        hits = await a.search("c", [])
+        assert hits == []
+
+    asyncio.run(_run())
+
+
+def test_search_rejects_non_list_query_vector() -> None:
     a = _adapter()
 
     async def _run() -> None:
         with pytest.raises(ValueError, match="query_vector"):
-            await a.search("c", [])
+            await a.search("c", "not-a-list")  # type: ignore[arg-type]
 
     asyncio.run(_run())
 

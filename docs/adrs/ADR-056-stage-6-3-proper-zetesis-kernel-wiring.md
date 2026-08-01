@@ -1,8 +1,16 @@
 # ADR-056 — Stage 6.3 (proper) Zetesis Kernel Wiring
 
-**Status:** Ratified v25 — Completed 2026-07-30
+**Status:** Ratified v25 — Completed 2026-07-30 — Amended 2026-08-01
 **Lock-in phase:** Stage 6.3 (proper) — Kosmos-Build-Sequence-v25.md §6.3
 **Supersedes:** —
+
+> **STATUS AMENDMENT (2026-08-01, adapter compliance):** The Stage 6.5 mount (Kosmos-Build-Sequence-v25.md §1.5 Wave F) binds Zetesis to the real `QdrantVectorAdapter(backend=InMemoryQdrantBackend())` per `plugins/zetesis/adapters/real/factory.py:build_stage_6_5_zetesis_plugin`. Sub-slice 3's no-op wiring proof (`VectorPort.search(collection=ZETESIS_STATE_NAMESPACE, query_vector=[], limit=1)`) then hit the real adapter, which raised `ValueError("query_vector must be a non-empty list of floats")` and terminated `research()` before the `event: completed` publish (see failure semantics §D3).
+>
+> **Resolution — adapter-side loosening (no plugin change):** `QdrantVectorAdapter.search(query_vector=[])` now returns `[]` instead of raising. This honors §D3's explicit "ignores the result" clause for the no-op wiring proof (line 30, sub-slice 3 STATUS AMENDMENT). Non-list `query_vector` still raises. Real retrieval activation (Stage 6.4 exit gate) will inject non-empty vectors via ADR-073 `EmbeddingsPort`; contract stays sound end-to-end because callers with real vectors are unaffected.
+>
+> **Files touched:** `adapters/vector/qdrant/adapter.py` (search body, ~5 lines) · `adapters/vector/qdrant/test_contract.py` (test flipped: `test_search_rejects_empty_query_vector` → `test_search_with_empty_vector_returns_empty_list`; added `test_search_rejects_non_list_query_vector`) · `ui/tests/16-zetesis-completes.spec.ts` (end-to-end regression: `POST /api/zetesis/research` reaches `event: completed`). ADR-073 (EmbeddingsPort + Ollama nomic-embed-text) tracks the follow-on real-retrieval work; scheduled for Stage 6.4.
+>
+> **Rationale for adapter-side over factory-side stub swap:** the Stage 6.5 factory docstring commits to "VectorPort: QdrantVectorAdapter(backend=InMemoryQdrantBackend()). Spec-endorsed — no RealQdrantBackend ships until Compose lands." A factory-level stub swap would immortalize a `ZetesisVectorStub` inside a factory named `build_stage_6_5_zetesis_plugin` ("full-real-adapter mount"), an anti-pattern. Loosening the adapter honors §D3 verbatim while leaving the real-adapter mount honest.
 
 > **STATUS AMENDMENT (2026-07-30):** Sub-slice 2 discovery corrected two factual errors in §D2 ("Sub-slice 2: port-wiring skeleton") without changing sub-slice intent:
 >

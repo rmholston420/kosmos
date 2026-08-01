@@ -230,6 +230,29 @@ vendored source trees; SPDX license verified on every version listed.
 - **ADR:** ADR-070
 - **Logged:** 2026-08-01 07:19 EDT
 
+#### DDC Uchen font (Christopher John Fynn, 2010) — VENDORED (font asset)
+- **Source:** upstream distribution
+  `https://deb.debian.org/debian/pool/main/f/fonts-ddc-uchen/fonts-ddc-uchen_1.0.orig.tar.gz`
+  (identical binary to Chris Fynn's original release for the Dzongkha
+  Development Commission of Bhutan)
+- **Commit / Version:** `1.0` (Debian `orig.tar.gz`, single-file tarball
+  containing `DDC_Uchen.ttf`; sha256 verifiable at build time)
+- **License:** SIL Open Font License 1.1 (embedded name records IDs
+  13 + 14; `OFL.txt` bundled beside the font per OFL clause 2 as an
+  accompanying text file)
+- **Kosmos location:** `ui/public/fonts/ddc-uchen/DDC_Uchen.woff2` plus
+  `ui/public/fonts/ddc-uchen/OFL.txt` (converted TTF→woff2 via fonttools
+  4.x; only compression format changed, not the underlying font tables)
+- **Port(s):** none (static asset consumed by `@font-face` in
+  `ui/app/globals.css` — the Kosmos wordmark and job-page display
+  headings; wired via `--font-display: "DDC Uchen", ...`)
+- **Modifications:** container format only (TTF→woff2, brotli-compressed
+  Font Table Directory per WOFF2 spec). No glyph, kerning, name-record,
+  or license-metadata modification. Reserved Font Name "DDC Uchen"
+  preserved unmodified per OFL clause 3.
+- **ADR:** ADR-072
+- **Logged:** 2026-08-01 09:04 EDT
+
 
 ## Historical entries
 

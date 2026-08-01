@@ -330,7 +330,13 @@ export interface ProvenanceChain {
   edge_count: number;
 }
 
-const GNOSIS_GATE_BASE = process.env.NEXT_PUBLIC_GNOSIS_GATE_BASE ?? "/gnosis-gate";
+// Historical note: an earlier build routed Gnosis calls through a
+// standalone `gnosis-gate` service. Stage 1.9 collapsed that surface
+// into the main kernel, exposing everything under `/api/gnosis/*`
+// directly (see `kernel/app.py` route table). This client still
+// carries the `gnosisGateClient` name for backwards compatibility with
+// call sites, but all requests now hit the kernel-owned prefix.
+const GNOSIS_GATE_BASE = process.env.NEXT_PUBLIC_GNOSIS_GATE_BASE ?? "";
 
 async function getJSONFromBase(base: string, path: string): Promise<unknown> {
   const res = await fetch(base + path, { cache: "no-store" });
@@ -338,20 +344,59 @@ async function getJSONFromBase(base: string, path: string): Promise<unknown> {
   return res.json();
 }
 
+// Route mapping (Stage 1.9+ kernel-owned surface):
+//   listCorpora     -> GET /api/gnosis/corpora
+//   query           -> GET /api/gnosis/query?q=...&corpus=...&limit=...
+//   getEventById    -> GET /api/gnosis/event/{event_id}
+//
+// Legacy per-corpus routes (`/api/corpus/{name}/*`) do not exist on the
+// current kernel and never came back after the gnosis-gate consolidation.
+// `getCorpusDetail`, `getProvenance`, and `traverse` are stubbed so their
+// existing call sites fail loudly with a clear diagnostic rather than
+// producing an opaque network 404. Wave F will replace those call sites
+// with `/api/gnosis/*` equivalents in a follow-up slice.
+async function _unmapped(name: string): Promise<never> {
+  throw new Error(
+    "gnosisGateClient." + name + " is unmapped in the current kernel; " +
+    "call site should migrate to /api/gnosis/* (see kernel/app.py routes)."
+  );
+}
+
+// Kernel `/api/gnosis/corpora` returns `{corpora: [...]}` (envelope
+// with a single `corpora` array key) — see kernel/app.py:1381. The
+// pre-Stage-1.9 sidecar returned a bare array, so the two remaining
+// consumers (ui/app/gnosis/page.tsx + tests) expect an array shape.
+// Unwrap here so call sites keep working without churn.
+interface CorporaEnvelope {
+  corpora: unknown[];
+}
+function _isCorporaEnvelope(v: unknown): v is CorporaEnvelope {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "corpora" in v &&
+    Array.isArray((v as CorporaEnvelope).corpora)
+  );
+}
+
 export const gnosisGateClient = {
-  listCorpora: () => getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpora"),
-  getCorpusDetail: (corpusName: string) =>
-    getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpus/" + corpusName),
-  getProvenance: (corpusName: string, eventId: string) =>
-    getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpus/" + corpusName + "/provenance/" + eventId),
-  query: (corpusName: string, q: string, asOf?: string, limit?: number) =>
+  listCorpora: async () => {
+    const raw = await getJSONFromBase(GNOSIS_GATE_BASE, "/api/gnosis/corpora");
+    if (Array.isArray(raw)) return raw;
+    if (_isCorporaEnvelope(raw)) return raw.corpora;
+    throw new Error(
+      "unexpected /api/gnosis/corpora shape: " + JSON.stringify(raw).slice(0, 80),
+    );
+  },
+  getCorpusDetail: (_corpusName: string) => _unmapped("getCorpusDetail"),
+  getProvenance: (_corpusName: string, _eventId: string) => _unmapped("getProvenance"),
+  query: (_corpusName: string, q: string, _asOf?: string, limit?: number) =>
     getJSONFromBase(
       GNOSIS_GATE_BASE,
-      "/api/corpus/" + corpusName + "/query?q=" + encodeURIComponent(q || "") +
-      (asOf ? "&as_of=" + asOf : "") + "&limit=" + (limit || 20)
+      "/api/gnosis/query?q=" + encodeURIComponent(q || "") +
+      "&limit=" + (limit || 20),
     ),
-  traverse: (corpusName: string, eventId: string) =>
-    getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpus/" + corpusName + "/traverse/" + eventId),
-  htmlIndexUrl: () => GNOSIS_GATE_BASE + "/",
-  htmlCorpusUrl: (corpusName: string) => GNOSIS_GATE_BASE + "/corpus/" + corpusName,
+  traverse: (_corpusName: string, _eventId: string) => _unmapped("traverse"),
+  htmlIndexUrl: () => "/gnosis/",
+  htmlCorpusUrl: (corpusName: string) => "/gnosis/detail/?corpus=" + corpusName,
 };

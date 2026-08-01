@@ -1,6 +1,75 @@
 "use client";
 import { useState } from "react";
 
+// -------------------------------------------------------------------------
+// SSE reader
+// -------------------------------------------------------------------------
+// `POST /api/zetesis/research` returns `text/event-stream`, not JSON.
+// Per ADR-060 the stream emits three frame types:
+//   event: started    data: {query, trial_id}
+//   event: error      data: {error, error_type, trial_id}   (terminal)
+//   event: completed  data: <ResearchReport>                (terminal)
+// This reader consumes the raw byte stream, buffers by `\n\n` frame
+// boundary, and resolves the promise with the payload from the
+// terminal frame. Non-terminal frames (`started`) are surfaced via
+// `onProgress` so the UI can show live status without waiting the
+// full ~540s Stage 6.3 DoD trial duration.
+// -------------------------------------------------------------------------
+async function readResearchStream(
+  response: Response,
+  onProgress: (event: string, data: unknown) => void,
+): Promise<Report> {
+  if (!response.body) throw new Error("response has no body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buf = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    let sep: number;
+    while ((sep = buf.indexOf("\n\n")) !== -1) {
+      const frame = buf.slice(0, sep);
+      buf = buf.slice(sep + 2);
+
+      // Parse the frame's `event:` and `data:` lines. We accept any
+      // whitespace after the colon per the SSE spec.
+      let evt = "message";
+      const dataLines: string[] = [];
+      for (const line of frame.split("\n")) {
+        if (line.startsWith(":")) continue; // SSE comment/keepalive
+        if (line.startsWith("event:")) evt = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      if (dataLines.length === 0) continue;
+
+      let payload: unknown;
+      try {
+        payload = JSON.parse(dataLines.join("\n"));
+      } catch (e) {
+        throw new Error(
+          "malformed SSE data on event '" + evt + "': " + String(e),
+        );
+      }
+
+      if (evt === "completed") {
+        return payload as Report;
+      }
+      if (evt === "error") {
+        const err = payload as { error?: string; error_type?: string };
+        throw new Error(
+          (err.error_type ? err.error_type + ": " : "") +
+            (err.error ?? "research failed"),
+        );
+      }
+      onProgress(evt, payload);
+    }
+  }
+  throw new Error("research stream closed without a terminal event");
+}
+
 type Report = {
   query?: string;
   answer?: string;
@@ -31,11 +100,19 @@ export default function ZetesisResearch() {
     try {
       const res = await fetch("/api/zetesis/research", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify({ query }),
       });
       if (!res.ok) throw new Error("POST /api/zetesis/research -> " + res.status);
-      const data = await res.json();
+      // Kernel emits SSE per ADR-060; parse the stream, resolve on
+      // `event: completed`, throw on `event: error` (see readResearchStream).
+      const data = await readResearchStream(res, () => {
+        /* progress: `started` frame is emitted immediately after POST;
+         * we already show the elapsed timer, so nothing extra to do. */
+      });
       setReport(data);
     } catch (e) {
       setError(String(e));

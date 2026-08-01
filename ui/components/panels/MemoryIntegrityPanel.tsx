@@ -198,6 +198,12 @@ export default function MemoryIntegrityPanel({ panels }: { panels: Panel[] }) {
   const [annotError, setAnnotError] = useState<string | null>(null);
   const cyRef = useRef<Core | null>(null);
 
+  // ADR-072 Wave F · F3: client-side search-by-provenance + confidence
+  // histogram. Filtering happens over already-loaded nodes (no extra
+  // kernel round-trip); edges are filtered by transitive endpoint
+  // membership in `toElements`.
+  const [provenanceQuery, setProvenanceQuery] = useState<string>("");
+
   const load = useCallback(async (choice: CorpusChoice) => {
     setState((s) => ({ ...s, loading: true, errorClass: null }));
     try {
@@ -231,14 +237,50 @@ export default function MemoryIntegrityPanel({ panels }: { panels: Panel[] }) {
     void load(corpus);
   }, [corpus, load]);
 
+  // ADR-072 F3: filter node set by case-insensitive substring on the
+  // `provenance` field. Empty query = no filter. Nodes without any
+  // provenance value are dropped when a query is active.
+  const filteredNodes = useMemo(() => {
+    const q = provenanceQuery.trim().toLowerCase();
+    if (!q) return state.nodes;
+    return state.nodes.filter((n) =>
+      (n.provenance ?? "").toLowerCase().includes(q),
+    );
+  }, [state.nodes, provenanceQuery]);
+
+  // ADR-072 F3: confidence histogram bins over the *filtered* nodes.
+  // Ten [0.0, 0.1) … [0.9, 1.0] buckets; nodes with null confidence go
+  // into a separate "unknown" tally shown alongside the histogram.
+  const confidenceStats = useMemo(() => {
+    const bins = new Array<number>(10).fill(0);
+    let unknown = 0;
+    let sum = 0;
+    let known = 0;
+    for (const n of filteredNodes) {
+      const c = n.confidence;
+      if (c == null) {
+        unknown += 1;
+        continue;
+      }
+      const clamped = Math.max(0, Math.min(0.9999, c));
+      const idx = Math.floor(clamped * 10);
+      bins[idx] += 1;
+      sum += c;
+      known += 1;
+    }
+    const mean = known > 0 ? sum / known : null;
+    const max = bins.reduce((m, v) => (v > m ? v : m), 0);
+    return { bins, unknown, mean, max, total: filteredNodes.length };
+  }, [filteredNodes]);
+
   const elements = useMemo(
     () =>
       toElements(
-        state.nodes,
+        filteredNodes,
         state.edges,
         groupByCommunity && communities ? communities.communities : null,
       ),
-    [state.nodes, state.edges, groupByCommunity, communities]
+    [filteredNodes, state.edges, groupByCommunity, communities]
   );
 
   const onCy = useCallback((cy: Core) => {
@@ -384,8 +426,110 @@ export default function MemoryIntegrityPanel({ panels }: { panels: Panel[] }) {
               ))}
             </select>
           </label>
+          {/* ADR-072 Wave F · F3: search-by-provenance filter. */}
+          <label
+            data-testid="memory-integrity-provenance-label"
+            style={{ display: "flex", gap: "6px", alignItems: "center", fontSize: "12px" }}
+          >
+            <span>Provenance:</span>
+            <input
+              type="search"
+              data-testid="memory-integrity-provenance-search"
+              value={provenanceQuery}
+              onChange={(e) => setProvenanceQuery(e.target.value)}
+              placeholder="substring filter…"
+              style={{
+                fontSize: "12px",
+                padding: "2px 6px",
+                background: "var(--rgpa-surface-2, #2a2a2a)",
+                border: "1px solid var(--rgpa-border, #333)",
+                color: "var(--rgpa-fg-1, #e6e6e6)",
+                borderRadius: "3px",
+                width: "14ch",
+              }}
+            />
+          </label>
         </div>
       </header>
+
+      {/* ADR-072 Wave F · F3: confidence histogram + summary stats.
+          Renders below header and above canvas so it stays visible in
+          the empty and error states too — the stats are meaningful
+          even when the graph is empty. */}
+      {!state.loading && !state.errorClass && (
+        <section
+          data-testid="memory-integrity-stats"
+          aria-label="Confidence distribution"
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "12px",
+            marginBottom: "8px",
+            padding: "6px 8px",
+            border: "1px solid var(--rgpa-border, #333)",
+            borderRadius: "4px",
+            background: "var(--rgpa-surface-2, #161616)",
+            fontSize: "11px",
+            color: "var(--rgpa-fg-2, #999)",
+            fontFamily: "var(--rgpa-mono, monospace)",
+          }}
+        >
+          <div
+            data-testid="memory-integrity-stats-summary"
+            style={{ display: "flex", flexDirection: "column", gap: "2px" }}
+          >
+            <span>n = {confidenceStats.total}</span>
+            <span data-testid="memory-integrity-stats-mean">
+              μ ={" "}
+              {confidenceStats.mean == null
+                ? "—"
+                : confidenceStats.mean.toFixed(2)}
+            </span>
+            {confidenceStats.unknown > 0 && (
+              <span data-testid="memory-integrity-stats-unknown">
+                ? = {confidenceStats.unknown}
+              </span>
+            )}
+          </div>
+          <div
+            data-testid="memory-integrity-histogram"
+            role="img"
+            aria-label={`Confidence histogram, ${confidenceStats.total} nodes`}
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: "2px",
+              height: "40px",
+              flex: 1,
+            }}
+          >
+            {confidenceStats.bins.map((count, i) => {
+              const pct =
+                confidenceStats.max > 0 ? (count / confidenceStats.max) * 100 : 0;
+              const lo = (i / 10).toFixed(1);
+              const hi = ((i + 1) / 10).toFixed(1);
+              return (
+                <div
+                  key={i}
+                  data-testid={`memory-integrity-hist-bin-${i}`}
+                  title={`[${lo}, ${hi}${i === 9 ? "]" : ")"}: ${count}`}
+                  style={{
+                    flex: 1,
+                    height: `${Math.max(pct, count > 0 ? 4 : 0)}%`,
+                    background:
+                      count === 0
+                        ? "transparent"
+                        : // Nagtang gold on Ratnasambhava scale
+                          "var(--rgpa-accent-gold, oklch(80% 0.15 85))",
+                    borderRadius: "1px",
+                    minHeight: count > 0 ? "2px" : 0,
+                  }}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {state.loading && (
         <p
@@ -418,7 +562,22 @@ export default function MemoryIntegrityPanel({ panels }: { panels: Panel[] }) {
         </p>
       )}
 
-      {!state.loading && !state.errorClass && state.nodes.length > 0 && (
+      {/* ADR-072 F3: distinct empty state when a filter hides all nodes. */}
+      {!state.loading &&
+        !state.errorClass &&
+        state.nodes.length > 0 &&
+        filteredNodes.length === 0 && (
+          <p
+            data-testid="memory-integrity-filter-empty"
+            role="status"
+            style={{ color: "var(--rgpa-fg-2, #999)", fontSize: "12px" }}
+          >
+            No nodes match provenance filter{" "}
+            <code>{provenanceQuery}</code>.
+          </p>
+        )}
+
+      {!state.loading && !state.errorClass && filteredNodes.length > 0 && (
         <div
           data-testid="memory-integrity-canvas-wrap"
           style={{

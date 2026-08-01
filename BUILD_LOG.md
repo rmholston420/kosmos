@@ -2652,3 +2652,87 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** EventBusPort (kernel dispatch → WS consumer path exercised end-to-end); FrontendContractPort (four Operate slots switch from placeholder to kernel-backed).
 - **PORTING_LEDGER / ADR updated:** ADR-072 authored (Proposed); no new vendored components (`@tailwindcss/postcss` is a first-party Tailwind package, not a vendored port).
 - **Stop-condition status:** F0+F1+F2 slice **met**. Colossus Playwright `14-wave-f-operate-panels.spec.ts` 6/6 GREEN. PR #18 awaiting merge. F3+F4+F5 for PR #19 remain. Full Wave F Definition of Done (target ≥55/6/0 full suite, kernel `6.9.0` after ratification PR) still open.
+
+## 2026-08-01 09:28 EDT — Stage 1.5 Wave F · F6 · ADR-056 §D3 no-op search compliance
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Zetesis · VectorPort · QdrantVectorAdapter
+- **What changed:**
+  - Diagnosed live-kernel Zetesis SSE `event: error` payload `"query_vector must be a non-empty list of floats"` on Colossus after F0.7 landed. Kernel `/health` green (12/12 subsystems); `POST /api/zetesis/research` reached `event: started` then errored before `event: completed`.
+  - Root cause traced: `plugins/zetesis/plugin.py:557` intentionally calls `VectorPort.search(query_vector=[], limit=1)` per ADR-056 §D3 sub-slice 3 STATUS AMENDMENT (verbatim: "no-op wiring proof calls `search(collection=ZETESIS_STATE_NAMESPACE, query_vector=[], limit=1)` and **ignores the result**"). The Stage 6.5 factory (`plugins/zetesis/adapters/real/factory.py:194`) binds the real `QdrantVectorAdapter(backend=InMemoryQdrantBackend())`, which raised `ValueError` on the spec-mandated no-op.
+  - **Fix B chosen over factory-side stub swap:** loosen `QdrantVectorAdapter.search` to return `[]` on empty `query_vector` (spec-legal no-op) while still raising for non-list inputs. Preserves the Stage 6.5 factory's "full-real-adapter mount" honesty; unblocks Stage 6.4 EmbeddingsPort work (ADR-073, pending) without factory churn.
+  - Flipped `test_search_rejects_empty_query_vector` → `test_search_with_empty_vector_returns_empty_list`; added `test_search_rejects_non_list_query_vector` to preserve non-list rejection.
+  - Added Playwright regression `ui/tests/16-zetesis-completes.spec.ts` asserting `/api/zetesis/research` reaches `event: completed` without `event: error`, plus a `/health` subsystem cross-check.
+  - Amended ADR-056 with a 2026-08-01 STATUS AMENDMENT block covering the diagnosis, resolution, files touched, and rationale for adapter-side loosening over factory-side stub swap. Status line updated to `Ratified v25 — Completed 2026-07-30 — Amended 2026-08-01`.
+- **Files touched:**
+  - `adapters/vector/qdrant/adapter.py` (~10 lines: empty vector returns `[]`; non-list still raises)
+  - `adapters/vector/qdrant/test_contract.py` (flipped 1 test, added 1 test)
+  - `ui/tests/16-zetesis-completes.spec.ts` (new, 2 tests)
+  - `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (STATUS AMENDMENT prepended, status line updated)
+- **Ports / adapters affected:** VectorPort (semantics loosened at adapter boundary); Zetesis research call path now completes end-to-end on live Colossus.
+- **PORTING_LEDGER / ADR updated:** ADR-056 amended (2026-08-01). ADR-073 (EmbeddingsPort + Ollama nomic-embed-text) referenced in the amendment as the follow-on Stage 6.4 real-retrieval work; not yet authored.
+- **Stop-condition status:** F6 slice **met** on branch; awaiting Colossus verification (`git pull` + kernel restart + `curl /api/zetesis/research` + Playwright `16-zetesis-completes.spec.ts`). PR #19 scope now F3 + F4 + F5 + F6.
+
+## 2026-08-01 09:34 EDT — Stage 1.5 Wave F · F3 · MemoryIntegrity provenance search + confidence histogram
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Gnosis · MEMORY_INTEGRITY panel
+- **What changed:**
+  - Added client-side search-by-provenance filter to `MemoryIntegrityPanel`. Case-insensitive substring match on the `provenance` field of already-loaded nodes; filtering happens locally (no extra `/api/gnosis/graph/nodes` round-trip). Empty query = no filter; nodes with `provenance == null` are dropped when a query is active.
+  - Added confidence histogram (10 [0.0, 0.1) … [0.9, 1.0] bins) over the *filtered* node set. Nodes with `null` confidence are counted separately as `unknown`. Histogram bars use `--rgpa-accent-gold` (Nagtang gold on Ratnasambhava scale) per ADR-072 Tibetan design system.
+  - Added summary stats row: `n` (filtered total), `μ` (arithmetic mean over known confidence), `?` (unknown count, hidden when zero).
+  - Added distinct empty state (`memory-integrity-filter-empty`) that renders when the filter hides all nodes but the underlying node set is non-empty.
+  - Edges are filtered transitively by endpoint membership inside the existing `toElements(nodes, edges, communities)` call — no edge-level filter code added.
+- **Files touched:**
+  - `ui/components/panels/MemoryIntegrityPanel.tsx` (~165 lines added: `provenanceQuery` state, `filteredNodes` / `confidenceStats` `useMemo`, search input in header, stats section above canvas, filter-empty branch)
+  - `ui/tests/17-memory-integrity-f3.spec.ts` (new, 3 tests: input present + controlled, stats section with 10 bins visible, filter round-trip restores stats)
+- **Ports / adapters affected:** none (pure UI on kernel data already flowing).
+- **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F3 falls under Wave F's "make placeholders real"; ratified after full Wave F lands.
+- **Stop-condition status:** F3 slice **met** on branch; awaiting Colossus verification.
+
+## 2026-08-01 09:34 EDT — Stage 1.5 Wave F · F4 · NotificationTray drawer wired into PersistentShell
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Kernel · PersistentShell top bar · EventBusPort consumer
+- **What changed:**
+  - New `ui/components/NotificationTray.tsx` (338 lines): Radix `Dialog`-backed drawer opened from a bell trigger in the top bar. Subscribes to all `WS_DEFAULT_EVENT_TYPES` via `useEventsWS().subscribe` (5 event types: `phrouros.anomaly.detected`, `zetesis.research.started`, `zetesis.research.completed`, `kernel.suspended`, `kernel.resumed`). Rolling in-memory history capped at `MAX_HISTORY = 100`.
+  - Tone classification per event type (danger / success / info) with Tibetan ADR-072 accent colors: Rakta red border-left for danger, Nagtang gold for success, Vairocana blue for info. Bell SVG icon, unread badge, connection-state pill, `Clear` button, `Close` button.
+  - Wired into `ui/components/PersistentShell.tsx` between `<ModelSwapIndicator />` and the contextual-drawer trigger.
+  - Full testid coverage: `notification-tray-trigger`, `-badge`, `-title`, `-description`, `-connection`, `-clear`, `-close`, `-overlay`, `-empty`, `-list`, `-item-{i}`, `-item-type-{i}`.
+- **Files touched:**
+  - `ui/components/NotificationTray.tsx` (new, 338 lines)
+  - `ui/components/PersistentShell.tsx` (2 lines: import + placement between ModelSwapIndicator and drawer-trigger)
+  - `ui/tests/18-notification-tray-f4.spec.ts` (new, 3 tests: trigger in top bar, open reveals title/description/connection/empty/close, Clear present)
+- **Ports / adapters affected:** EventBusPort consumer path — the tray joins the existing `EventsWSProvider` subscription set alongside `AlgedonicPill`, `AlgedonicBanner`, `AgentTracePanel`, `ApprovalsQueuePanel`.
+- **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F4 falls under Wave F "make placeholders real"; no new vendored components (Radix Dialog already vendored at Stage 1.5 Wave A).
+- **Stop-condition status:** F4 slice **met** on branch; awaiting Colossus verification.
+
+## 2026-08-01 09:34 EDT — Stage 1.5 Wave F · F5 · /kernel introspection page
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Kernel · FrontendContractPort read surface
+- **What changed:**
+  - New `ui/app/kernel/page.tsx` (288 lines): read-only browsable renderer of `/api/kernel/schema`. Three sections:
+    1. **Plugins** — one card per `PluginDescriptor` showing name, version, `kernel_compat`, `state_namespace`, routes (path + label list), panels (id → slot, priority), and a collapsible design-tokens map.
+    2. **All Panels** — aggregate `schema.panels[]` list sorted by priority: id · slot · priority · plugin_name.
+    3. **Design tokens** — aggregate `schema.design_tokens{}` map, alphabetically sorted, inside a `<details>` collapsible.
+  - Header shows `schema.generated_at`, `schema.title`, and plugin/panel counts.
+  - Wired into `Sidebar.tsx` as the sixth Job route (`/kernel`, label "Kernel", description "Plugin registry & schema introspection"). Follows the existing static export `trailingSlash: true` convention.
+  - Uses ADR-072 Tibetan design tokens (`--rgpa-border`, `--rgpa-surface-1`, `--rgpa-fg-{1,2,3}`, `--rgpa-mono`) with sensible dark-mode fallbacks.
+- **Files touched:**
+  - `ui/app/kernel/page.tsx` (new, 288 lines)
+  - `ui/components/Sidebar.tsx` (1 line: `/kernel` row added to `JOB_ROUTES`)
+  - `ui/tests/19-kernel-introspection-f5.spec.ts` (new, 3 tests: sidebar link routes to /kernel + shows title, page renders all three sections, first plugin surfaced with name/namespace/version testids and cross-checked against `GET /api/kernel/schema`)
+- **Ports / adapters affected:** FrontendContractPort read-only browse surface. No new endpoints; `renderKernelSchema()` already existed.
+- **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F5 falls under Wave F "make placeholders real".
+- **Stop-condition status:** F5 slice **met** on branch; awaiting Colossus verification. PR #19 F3+F4+F5+F6 slice complete; ready to open.
+
+## 2026-08-01 09:41 EDT — Stage 1.5 Wave F · F3 · Test-only race-window fix
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Playwright regression hardening
+- **What changed:**
+  - `ui/tests/17-memory-integrity-f3.spec.ts` first test (`provenance search input is present and controlled`) flaked under full-suite parallel load: `beforeEach` waited for `memory-integrity-loading` to disappear but not for one of the three terminal branches (`canvas-wrap` / `empty` / `error`) to mount. Race window let the test fall through to expect `filter-empty` while the panel was still between states.
+  - Added a `Promise.race` in `beforeEach` awaiting any of the three terminal branches (all wrapped in `.catch(() => undefined)` so the timeout of one branch doesn't fail the test).
+  - Tightened the first test's branch selection: check `memory-integrity-error` first, then `canvas-wrap` count; only expect `filter-empty` when there are actually loaded nodes to filter to empty.
+  - No component change. Test-only fix.
+- **Files touched:**
+  - `ui/tests/17-memory-integrity-f3.spec.ts` (test-only; beforeEach + first test tightened)
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met on branch; awaits Colossus full-suite re-verify (target 68/68 GREEN).
