@@ -3653,3 +3653,14 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** SandboxProvider (adapter only, port unchanged)
 - **PORTING_LEDGER / ADR updated:** — (no license/ADR change; ADR-079 boundary invariants preserved — parent `.git/worktrees/` and rest of `.git/` remain read-only, only the specific slot's metadata is writable)
 - **Stop-condition status:** in-progress — spec 03 lifecycle test still needs to observe SUCCEEDED/PARTIAL/FAILED end-to-end after a kernel restart.
+
+## 2026-08-01 19:34 EDT — Stage 3.14b step 3 DoD met (Plan -> Approve -> Execute -> Diff end-to-end green)
+
+- **Stage / plugin / port:** Stage 3.14b step 3 · plugins/tektos · TektosExecutorLoop end-to-end
+- **What changed:** Ran ui spec 03-tektos-plan-workflow.spec.ts against the kernel with the bwrap per-slot writable-bind fix in place. Both tests pass:
+  - "index lists the pending plan" ✓
+  - "full plan lifecycle: approve, execute, show diff" ✓
+- **Files touched:** none (verification run only).
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —.
+- **Stop-condition status:** MET. Stage 3.14b step 3 closed. Remaining spec failures (01 sidebar dedupe, 08+16 zetesis SSE, 20 gnosis graph, 24 memory quarantine) are pre-existing and tracked in KNOWN_ISSUES.md — not in this stage's scope.

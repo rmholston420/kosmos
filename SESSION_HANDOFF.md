@@ -1,35 +1,30 @@
-# Kosmos Session Handoff — 2026-08-01 19:02 EDT
+# Kosmos Session Handoff — 2026-08-01 19:34 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 3.14b step 3 COMPLETE + verified · executor `files_changed` contract fixed (uncommitted)
-- **Plugin / kernel component:** Tektos executor (`Patcher` / `TektosExecutorLoop`) + Next.js UI
-- **Port(s) in progress:** none
+- **Stage / phase:** Stage 3.14b step 3 — CLOSED. Next up: Stage 3.14b step 4 (or the next spec entry after step 3 in Kosmos-Build-Spec-v25.md; confirm against the spec at the start of the next session).
+- **Plugin / kernel component:** plugins/tektos (executor loop + endpoints stable end-to-end).
+- **Port(s) in progress:** none.
 
 ## Completed this session
-- Stage 3.14b step 2e — kernel endpoints wired (commit `32ad696`, 96/96 verified on Colossus).
-- Stage 3.14b step 3 — UI wiring for `/execute` + `/diff` (commit `1626f75`, verified: 2 unseeded detail smokes pass, `pnpm build` clean).
-- Executor `files_changed` contract fix — `Patcher.PatchApplied.files_changed: int → tuple[str, ...]`; parser rewritten to consume `git show --name-only --format=`; unit + integration tests updated to match. `KNOWN_ISSUES.md` entry moved to `DEBUG_LOG.md` as closed diagnosis.
+- Stage 3.14b step 3 timeout widening in ui spec 03 (BUILD_LOG 2026-08-01 19:16 EDT).
+- Diagnosed and fixed executor `files_changed` bug (BUILD_LOG 2026-08-01 19:02 EDT).
+- Diagnosed the sandbox EROFS-on-index.lock crash, fixed the bwrap envelope to bind `<repo>/.git/worktrees/<slot>/` writable inside the namespace (BUILD_LOG 2026-08-01 19:29 EDT; DEBUG_LOG 2026-08-01 19:29 EDT).
+- Verified Stage 3.14b step 3 DoD: both tests in ui spec 03 pass against the kernel with the fix (BUILD_LOG 2026-08-01 19:34 EDT).
 
 ## Remaining before current Definition of Done
-Full 3.14b DoD:
-
-- **Verify** the `files_changed` fix on Colossus:
-  ```bash
-  cd ~/dev/kosmos && git pull
-  pytest plugins/tektos/executor/tests/test_patcher.py -x
-  pytest plugins/tektos/executor/tests/test_loop.py -x
-  # Optional (needs real git + fixture):
-  KOSMOS_TEKTOS_REAL_GIT=1 pytest plugins/tektos/executor/tests/test_patcher_integration.py -x
-  ```
-  Expected: patcher unit tests + loop tests still pass (loop side unchanged), integration test asserts the new tuple shape.
-- **Seeded end-to-end** happy path via `03-tektos-plan-workflow.spec.ts` with a real Tektos intention + Ollama live. This was previously blocked by the `TypeError` at loop:467 — should now proceed through to SUCCEEDED.
+- None for Stage 3.14b step 3.
 
 ## Open questions / awaiting user answer
-- After verify: run the seeded happy path (option 2 from earlier), or move on to a different follow-up (Stage 3.15+ / UI flake cleanup)?
+- None.
 
 ## Exact next action
-User: pull and run the executor unit tests on Colossus:
-```bash
-cd ~/dev/kosmos && git pull && pytest plugins/tektos/executor/tests/test_patcher.py plugins/tektos/executor/tests/test_loop.py -x
-```
-Expected: all patcher + loop tests pass (patcher signature changed, loop signature unchanged).
+- Confirm the next stage/step from `Kosmos-Build-Spec-v25.md` (Stage 3.14b step 4, or the next open item), restate scope + Definition of Done, and begin.
+
+## Pre-existing test failures NOT in Stage 3.14b step 3 scope
+- `01-shell-and-routes.spec.ts` — sidebar dedupe: `/zetesis` and `/gnosis` links missing from `sidebar-plugins`. Registry/manifest bug.
+- `08-zetesis-research.spec.ts` — real research surface never reaches report/error state within 600s.
+- `16-zetesis-completes.spec.ts` — SSE `completed` event never emitted (POST returns 200 + text/event-stream, but Playwright request context is disposed before end-of-stream).
+- `20-gnosis-graph-viz.spec.ts` — strict-mode violation: both `graph-empty` and `graph-stats` are visible simultaneously.
+- `24-memory-quarantine-review.spec.ts` — none of the expected review testids present on initial load.
+
+Track/triage under KNOWN_ISSUES.md before touching them.
