@@ -3119,3 +3119,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** ADR-075 §D5 executed
 - **Stop-condition status:** met
+
+## 2026-08-01 12:07 EDT — Stage 1.6 Phase 2 (ADR-075) PR #28 merged to main
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · kernel · Gnosis UI · Memory UI · Zetesis event fan-out
+- **What changed:** Squash-merged PR #28 into main at `a105af5`. Delivers D1 (Graphiti hard-delete + graphiti-core dep removal + `_boot_memory` uses `InMemoryTemporalIndex()`), D2 (`POST /api/memory/search-semantic` route with `_MemorySearchSemanticBody` validation + `/memory/search` UI page + `kernelClient.memorySearchSemantic` client + graceful 200-degraded path when memory None or Qdrant unreachable), D3 (`_drain_zetesis_reports` fans out to `MemoryPort.write_event` with provenance=`zetesis.event_bus`/confidence=1.0, errors captured in `registry.errors["zetesis_fanout"]`), D4 (`/gnosis/graph` client-side `next_cursor` pagination with `MAX_PAGES=10`, `graph-truncated` testid, `NNN nodes · MMM edges · pages X/10` footer), D5 (kernel version 6.11.0 → 6.12.0). Colossus verify: pytest 1264 passed / 14 skipped; Playwright 10/10 passed after kernel restart.
+- **Files touched:** kernel/app.py; ui/app/memory/page.tsx; ui/app/memory/search/page.tsx (new); ui/app/gnosis/graph/page.tsx; ui/lib/kernel-client.ts; ui/tests/13-community-collapse-and-annotate.spec.ts; ui/tests/20-gnosis-graph-viz.spec.ts; ui/tests/21-memory-search-semantic.spec.ts (new); ui/tests/22-zetesis-fan-out-to-semantic.spec.ts (new); adapters/memory/dozerdb/{__init__.py,corpora/__init__.py,corpora/corpus_runner.py,corpora/test_corpora_contract.py} (Graphiti hard-delete); adapters/memory/dozerdb/{graphiti_temporal_index.py,kosmos_graphiti_embedder.py,test_graphiti_temporal_index_contract.py} (deleted); pyproject.toml (graphiti-core removed); plugins/tektos/tests/{test_openspec.py,test_repomap.py,test_tektos_agent.py} + plugins/zetesis/adapters/memory_stub.py (protocol conformance: added no-op search_semantic); tests/kernel/{test_stage_1_5_adr_071_wave_e.py,test_stage_1_6_adr_073_embeddings_port.py} (version pin bumps to 6.12.0); BUILD_LOG.md; DEBUG_LOG.md; SESSION_HANDOFF.md
+- **Ports / adapters affected:** MemoryPort (search_semantic surface now covered by all fakes/stubs); EventBusPort (zetesis fan-out consumer)
+- **PORTING_LEDGER / ADR updated:** ADR-075 (Ratified · fully executed)
+- **Stop-condition status:** met — Stage 1.6 Phase 2 complete
