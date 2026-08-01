@@ -33,6 +33,7 @@ from adapters.memory.dozerdb.adapter import (
     InMemoryTemporalIndex,
     NoOpAmgPolicy,
 )
+from ports.memory import MemoryPort
 from adapters.notification.kernel.adapter import KernelNotificationAdapter
 from adapters.observability.otel_stack.adapter import (
     OtelStackObservabilityAdapter,
@@ -130,6 +131,7 @@ def build_stage_6_5_zetesis_plugin(
     event_bus: ValkeyEventBusAdapter | None = None,
     resource: SqliteResourceAdapter | None = None,
     notification: KernelNotificationAdapter | None = None,
+    memory: MemoryPort | None = None,
     ollama_base_url: str = "http://127.0.0.1:11434/v1",
     ollama_model: str = "qwen2.5:32b-instruct-q4_K_M",
     searxng_url: str = "http://127.0.0.1:8888",
@@ -181,11 +183,16 @@ def build_stage_6_5_zetesis_plugin(
     if notification is None:
         notification = KernelNotificationAdapter()
 
-    memory = DozerDbMemoryAdapter(
-        graph=InMemoryGraphBackend(),
-        amg=NoOpAmgPolicy(),
-        temporal=InMemoryTemporalIndex(),
-    )
+    # Stage 1.8: reuse the kernel-owned MemoryPort when provided so writes
+    # land in the shared DozerDB backend (ADR-008 · ADR-063). Fall back to
+    # a fully in-memory adapter only when the caller hasn't supplied one
+    # (test harnesses, standalone factory calls).
+    if memory is None:
+        memory = DozerDbMemoryAdapter(
+            graph=InMemoryGraphBackend(),
+            amg=NoOpAmgPolicy(),
+            temporal=InMemoryTemporalIndex(),
+        )
 
     vector = QdrantVectorAdapter(backend=InMemoryQdrantBackend())
 
