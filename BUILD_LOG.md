@@ -2489,3 +2489,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Uses existing `EventBusPort` via `_publish_kernel_event` for best-effort event emission (never blocks control action on bus failure).
 - **PORTING_LEDGER / ADR updated:** ADR-069 authored (Proposed). No new vendored components — cmdk + Radix Dialog already ledgered from Wave A.
 - **Stop-condition status:** met pending Colossus green build + green pytest + green Playwright.
+
+## 2026-08-01 07:07 EDT — Stage 1.5 Wave C · GREEN on Colossus
+
+- **Stage / plugin / port:** Stage 1.5 · Kernel + UI · kill-switch (ADR-069) validation
+- **What changed:** Wave C validated end-to-end on Colossus after forcing a clean Next.js static-export rebuild. No code changes this entry — validation only.
+  - `pytest tests/kernel/test_stage_1_5_adr_069_kill_switch.py -v` → **15/15 passed**.
+  - `npx playwright test tests/11-kill-switch.spec.ts` → **5/5 passed**.
+  - Full Playwright (`npx playwright test`) → **38 passed / 6 skipped / 0 failed** across all 11 spec files.
+  - Kernel `/health` remained `200 OK` before, between, and after Playwright runs; middleware asymmetric gate confirmed at runtime (`POST /api/approvals/nonexistent/approve` → 503 while suspended, `/health` + `/api/kernel/**` stayed 200).
+- **Root cause of prior 27-failure run (2026-08-01 06:59 EDT):** stale `ui/out` static export — browser requested chunk hashes that no longer existed after Wave C's incremental client-code changes, hydration failed, no `data-testid` elements rendered. Fix: always `rm -rf ui/.next ui/out` before `npx next build` when Wave-C-touched client components change. Recorded in DEBUG_LOG.
+- **Files touched:** none (validation-only entry).
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none. ADR-069 status can now be moved from `Proposed` to `Ratified` on Wave C merge.
+- **Stop-condition status:** MET. Wave C ready to merge. Wave D (Memory Integrity graph) unblocked.
