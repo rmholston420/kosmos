@@ -93,3 +93,35 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Next investigation:** `adapters/memory/dozerdb/kosmos_graphiti_embedder.py` (or wherever `KosmosGraphitiEmbedder` is defined) needs to subclass `graphiti_core.embedder.EmbedderClient` or the constructor wiring in `graphiti_temporal_index.py` should adapt to a duck-typed protocol. Also consider: ADR-073 marked GraphitiTemporalIndex path as deprecated — the correct fix may be to delete it entirely (hard-delete deferred per ADR-073 §Consequences).
 - **Related DEBUG_LOG search terms:** "GraphitiTemporalIndex", "EmbedderClient", "KosmosGraphitiEmbedder", "GraphitiClients validation"
 
+
+### 2026-08-01 — ui spec 01: sidebar-plugins missing /zetesis and /gnosis links
+
+- **Blocks:** no blockers (test-only; UI plugin registry surfacing)
+- **Symptom:** `01-shell-and-routes.spec.ts:16` fails — `getByTestId('sidebar-plugins').locator('a[href="/zetesis"]')` and `a[href="/gnosis"]` resolve to 0 elements. The test expects both routes to be de-duped (registry + static fallback) and rendered exactly once each. Sidebar screenshot shows only some plugin links, not the full set the static fallback should guarantee.
+- **Attempted fixes:** none this session (pre-existing flake, out of Stage 3.14b step 3 scope).
+- **Next investigation:** inspect `ui/lib/registry.ts` (or wherever `sidebar-plugins` is populated) — the live-registry merge with static fallbacks must be either (a) filtering out `/zetesis` and `/gnosis` entries, or (b) racing with data that hasn't loaded by first paint. Verify against `/api/kernel/schema` payload at test-run time.
+- **Related DEBUG_LOG search terms:** "sidebar-plugins", "static fallback", "route manifest", "de-dupes"
+
+### 2026-08-01 — ui spec 08: zetesis-research surface never reaches report/error state
+
+- **Blocks:** no blockers (test-only)
+- **Symptom:** `08-zetesis-research.spec.ts:27` — submitting a query, expect `zetesis-report | zetesis-report-error | zetesis-error` to be visible within 600s. Neither locator appears; Playwright's own per-test 30s timeout expires first, so the 600s wait is truncated. Retry #1 same behavior.
+- **Attempted fixes:** none this session.
+- **Next investigation:** (a) confirm the per-test timeout is actually 30s vs the intended 600s — likely a `test.setTimeout()` missing at the top of the test, similar to spec 03's fix; (b) if the timeout is raised, verify Ollama is warm and the ODR pipeline emits a terminal SSE event. Compare against spec 16 which asserts on the raw SSE stream.
+- **Related DEBUG_LOG search terms:** "zetesis-report", "zetesis-report-error", "600_000", "test.setTimeout"
+
+### 2026-08-01 — ui spec 16: F6 zetesis SSE POST context disposed before completed event
+
+- **Blocks:** no blockers (test-only; SSE lifecycle)
+- **Symptom:** `16-zetesis-completes.spec.ts:27` — `request.post('/api/zetesis/research', ...)` returns 200 with `content-type: text/event-stream; charset=utf-8`, then Playwright throws `apiRequestContext.post: Request context disposed.` at the 30s per-test timeout. The completed event never arrives before the request context is torn down.
+- **Attempted fixes:** none this session.
+- **Next investigation:** two paths — (a) same missing `test.setTimeout(90_000)` pattern as spec 08 (Playwright kills the request context at the per-test cap regardless of the individual request timeout); (b) actual ODR/SSE hang on the kernel side never emitting `event: completed`. Instrument by dropping SSE stream to disk during the test and checking last-event-received timestamps.
+- **Related DEBUG_LOG search terms:** "apiRequestContext", "request context disposed", "text/event-stream", "zetesis SSE"
+
+### 2026-08-01 — ui spec 24: memory-quarantine review initial state resolves to none of {list, empty, degraded, error}
+
+- **Blocks:** no blockers (test-only; ADR-076 D4 surface)
+- **Symptom:** `24-memory-quarantine-review.spec.ts:30` — walks `["quarantine-review-list", "quarantine-empty", "quarantine-degraded", "quarantine-error"]`, sums their counts, asserts `>= 1`. All four resolve to 0. The page renders but none of the expected state markers appear.
+- **Attempted fixes:** none this session.
+- **Next investigation:** either the UI added a new state testid that isn't in the whitelist (e.g. loading spinner outlasting the test), or the fetch to the quarantine port failed silently (no `quarantine-error` rendered on 4xx/5xx). Check `ui/app/memory/quarantine/` state machine + `/api/memory/quarantine` handler; expand the test's testid list to include whatever the current in-flight state emits.
+- **Related DEBUG_LOG search terms:** "quarantine-review-list", "quarantine-empty", "quarantine-degraded", "quarantine-error", "ADR-076 D4"
