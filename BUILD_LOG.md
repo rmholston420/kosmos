@@ -3155,3 +3155,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none yet (ratification only; D1–D7 execution follows on `stage-1-6-p3-code`)
 - **PORTING_LEDGER / ADR updated:** ADR-076 Ratified v25
 - **Stop-condition status:** met for ratification; D1–D7 code execution begins next.
+
+## 2026-08-01 13:07 EDT — Merged PRs #31 + #32 (sidebar de-dupe, gnosis graph visibility, events-ws unwrap)
+
+- **Stage / plugin / port:** Stage 1.5 GUI · Sidebar + Gnosis Graph + EventBusPort WS bridge
+- **What changed:** Merged `hotfix-gnosis-graph-visibility` (PR #32) — DimensionalForceGraph ResizeObserver hotfix, gnosis/graph hex-color palette, `events-ws.tsx` envelope-unwrap fix, Playwright diagnostic. Merged `hotfix-sidebar-zetesis-duplicate` (PR #31) after rebasing on updated main and resolving DEBUG_LOG chronology. Playwright diagnostic confirmed all three symptoms fixed: (a) 3D canvas 990×502 (was 0×0), (b) nodes/edges render with high-contrast hex, (c) NotificationTray receives Zetesis events (`aria-label="Notifications (1 unread)"`, 1 DOM entry).
+- **Files touched:** ui/components/Sidebar.tsx; ui/tests/01-shell-and-routes.spec.ts; ui/components/graph/DimensionalForceGraph.tsx; ui/app/gnosis/graph/page.tsx; ui/lib/events-ws.tsx; ui/tests/diagnostics/events-and-graph.spec.ts; ui/playwright.config.ts; .gitignore; DEBUG_LOG.md
+- **Ports / adapters affected:** FrontendContractPort (dedupe), EventBusPort (WS wire-format unwrap)
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — Colossus Playwright diagnostic green on all three symptoms; PR #31 + PR #32 squashed into main
