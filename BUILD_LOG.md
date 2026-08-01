@@ -2045,3 +2045,16 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — test-only fix.
 - **PORTING_LEDGER / ADR updated:** none (test hygiene).
 - **Stop-condition status:** in-progress — awaiting 5/5 green on Colossus.
+
+## 2026-08-01 02:00 EDT — Stage 6.5.3 · Zetesis /research SSE endpoint (ADR-060)
+
+- **Stage / plugin / port:** Stage 6.5.3 · Kernel HTTP surface · Zetesis
+- **What changed:** Added kernel-owned `POST /api/zetesis/research` endpoint returning `text/event-stream`. Emits `started` immediately (with server-issued `trial_id`), then block-awaits `ZetesisPlugin.research(query, config=config)`, then emits `completed` with the full `ResearchReport` payload — or `error` with `{error, error_type, trial_id}` if the call raises. Config passthrough coerces `priority_class` (str→enum), `compute_budget` (num/str→Decimal), `fact_anchor_urls`/`rubric_lines` (list→tuple); unknown keys dropped for forward-compat; invalid coercion returns 400 before the SSE handshake. `kernel/app.py` version 6.5.2 → 6.5.3.
+- **Files touched:**
+  - `kernel/app.py` (added imports, `_SSE_HEADERS`, `_sse_event`, `_build_research_config`, `zetesis_research` route; version bump; docstring update)
+  - `docs/adrs/ADR-060-stage-6-5-3-zetesis-research-sse.md` (new)
+  - `docs/adrs/README.md` (row inserted before ADR-059)
+  - `tests/kernel/test_stage_6_5_3_zetesis_research_sse.py` (new, 8 tests)
+- **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`.
+- **PORTING_LEDGER / ADR updated:** ADR-060 new; PORTING_LEDGER unchanged.
+- **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
