@@ -489,3 +489,15 @@ Entry format per `kosmos-log-maintenance` skill:
   - `adapters/memory/dozerdb/graphiti_temporal_index.py` (batch EpisodicNode hydration + payload provenance injection)
   - `kernel/app.py` (filter uses `provenances` set membership; wider `raw_limit`)
 - **Related BUILD_LOG entry:** 2026-08-01 03:55 EDT
+
+## 2026-08-01 04:35 EDT — Tektos-UI htmx root-relative asset path 404s under kernel mount (closed)
+
+- **Symptom:** `plugins/tektos/ui/templates.py` rendered `<script src="{htmx_src}"></script>` with `htmx_src=TEKTOS_UI_HTMX_JS_PATH="/htmx.min.js"` — root-relative. Once the sub-app is mounted at `/tektos-ui/*` inside the kernel (ADR-065), browsers resolve `/htmx.min.js` against the kernel root, which returns 404. `GET /tektos-ui/htmx.min.js` returned 200 during smoke, but the served HTML pointed at the kernel-root path.
+- **Affected stage / plugin / port:** Stage 3.11 · Tektos UI · asset URL rendering (bug carried forward; exposed by Stage 6.5.8 mount, closed by ADR-066 D5 as part of Stage 6.5.9).
+- **Root cause:** The template constant `TEKTOS_UI_HTMX_JS_PATH` is used for two distinct purposes: (a) the FastAPI route decorator on the sub-app (`@app.get("/htmx.min.js")`) which requires the leading slash; (b) the HTML `<script src>` binding which needs to be mount-prefix-relative. A single constant cannot satisfy both under a non-root mount.
+- **Fix applied:** Introduced a second constant `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF = "htmx.min.js"` (bare, mount-relative) in `plugins/tektos/ui/policy.py` and swapped the template binding to use it. The route decorator target (`TEKTOS_UI_HTMX_JS_PATH`) is unchanged so the sub-app route surface stays byte-identical. Browsers now resolve the relative `htmx.min.js` against the sub-app root (`/tektos-ui/`) → `/tektos-ui/htmx.min.js` → 200. Regression test in `tests/kernel/test_stage_6_5_9_gui_enablement.py::TestTektosUiHtmxTemplateHref` asserts the rendered HTML contains `src="htmx.min.js"` and not `src="/htmx.min.js"`.
+- **Files changed:**
+  - `plugins/tektos/ui/policy.py`
+  - `plugins/tektos/ui/templates.py`
+  - `tests/kernel/test_stage_6_5_9_gui_enablement.py` (D5 test class)
+- **Related BUILD_LOG entry:** 2026-08-01 04:35 EDT

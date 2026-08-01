@@ -10,6 +10,7 @@ __all__ = [
     "TEKTOS_UI_HEALTHZ_PATH",
     "TEKTOS_UI_HOST",
     "TEKTOS_UI_HTMX_JS_PATH",
+    "TEKTOS_UI_HTMX_JS_TEMPLATE_HREF",
     "TEKTOS_UI_HTMX_SHA256",
     "TEKTOS_UI_HTMX_UPSTREAM_COMMIT",
     "TEKTOS_UI_HTMX_UPSTREAM_LICENSE",
@@ -118,6 +119,10 @@ TEKTOS_UI_PLAN_EXECUTE_PATH: str = "/plan/{approval_id}/execute"
 TEKTOS_UI_PLAN_DIFF_PATH: str = "/plan/{approval_id}/diff"
 TEKTOS_UI_HEALTHZ_PATH: str = "/healthz"
 TEKTOS_UI_HTMX_JS_PATH: str = "/htmx.min.js"
+# ADR-066 D5 — relative href for use in HTML templates so browsers resolve
+# the asset against the sub-app mount prefix (e.g. ``/tektos-ui/``) rather
+# than the kernel root, where the route does not exist.
+TEKTOS_UI_HTMX_JS_TEMPLATE_HREF: str = "htmx.min.js"
 
 
 # ── FrontendContractPort Route ────────────────────────────────────────────

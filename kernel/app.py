@@ -1,4 +1,4 @@
-"""Kosmos kernel FastAPI app (Stage 6.5.8 — Tektos UI kernel mount).
+"""Kosmos kernel FastAPI app (Stage 6.5.9 — GUI enablement kernel additions).
 
 Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
 
@@ -692,6 +692,36 @@ async def resource_balances() -> dict[str, Any]:
     return out
 
 
+# ADR-066 D2 — resource queue passthrough
+
+
+@app.get("/api/resources/queue")
+async def resource_queue(
+    kind: str, n: int = 5
+) -> list[dict[str, Any]]:
+    rp = registry.resource
+    if rp is None:
+        raise HTTPException(503, detail=registry.errors.get("resource"))
+    from ports.resource import ResourceKind as _RK
+
+    try:
+        rk = _RK(kind)
+    except ValueError as exc:
+        valid = [m.value for m in _RK]
+        raise HTTPException(
+            400, detail=f"unknown kind {kind!r}; valid: {valid}"
+        ) from exc
+    if not isinstance(n, int) or n < 1 or n > 100:
+        raise HTTPException(400, detail="'n' must be an int in [1, 100]")
+    try:
+        queued = await rp.peek(rk, n)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+    return [_dataclass_to_dict(q) for q in queued]
+
+
 # ---------------------------------------------------------------------------
 # Approvals
 # ---------------------------------------------------------------------------
@@ -1312,6 +1342,7 @@ async def zetesis_research(request: Request) -> StreamingResponse:
 
 
 @app.get("/api/notifications/health")
+@app.get("/api/notifications/slo")  # ADR-066 D4 alias
 async def notification_health() -> dict[str, Any]:
     n = registry.notification
     if n is None:
@@ -1324,6 +1355,36 @@ async def notification_health() -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {"report": payload}
     return payload
+
+
+# ADR-066 D1 — notification ack passthrough
+
+
+@app.post("/api/notifications/{notification_id}/ack")
+async def notification_ack(
+    notification_id: str, request: Request
+) -> dict[str, Any]:
+    n = registry.notification
+    if n is None:
+        raise HTTPException(503, detail=registry.errors.get("notification"))
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail=f"invalid JSON body: {exc}") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail="body must be a JSON object")
+    sub = body.get("subscriber_id")
+    if not isinstance(sub, str) or not sub.strip():
+        raise HTTPException(
+            400, detail="'subscriber_id' must be a non-empty string"
+        )
+    try:
+        acked = await n.ack_receipt(notification_id, sub)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+    return {"acked": bool(acked)}
 
 
 # ---------------------------------------------------------------------------
@@ -1410,6 +1471,83 @@ async def events_ws(ws: WebSocket) -> None:
                 bus.unsubscribe(t, q)
             except Exception:  # noqa: BLE001
                 pass
+
+
+# ADR-066 D3 — algedonic WebSocket push channel
+
+
+class _WebSocketAlgedonicSink:
+    """Kernel-scoped :class:`ports.notification.Sink` that forwards
+    only algedonic-tier records to a single WebSocket client.
+
+    Non-algedonic tiers are soft-dropped (``return True``) so the port
+    doesn't record them as SLO breaches. Transport errors from the
+    WebSocket surface as ``return False`` per the ``Sink`` contract.
+    """
+
+    def __init__(self, ws: WebSocket) -> None:
+        self._ws = ws
+
+    async def deliver(self, record: Any) -> bool:
+        # Local import to avoid a top-of-file cycle with the notification
+        # port's enum module (kept identical to other route handlers).
+        from ports.notification import AlgedonicTier
+
+        tier = getattr(record, "tier", None)
+        if tier != AlgedonicTier.ALGEDONIC:
+            return True  # soft-drop non-algedonic tiers
+        try:
+            await self._ws.send_json(
+                {
+                    "frame": "algedonic",
+                    "record": _dataclass_to_dict(record),
+                }
+            )
+        except Exception:  # noqa: BLE001
+            return False
+        return True
+
+    async def close(self) -> None:
+        # WebSocket lifetime is owned by the route handler; nothing to do.
+        return None
+
+
+@app.websocket("/api/algedonic/ws")
+async def algedonic_ws(ws: WebSocket) -> None:
+    n = registry.notification
+    if n is None:
+        await ws.close(code=1011, reason="notification subsystem down")
+        return
+
+    await ws.accept()
+    await ws.send_json({"frame": "ready"})
+
+    sink = _WebSocketAlgedonicSink(ws)
+    try:
+        n.register_sink(sink)
+    except Exception as exc:  # noqa: BLE001
+        await ws.close(code=1011, reason=f"sink register failed: {exc}")
+        return
+
+    async def _drain_client() -> None:
+        # Consume (and ignore) client frames so a client close surfaces
+        # promptly as WebSocketDisconnect.
+        while True:
+            await ws.receive_text()
+
+    drain = asyncio.create_task(_drain_client())
+    try:
+        await drain
+    except WebSocketDisconnect:
+        pass
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        drain.cancel()
+        try:
+            n.unregister_sink(sink)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # ---------------------------------------------------------------------------

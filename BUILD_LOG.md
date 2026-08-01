@@ -2188,3 +2188,29 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met — Stage 6.5.8 shipped + tagged.
+
+## 2026-08-01 04:35 EDT — Stage 6.5.9 · GUI enablement kernel additions (ADR-066) — PR opened
+
+- **Stage / plugin / port:** Stage 6.5.9 · kernel · four GUI-enablement additions + Tektos-UI htmx template fix (ADR-066)
+- **What changed:**
+  - `kernel/app.py` version 6.5.8 → 6.5.9.
+  - Added `POST /api/notifications/{notification_id}/ack` (D1) — passthrough to `NotificationPort.ack_receipt`; 503 when subsystem down; 400 on missing/empty `subscriber_id` or malformed body; 502 on upstream exception.
+  - Added `GET /api/resources/queue` (D2) — passthrough to `ResourcePort.peek(kind, n)`; 400 on unknown kind or `n` out of `[1, 100]`; 503 when subsystem down; 502 on upstream exception.
+  - Added `WebSocket /api/algedonic/ws` (D3) — accepts, sends `{"frame":"ready"}`, registers a kernel-scoped `_WebSocketAlgedonicSink` (implements `ports.notification.Sink`) that forwards only `AlgedonicTier.ALGEDONIC` records; non-algedonic tiers soft-drop; transport errors soft-fail; sink is unregistered on disconnect. Closes with 1011 when the notification subsystem is down.
+  - Added `GET /api/notifications/slo` (D4) — second route decorator on the existing `notification_health()` handler, byte-identical response, `/api/notifications/health` remains live.
+  - Tektos-UI htmx template fix (D5): `plugins/tektos/ui/policy.py` gains `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF = "htmx.min.js"` (bare, mount-relative). `plugins/tektos/ui/templates.py` swaps the `<script src="{htmx_src}">` binding from `TEKTOS_UI_HTMX_JS_PATH` (root-relative, `/htmx.min.js`) to the new relative constant. Route decorator target unchanged. Verified during Stage 6.5.8 smoke that `GET /tektos-ui/htmx.min.js` returns 200 under mount.
+  - Test tier `tests/kernel/test_stage_6_5_9_gui_enablement.py` (new) — 4 D1 route tests, 6 D2 route tests, 4 D3 sink unit tests + 3 D3 WS route tests, 2 D4 alias tests, 3 D5 template tests.
+- **Files touched:**
+  - `docs/adrs/ADR-066-stage-6-5-9-gui-enablement.md` (new)
+  - `docs/adrs/README.md` (row inserted above ADR-065)
+  - `kernel/app.py` (three new routes, one alias decorator, `_WebSocketAlgedonicSink` class, version bump)
+  - `plugins/tektos/ui/policy.py` (one new constant, one new `__all__` entry)
+  - `plugins/tektos/ui/templates.py` (one import swap, one binding change)
+  - `tests/kernel/test_stage_6_5_9_gui_enablement.py` (new)
+  - `KNOWN_ISSUES.md` (htmx entry removed — moved to `DEBUG_LOG.md` as closed diagnosis)
+  - `DEBUG_LOG.md` (append closed entry for htmx root-relative fix)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten with 6.5.9 state)
+- **Ports / adapters affected:** none. Zero new port surface; zero new file under `adapters/`. `_WebSocketAlgedonicSink` is a kernel-internal `Sink`-protocol implementation, not a port.
+- **PORTING_LEDGER / ADR updated:** ADR-066 authored + ratified. Zero `PORTING_LEDGER.md` change.
+- **Stop-condition status:** in-progress — PR #10 opened, awaiting Colossus retest.
