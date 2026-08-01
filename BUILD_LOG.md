@@ -2687,3 +2687,19 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (pure UI on kernel data already flowing).
 - **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F3 falls under Wave F's "make placeholders real"; ratified after full Wave F lands.
 - **Stop-condition status:** F3 slice **met** on branch; awaiting Colossus verification.
+
+## 2026-08-01 09:34 EDT — Stage 1.5 Wave F · F4 · NotificationTray drawer wired into PersistentShell
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Kernel · PersistentShell top bar · EventBusPort consumer
+- **What changed:**
+  - New `ui/components/NotificationTray.tsx` (338 lines): Radix `Dialog`-backed drawer opened from a bell trigger in the top bar. Subscribes to all `WS_DEFAULT_EVENT_TYPES` via `useEventsWS().subscribe` (5 event types: `phrouros.anomaly.detected`, `zetesis.research.started`, `zetesis.research.completed`, `kernel.suspended`, `kernel.resumed`). Rolling in-memory history capped at `MAX_HISTORY = 100`.
+  - Tone classification per event type (danger / success / info) with Tibetan ADR-072 accent colors: Rakta red border-left for danger, Nagtang gold for success, Vairocana blue for info. Bell SVG icon, unread badge, connection-state pill, `Clear` button, `Close` button.
+  - Wired into `ui/components/PersistentShell.tsx` between `<ModelSwapIndicator />` and the contextual-drawer trigger.
+  - Full testid coverage: `notification-tray-trigger`, `-badge`, `-title`, `-description`, `-connection`, `-clear`, `-close`, `-overlay`, `-empty`, `-list`, `-item-{i}`, `-item-type-{i}`.
+- **Files touched:**
+  - `ui/components/NotificationTray.tsx` (new, 338 lines)
+  - `ui/components/PersistentShell.tsx` (2 lines: import + placement between ModelSwapIndicator and drawer-trigger)
+  - `ui/tests/18-notification-tray-f4.spec.ts` (new, 3 tests: trigger in top bar, open reveals title/description/connection/empty/close, Clear present)
+- **Ports / adapters affected:** EventBusPort consumer path — the tray joins the existing `EventsWSProvider` subscription set alongside `AlgedonicPill`, `AlgedonicBanner`, `AgentTracePanel`, `ApprovalsQueuePanel`.
+- **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F4 falls under Wave F "make placeholders real"; no new vendored components (Radix Dialog already vendored at Stage 1.5 Wave A).
+- **Stop-condition status:** F4 slice **met** on branch; awaiting Colossus verification.

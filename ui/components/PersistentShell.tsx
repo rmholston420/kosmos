@@ -8,6 +8,7 @@ import AlgedonicBanner from "./AlgedonicBanner";
 import ModelSwapIndicator from "./ModelSwapIndicator";
 import CommandPalette from "./CommandPalette";
 import KillSwitch from "./KillSwitch";
+import NotificationTray from "./NotificationTray";
 import DesignTokenHydrator from "./DesignTokenHydrator";
 import { EventsWSProvider } from "../lib/events-ws";
 
@@ -39,6 +40,7 @@ export default function PersistentShell({ children }: { children: ReactNode }) {
         <CommandPalette />
         <AlgedonicPill />
         <ModelSwapIndicator />
+        <NotificationTray />
         <button
           data-testid="drawer-trigger"
           aria-label="Open contextual drawer"
