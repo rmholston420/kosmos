@@ -1,33 +1,48 @@
-# Kosmos Session Handoff — 2026-08-01 08:58 EDT
+# Kosmos Session Handoff — 2026-08-01 09:46 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 1.5 · Wave F (GUI realization completion) · **F0 + F1 + F2 shipped in PR #18**
-- **Plugin / kernel component:** shell theme + `EventsWSProvider` + four kernel-authoritative Operate panels + Next 16 tsconfig shape
-- **Port(s) in progress:** EventBusPort WS consumer path (F1); FrontendContractPort Operate-slot completion (F2 done, F3-F5 pending)
+
+- **Stage / phase:** Stage 1.5 Wave F complete on Part 2; Wave F overall STILL PROPOSED (ADR-072 not yet ratified)
+- **Plugin / kernel component:** GUI shell + kernel introspection + Zetesis end-to-end
+- **Port(s) in progress:** none — Wave F Part 2 shipped, awaiting decision on next PR scope
 
 ## Completed this session
-- Diagnosed the "black text on white" GUI as missing `@tailwindcss/postcss` + missing `postcss.config` → PostCSS never processed `@import "tailwindcss"`.
-- F0 · Tibetan theme realization: 12-line stub `globals.css` expanded to 506 lines with the full Five-Wisdom OKLCH visual system; attribute-selector styling on existing `data-testid` values — zero component-file churn.
-- F1 · `EventsWSProvider` mounted in `PersistentShell`; `AgentTracePanel` + `ApprovalsQueuePanel` wired to relevant event types.
-- F2 · Four Operate panels live: `StubDegradation`, `ModelSwapSLO`, `ContextPressure`, `HardwareResilience`. `PanelGrid` renders them unconditionally.
-- Folded `ui/tsconfig.json` Next 16 regenerated shape → ends the recurring dirty-checkout diff.
-- Authored ADR-072 (Proposed); index row appended after ADR-071.
-- PR #18 opened: https://github.com/rmholston420/kosmos/pull/18 · commits `21be756` (F1) + `2fb09cc` (F0+F2).
-- Colossus: `pnpm ui install` clean, `pnpm ui build` 13/13 static pages, Playwright `14-wave-f-operate-panels.spec.ts` **6/6 GREEN** in 807 ms. `git stash drop` cleared the tsconfig stash.
-- BUILD_LOG appended (2026-08-01 08:58 EDT).
+
+- **F6** (`c223b11`) — ADR-056 §D3 no-op search compliance. Adapter-side loosening: `QdrantVectorAdapter.search(query_vector=[])` returns `[]`. ADR-056 amended with 2026-08-01 STATUS AMENDMENT. Non-list still rejected. Zetesis SSE `event: completed` reached in 12.1s.
+- **F3** (`c1d39d0`) — MemoryIntegrityPanel: client-side provenance substring search + 10-bin confidence histogram in Nagtang gold (Ratnasambhava scale). Filter-empty branch when substring hides all nodes.
+- **F4** (`97ba222`) — NotificationTray Radix Dialog drawer wired into PersistentShell. Subscribes to `WS_DEFAULT_EVENT_TYPES`, rolling history capped at 100, tone classification via ADR-072 accents.
+- **F5** (`a0fb05e`) — `/kernel` introspection page: read-only browsable renderer of `/api/kernel/schema`. Three sections (plugins, aggregate panels, design tokens). Sidebar sixth Job route.
+- **F3 test race-fix** (`90786a4`) — `beforeEach` in `17-memory-integrity-f3.spec.ts` now `Promise.race`s the three terminal branches so filter-empty expectation doesn't hit a mid-mount window.
+- **PR #19** MERGED as squash `56a7fe6` at 2026-08-01 09:46 EDT. Full Playwright suite: **68 passed, 7 skipped, 0 failed** on Colossus.
 
 ## Remaining before current Definition of Done
-- Merge PR #18 (F0+F1+F2 slice).
-- Open PR #19 with F3+F4+F5:
-  - F3 · `MemoryIntegrityPanel` search-by-provenance + confidence-histogram stats
-  - F4 · `NotificationTray` in top bar (drawer-backed event history from `EventsWSProvider`)
-  - F5 · `/kernel` introspection page rendering `KernelSchema` as a debug surface
-- Open ratification PR after PR #19 lands: flip ADR-072 `Proposed → Ratified v25`, bump kernel `6.8.0 → 6.9.0`, update version-pin tests. Also fold the Next.js `16.0.0 → 16.0.x` security bump (CVE-2025-66478) here.
-- Full Colossus suite target: **≥55/6/0** Playwright + full pytest GREEN.
+
+Wave F Definition of Done (from ADR-072 Proposed):
+
+- [x] F0 · design-token bridge + shell chrome (PR #18)
+- [x] F1 · algedonic pill (PR #18)
+- [x] F2 · Cmd+K palette stub (PR #18)
+- [x] F3 · MemoryIntegrity provenance search + histogram (PR #19)
+- [x] F4 · NotificationTray drawer (PR #19)
+- [x] F5 · /kernel introspection page (PR #19)
+- [x] F6 · ADR-056 §D3 no-op search compliance (PR #19)
+- [ ] **ADR-072 ratification PR** — flip status Proposed → Ratified v25, bump kernel `6.8.0 → 6.9.0`, fold in Next.js CVE-2025-66478 bump
 
 ## Open questions / awaiting user answer
-- **DDC Uchen wordmark font.** Currently the display face falls back to Times when DDC Uchen / Noto Serif Tibetan isn't installed. Want a self-hosted `@font-face` bundled with the shell so it's guaranteed everywhere?
-- **PR #18 merge order.** Merge PR #18 immediately, then start PR #19? Or hold PR #18 until PR #19 is ready and merge both back-to-back?
+
+Two ADR authorings to sequence:
+
+1. **ADR-072 ratification** — pure paper PR (status + version + Next.js CVE bump), or hold until F7 test-hardening also lands?
+2. **ADR-073 (EmbeddingsPort + Ollama nomic-embed-text routing)** — needed to fix ODR OpenAI fallback observed in F6 verification. Stage 6.4 territory.
+3. **ADR-056 §D3 failure-semantics STATUS AMENDMENT** — small: current runtime publishes `event: completed` with an `error` field populated on inner-loop failure; spec §D3 says on failure completed is NOT published. Two options: amend spec to allow graceful-completion-with-error (better GUI UX), or fix plugin to re-raise. Ask user which.
 
 ## Exact next action
-- Await user decision on PR #18 merge timing + wordmark font. Default: merge PR #18 now, start F3 (MemoryIntegrityPanel search + stats) on the same branch or a fresh `stage-1-5-wave-f-part-2` branch depending on merge order.
+
+Ask user which of the three follow-ups is next:
+
+- **(A)** ADR-072 ratification PR (paper + version bump + Next.js CVE)
+- **(B)** ADR-073 authoring + EmbeddingsPort + Ollama routing (fixes ODR OpenAI fallback)
+- **(C)** ADR-056 §D3 failure-semantics amendment (small, standalone)
+- **(D)** F7 test-hardening (kill-switch afterEach guard + serialize/retry Zetesis SSE specs)
+
+Or a combination. Default recommendation: (C) first (tiny), then (A), then (B), with (D) folded into (A) opportunistically.
