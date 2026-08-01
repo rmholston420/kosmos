@@ -204,6 +204,33 @@ vendored source trees; SPDX license verified on every version listed.
 - **Logged:** 2026-08-01 06:12 EDT
 
 
+### Stage 1.5 Wave D · UI dependencies (MEMORY_INTEGRITY graph)
+
+#### cytoscape — VENDORED
+- **Source:** https://github.com/cytoscape/cytoscape.js
+- **Commit / Version:** `^3.30.0`
+- **License:** MIT
+- **Kosmos location:** `ui/` (npm dep; consumed inside
+  `ui/components/panels/MemoryIntegrityPanel.tsx` only — never
+  imported by other components)
+- **Port(s):** none — client-side graph rendering surface for the
+  MEMORY_INTEGRITY panel per UX Design Spec §"Data-Type Taxonomy" #1
+- **Modifications:** none
+- **ADR:** ADR-070
+- **Logged:** 2026-08-01 07:19 EDT
+
+#### react-cytoscapejs — VENDORED
+- **Source:** https://github.com/plotly/react-cytoscapejs
+- **Commit / Version:** `^2.0.0`
+- **License:** MIT
+- **Kosmos location:** `ui/` (npm dep; thin React binding for cytoscape,
+  consumed inside `ui/components/panels/MemoryIntegrityPanel.tsx` only)
+- **Port(s):** none
+- **Modifications:** none
+- **ADR:** ADR-070
+- **Logged:** 2026-08-01 07:19 EDT
+
+
 ## Historical entries
 
 Full history through ADR-056 lives in `docs/adrs/README.md`. Notable

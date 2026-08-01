@@ -139,7 +139,61 @@ export const kernelClient = {
   resumeKernel: () => postJSON<KernelResumeResponse>("/api/kernel/resume", {}),
   getSuspensionStatus: () =>
     getJSON<KernelSuspensionStatus>("/api/kernel/suspension"),
+
+  // ADR-070 Stage 1.5 Wave D — Gnosis graph endpoints.
+  fetchGraphNodes: (opts?: { corpus?: string; limit?: number; cursor?: string }) => {
+    const qs = new URLSearchParams();
+    if (opts?.corpus) qs.set("corpus", opts.corpus);
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    if (opts?.cursor) qs.set("cursor", opts.cursor);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return getJSON<GraphNodePage>(`/api/gnosis/graph/nodes${suffix}`);
+  },
+  fetchGraphEdges: (opts?: { corpus?: string; node_id?: string; limit?: number; cursor?: string }) => {
+    const qs = new URLSearchParams();
+    if (opts?.corpus) qs.set("corpus", opts.corpus);
+    if (opts?.node_id) qs.set("node_id", opts.node_id);
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    if (opts?.cursor) qs.set("cursor", opts.cursor);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return getJSON<GraphEdgePage>(`/api/gnosis/graph/edges${suffix}`);
+  },
+  fetchGraphNode: (nodeId: string) =>
+    getJSON<GraphNodeDetail>(`/api/gnosis/graph/node/${encodeURIComponent(nodeId)}`),
 };
+
+// --- ADR-070 D1: /api/gnosis/graph/* ---
+export type GraphNodeKind = "subject" | "object" | "zetesis_report";
+export interface GraphNode {
+  id: string;
+  label: string;
+  kind: GraphNodeKind;
+  provenance: string | null;
+  confidence: number | null;
+}
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  kind: string;
+  label: string;
+  provenance: string | null;
+  confidence: number | null;
+  as_of: string | null;
+}
+export interface GraphNeighborSummary {
+  id: string;
+  label: string;
+  kind: GraphNodeKind;
+  via_edge_kind: string;
+}
+export interface GraphNodePage { nodes: GraphNode[]; next_cursor: string | null; }
+export interface GraphEdgePage { edges: GraphEdge[]; next_cursor: string | null; }
+export interface GraphNodeDetail {
+  node: GraphNode;
+  neighbor_count: number;
+  neighbors: GraphNeighborSummary[];
+}
 
 // --- ADR-068 D1: /api/ollama/status ---
 export interface OllamaStatus {

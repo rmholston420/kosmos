@@ -1,37 +1,38 @@
-# Kosmos Session Handoff — 2026-08-01 07:11 EDT
+# Kosmos Session Handoff — 2026-08-01 07:35 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 1.5 · GUI realization · **Waves A+B+C MERGED to main (PR #12 · squash `800a399`)**
-- **Plugin / kernel component:** Ready to start Wave D — MEMORY_INTEGRITY graph via cytoscape.js + `/api/gnosis/graph/*` read-only endpoints.
-- **Port(s) in progress:** none. Wave D will introduce a new read-only graph surface on Gnosis (no new port; extension of existing plugin routes).
+- **Stage / phase:** Stage 1.5 · GUI realization · Wave D
+- **Plugin / kernel component:** Kernel Gnosis surrogate (ADR-064) + UI MEMORY_INTEGRITY panel
+- **Port(s) in progress:** none new — consumes existing `MemoryPort.query_temporal`
 
 ## Completed this session
-- Wave A GREEN and shipped (persistent shell, job-segmented sidebar, 5 job pages, top bar, Cmd+K, ADR-068).
-- Wave B GREEN and shipped (GovernancePanel wired to `/api/praxis/constitution` + `/api/praxis/apex/policies`, ApprovalsQueuePanel `governanceMode` tier grouping on `/govern`).
-- Wave C GREEN and shipped (kernel kill-switch soft-suspend, asymmetric middleware, three endpoints, KillSwitch two-step confirm w/ reason, CommandPalette Plugins group, ADR-069). Colossus final validation: pytest 15/15, kill-switch Playwright 5/5, full Playwright 38 passed / 6 skipped / 0 failed.
-- Stale `ui/out` chunk-hash cascade root cause captured in DEBUG_LOG with prevention (always `rm -rf ui/.next ui/out` before rebuild when Wave-C-touched client components change).
-- PR #12 squash-merged to `main` at 2026-08-01 07:10 EDT as commit `800a399`.
-- `stage-1-5-gui-realized` branch reset to post-merge `origin/main` and retained for Wave D.
-- ADR-069 status promoted `Proposed → Ratified v25 (2026-08-01)` in ADR file and index README.
+- Wave C validated GREEN on Colossus (pytest 15/15, kill-switch Playwright 5/5, full Playwright 38/6/0)
+- Root cause captured in DEBUG_LOG: stale `ui/out` chunk-hash cascade → prevention `rm -rf ui/.next ui/out` before every rebuild
+- PR #12 (Waves A+B+C) squash-merged as `800a399`
+- ADR-069 promoted `Proposed → Ratified v25 (2026-08-01)`
+- PR #13 (ADR-069 ratification + logs + handoff) squash-merged as `5ea560d`
+- Wave D authored end-to-end on branch `stage-1-5-gui-realized`:
+  - ADR-070 (Proposed): 6 decisions covering endpoints, data union, cytoscape vendor, `/memory` swap, Zetesis best-effort, version bump 6.6.0 → 6.7.0
+  - PORTING_LEDGER: `cytoscape ^3.30.0` (MIT) + `react-cytoscapejs ^2.0.0` (MIT) VENDORED under new Stage 1.5 Wave D UI dependencies section
+  - `kernel/app.py`: version bump, `_BootRegistry.zetesis_reports` deque, `zetesis_plugin` handle, 3 read-only routes + 7 helpers under `/api/gnosis/graph/*`
+  - `ui/lib/kernel-client.ts`: `fetchGraphNodes`, `fetchGraphEdges`, `fetchGraphNode` + 6 interfaces
+  - `ui/components/panels/MemoryIntegrityPanel.tsx` (new): dynamic-imported cytoscape wrapper, corpus dropdown, inspector drawer, terminal-state discipline (`role="status"`/`role="alert"`)
+  - `ui/components/PanelGrid.tsx`: `MEMORY_INTEGRITY` always-render branch
+  - `ui/package.json`: `cytoscape` + `react-cytoscapejs` runtime + typings dev deps
+  - pytest `tests/kernel/test_stage_1_5_adr_070_gnosis_graph.py`: 17 tests, LOCAL GREEN 17/17
+  - Playwright `ui/tests/12-memory-integrity-graph.spec.ts`: 5 tests (awaits Colossus)
 
 ## Remaining before current Definition of Done
-- Wave D authoring: MEMORY_INTEGRITY graph panel.
-  - Backend: `/api/gnosis/graph/nodes`, `/api/gnosis/graph/edges`, `/api/gnosis/graph/query` (read-only, kernel-mounted per ADR-057).
-  - Frontend: MEMORY_INTEGRITY panel embedding cytoscape.js (MIT, already in Stage 1 candidate ledger) with node/edge inspection, provenance chip, CIDOC-CRM typed edge kinds.
-  - Tests: pytest for endpoints + Playwright for panel render + interaction.
-- Open a new PR for Wave D (base `main`, head `stage-1-5-gui-realized`) once first commit lands.
+- Commit Wave D to `stage-1-5-gui-realized` and push
+- Open PR #14 for Wave D
+- Colossus: `git stash` local `ui/package-lock.json` + `ui/tsconfig.json`; `git pull` merged main; reset branch; `pnpm install` for new cytoscape deps
+- Colossus: `pytest tests/kernel/test_stage_1_5_adr_070_gnosis_graph.py -v` — expect 17/17
+- Colossus: `rm -rf ui/.next ui/out && cd ui && pnpm exec next build`
+- Colossus: `npx playwright test tests/12-memory-integrity-graph.spec.ts` + full Playwright — expect 5/5 + regression-free
+- Merge PR #14, then promote ADR-070 `Proposed → Ratified v25`
 
 ## Open questions / awaiting user answer
-- none.
+- none — scope + vendor + data source all locked
 
 ## Exact next action
-Colossus paste to pull the merged main + refreshed Wave D branch:
-
-```bash
-cd ~/dev/kosmos && git fetch origin --prune && \
-  git checkout main && git pull --ff-only && \
-  git checkout stage-1-5-gui-realized && git reset --hard origin/stage-1-5-gui-realized && \
-  git log --oneline -5
-```
-
-Then reply "start Wave D" to begin authoring the MEMORY_INTEGRITY graph slice.
+- On agent side: `cd /tmp/kosmos-stage-1 && git add -A && git commit -m "Stage 1.5 Wave D: MEMORY_INTEGRITY graph (ADR-070)" && git push origin stage-1-5-gui-realized && gh pr create --title "Stage 1.5 Wave D · MEMORY_INTEGRITY provenance graph (ADR-070)" --body-file /tmp/pr14-body.md`

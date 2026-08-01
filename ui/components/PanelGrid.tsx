@@ -3,6 +3,7 @@ import type { Panel } from "../lib/kernel-client";
 import ApprovalsQueuePanel from "./panels/ApprovalsQueuePanel";
 import GovernancePanel from "./panels/GovernancePanel";
 import AgentTracePanel from "./panels/AgentTracePanel";
+import MemoryIntegrityPanel from "./panels/MemoryIntegrityPanel";
 import PlaceholderPanel from "./panels/PlaceholderPanel";
 
 const ALL_SLOTS = [
@@ -37,6 +38,12 @@ function renderPanelBySlot(slot: string, panels: Panel[], opts: PanelGridOptions
   // /api/praxis/*; always render even when zero panels are registered.
   if (slot === "GOVERNANCE") {
     return <GovernancePanel key={slot} panels={slotPanels} />;
+  }
+
+  // MEMORY_INTEGRITY (Wave D, ADR-070): reads /api/gnosis/graph/* directly;
+  // always render even when zero panels are registered.
+  if (slot === "MEMORY_INTEGRITY") {
+    return <MemoryIntegrityPanel key={slot} panels={slotPanels} />;
   }
 
   if (slotPanels.length === 0) {
