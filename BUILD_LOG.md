@@ -2391,3 +2391,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — all three routes call existing subsystems (`registry.llm._base_url`, `ConstitutionLoader`, `Trigger` enum). ADR-007 respected (kernel imports `plugins.praxis.constitution.loader` + `plugins.praxis.apex.models` inside the route handlers; no cross-plugin import). Zero new pip dep (httpx already vendored via FastAPI's TestClient stack).
 - **PORTING_LEDGER / ADR updated:** none — ADR-068 already ratified in previous commit; no new vendored component.
 - **Stop-condition status:** met — user requested backend-only landing so Colossus can pull + run pytest before UI work begins. Wave A frontend blocked pending user green-light.
+
+## 2026-08-01 06:45 EDT — Tektos-UI test fixup for ADR-066 D5 (missed rename)
+
+- **Stage / plugin / port:** Stage 6.5.9 · Tektos · UI template test alignment (retroactive fix)
+- **What changed:** Two assertions in `plugins/tektos/tests/test_tektos_ui.py` still referenced `TEKTOS_UI_HTMX_JS_PATH` ("/htmx.min.js" — the ROUTE constant) after ADR-066 D5 renamed the template binding to `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF` ("htmx.min.js" — the bare mount-relative HREF). Updated both to assert `TEKTOS_UI_HTMX_JS_TEMPLATE_HREF`. The route-level fetch at line 348 (`client.get(TEKTOS_UI_HTMX_JS_PATH)`) is correct as-is — the FastAPI decorator still binds `/htmx.min.js` per ADR-066 D5. Detected by Colossus full-suite pytest after ADR-068 backend deltas landed.
+- **Files touched:** `plugins/tektos/tests/test_tektos_ui.py` (3 edits: 1 import + 2 assertion sites).
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none. ADR-066 D5 remains authoritative; these tests should have been updated in that commit.
+- **Stop-condition status:** met — Colossus pytest expected to return to green after this fixup.
