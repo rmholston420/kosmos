@@ -1,48 +1,41 @@
-# Kosmos Session Handoff — 2026-08-01 06:33 EDT
+# Kosmos Session Handoff — 2026-08-01 06:49 EDT
 
 ## Current build-sequencing position
-
-- **Stage / phase:** Stage 1.5 · GUI Realization (ADR-068)
-- **Plugin / kernel component:** `kosmos/ui/` (Next.js 16 static export served by kernel FastAPI)
-- **Port(s) in progress:** none — UI-only wave; consumes existing FrontendContractPort schema + ADR-068 D1/D2/D3 routes
+- **Stage / phase:** Stage 1.5 · GUI realization · Wave C landed (backend + frontend + tests)
+- **Plugin / kernel component:** Kernel (kill-switch middleware + 3 endpoints); Kosmos UI (KillSwitch, CommandPalette)
+- **Port(s) in progress:** none (kill-switch uses existing EventBusPort for best-effort emit)
 
 ## Completed this session
-
-- Wave A merged and PR #12 opened against `main` — persistent shell + job-segmented sidebar + 5 job pages + top-bar wiring (Cmd+K, algedonic pill, model-swap indicator, kill-switch stub, drawer). 28/28 Playwright green on Colossus.
-- Wave B landed on branch `stage-1-5-gui-realized`:
-  - GovernancePanel fetches `/api/praxis/constitution` + `/api/praxis/apex/policies` live
-  - ApprovalsQueuePanel `governanceMode` prop → tier-grouped view on `/govern`
-  - Phrouros oversight surface rendered visible-but-disabled
-  - 5 new Playwright tests in `ui/tests/10-governance-surface.spec.ts`
-  - BUILD_LOG appended
+- Wave B landed on `stage-1-5-gui-realized` (commit `6c42015`) — GovernancePanel + ApprovalsQueuePanel governanceMode + 5 Playwright tests; Colossus **33 passed / 6 skipped / 0 failed**.
+- Wave C authored + wired end-to-end:
+  - `ADR-069-stage-1-5-kernel-kill-switch.md` (Proposed; soft-suspend semantics, asymmetric middleware gate, version bump 6.5.9 → 6.6.0).
+  - `docs/adrs/README.md` index row.
+  - `kernel/app.py`: registry fields, version, WS event types, middleware, three endpoints (`POST /api/kernel/kill`, `POST /api/kernel/resume`, `GET /api/kernel/suspension`), `_publish_kernel_event` helper.
+  - `ui/lib/kernel-client.ts`: `killKernel`, `resumeKernel`, `getSuspensionStatus` + typed responses.
+  - `ui/components/KillSwitch.tsx`: two-step confirm with reason input, polls `/api/kernel/suspension`, renders suspended banner + resume.
+  - `ui/components/CommandPalette.tsx`: adds `Plugins` cmdk group enumerated from `/api/kernel/schema`.
+  - `tests/kernel/test_stage_1_5_adr_069_kill_switch.py` (15 tests, all passing in sandbox).
+  - `ui/tests/11-kill-switch.spec.ts` (5 Playwright tests).
+  - BUILD_LOG.md Wave C entry appended.
 
 ## Remaining before current Definition of Done
-
-- Push Wave B commit to `stage-1-5-gui-realized`
-- Colossus: `git pull && cd ui && rm -rf .next out && npx next build && cd .. && pytest -q && cd ui && npx playwright test --project=chromium 2>&1 | tail -30`
-- Confirm 33 passing (17 pre-existing + 12 Wave A + 5 Wave B; some opt-in skips as before)
-- Restart uvicorn if needed before running Playwright
-- Then Wave C: kill-switch backend (`POST /api/kernel/kill`) + wiring + cmdk plugin actions
-- Then Wave D: MEMORY_INTEGRITY graph visualization (cytoscape.js) + `/api/gnosis/graph/*` backend endpoints
+- Colossus green build (`next build`), full pytest, full Playwright.
+- Merge PR #12 after Waves C + D land.
+- Wave D (Memory Integrity graph via cytoscape.js + `/api/gnosis/graph/*` endpoints) not yet started.
 
 ## Open questions / awaiting user answer
-
-- none — proceeding per approved B → C → D order
+- none — Wave C decisions locked by ADR-069.
 
 ## Exact next action
-
-Colossus paste:
+Colossus paste block to pull + rebuild + test Wave C:
 
 ```bash
-cd ~/dev/kosmos
-git pull --ff-only
-pkill -f "uvicorn kernel.app" 2>/dev/null
-pkill -f "next" 2>/dev/null
-sleep 1
-cd ui && rm -rf .next out && npx next build 2>&1 | tail -20
-cd ~/dev/kosmos
-uvicorn kernel.app:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
-sleep 4
-pytest -q 2>&1 | tail -5
-cd ui && npx playwright test --project=chromium 2>&1 | tail -20
+cd ~/dev/kosmos && git fetch origin && git checkout stage-1-5-gui-realized && git pull --ff-only && \
+rm -rf ui/.next ui/out && \
+cd ui && npx next build && cd .. && \
+(pkill -f "uvicorn.*kernel.app" || true) && sleep 1 && \
+nohup uvicorn kernel.app:app --host 127.0.0.1 --port 8000 >/tmp/kosmos-kernel.log 2>&1 & sleep 3 && \
+python -m pytest tests/kernel/test_stage_1_5_adr_069_kill_switch.py -v && \
+cd ui && npx playwright test tests/11-kill-switch.spec.ts && \
+cd .. && python -m pytest -q && cd ui && npx playwright test
 ```

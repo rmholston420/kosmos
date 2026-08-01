@@ -2463,3 +2463,29 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. UI-only; consumes existing D2/D3 routes.
 - **PORTING_LEDGER / ADR updated:** none (no new vendored deps; ADR-068 remains authoritative).
 - **Stop-condition status:** met for Wave B pending Colossus test pass.
+
+## 2026-08-01 06:49 EDT — Stage 1.5 Wave C · Kernel kill-switch backend + wiring (ADR-069)
+
+- **Stage / plugin / port:** Stage 1.5 · Kernel · lifecycle kill-switch (soft-suspend)
+- **What changed:** Wires the previously-stub top-bar kill-switch to a real kernel-level suspend/resume gate. ADR-069 authored (Proposed). Semantics per UX Design Spec §Persistent Top Bar: soft-suspend, not hard process kill — UI must stay alive to show suspended state and offer resume.
+  - **`kernel/app.py`**: version bump `6.5.9 → 6.6.0`; `_BootRegistry` gains `suspended: bool`, `suspended_at: str | None`, `suspend_reason: str | None`; `WS_DEFAULT_EVENT_TYPES` extended by `kernel.suspended` + `kernel.resumed`; asymmetric middleware gate — allow-lists `/health`, `/api/kernel/**`, `/api/events/ws`, `/api/algedonic/ws`, `HEAD`/`OPTIONS`; every other request while suspended returns 503 `{detail: "kernel suspended", suspended_at, reason}`; three new routes:
+    - `POST /api/kernel/kill` — idempotent (first reason wins), optional `{reason?}` body, publishes `kernel.suspended` on transition
+    - `POST /api/kernel/resume` — idempotent, publishes `kernel.resumed` on transition
+    - `GET /api/kernel/suspension` — read-only, never gated
+  - **`ui/lib/kernel-client.ts`**: `killKernel(reason?)`, `resumeKernel()`, `getSuspensionStatus()` + typed `KernelSuspensionStatus | KernelKillResponse | KernelResumeResponse`.
+  - **`ui/components/KillSwitch.tsx`**: two-step confirm dialog with reason input, POSTs on second confirm; polls `/api/kernel/suspension` every 3s; when suspended renders `kernel-suspended-banner` (role=status, aria-live) with reason + resume button; trigger toggles to a resume affordance while suspended.
+  - **`ui/components/CommandPalette.tsx`**: adds `Plugins` group enumerated from live `/api/kernel/schema` `plugins[].routes[]`, deduped by path, slug-encoded testids (`cmdk-item-plugin-<slug>`). Gracefully absent when schema returns no plugin routes.
+  - **`tests/kernel/test_stage_1_5_adr_069_kill_switch.py`** (new, 15 tests): version, WS types, GET baseline, kill (with/without reason, idempotent, empty-string reason ignored), resume (clears, idempotent), middleware (health/kernel introspection reachable, resume reachable, mutating routes 503 with detail, non-kernel GET gated, non-API paths untouched).
+  - **`ui/tests/11-kill-switch.spec.ts`** (new, 5 Playwright tests): two-step confirm + backend round-trip, resume clears banner, mutating routes 503 while suspended, kernel introspection stays 200, cmdk plugin-actions group enumerates schema routes.
+- **Files touched:**
+  - `docs/adrs/ADR-069-stage-1-5-kernel-kill-switch.md` (new)
+  - `docs/adrs/README.md` (ADR-069 row)
+  - `kernel/app.py` (registry fields, version, middleware, 3 endpoints, `_publish_kernel_event` helper, WS_DEFAULT_EVENT_TYPES)
+  - `ui/lib/kernel-client.ts` (3 methods + 3 interfaces)
+  - `ui/components/KillSwitch.tsx` (wired)
+  - `ui/components/CommandPalette.tsx` (Plugins group)
+  - `tests/kernel/test_stage_1_5_adr_069_kill_switch.py` (new, 15 tests)
+  - `ui/tests/11-kill-switch.spec.ts` (new, 5 tests)
+- **Ports / adapters affected:** none. Uses existing `EventBusPort` via `_publish_kernel_event` for best-effort event emission (never blocks control action on bus failure).
+- **PORTING_LEDGER / ADR updated:** ADR-069 authored (Proposed). No new vendored components — cmdk + Radix Dialog already ledgered from Wave A.
+- **Stop-condition status:** met pending Colossus green build + green pytest + green Playwright.

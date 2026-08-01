@@ -114,6 +114,13 @@ class _BootRegistry:
         # successful seeder run, or ``None`` when the seeder didn't run.
         self.gnosis_corpus_counts: dict[str, int] = {}
         self.gnosis_last_seeded_at: str | None = None
+        # Stage 1.5 Wave C (ADR-069): Kernel kill-switch soft-suspend state.
+        # ``suspended`` gates mutating routes via middleware; introspection
+        # routes (/health, /api/kernel/**, WS) stay reachable in either
+        # state. Toggled by POST /api/kernel/kill and POST /api/kernel/resume.
+        self.suspended: bool = False
+        self.suspended_at: str | None = None
+        self.suspend_reason: str | None = None
 
 
 registry = _BootRegistry()
@@ -614,7 +621,56 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.9", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.6.0", lifespan=lifespan)
+
+
+# ---------------------------------------------------------------------------
+# Kill-switch middleware — ADR-069 (Stage 1.5 Wave C)
+#
+# Asymmetric gate: when ``registry.suspended`` is True, allow /health,
+# /api/kernel/** (introspection), /api/kernel/resume (the escape hatch),
+# WebSocket handshakes, and HEAD/OPTIONS. Everything else under /api/**
+# returns 503 with ``{detail: "kernel suspended", suspended_at, reason}``
+# so the UI stays observable and can offer resume without waiting on a
+# hung mutating call.
+# ---------------------------------------------------------------------------
+
+
+_KILL_SWITCH_ALWAYS_ALLOW_PATHS: frozenset[str] = frozenset({
+    "/health",
+})
+_KILL_SWITCH_ALLOW_PREFIXES: tuple[str, ...] = (
+    "/api/kernel/",           # introspection + /kill, /resume, /suspension
+    "/api/events/ws",         # WS bridge issues its own frames
+    "/api/algedonic/ws",      # legacy alias, if mounted
+)
+
+
+@app.middleware("http")
+async def _kill_switch_middleware(request: Request, call_next):
+    if not registry.suspended:
+        return await call_next(request)
+
+    method = request.method.upper()
+    if method in ("HEAD", "OPTIONS"):
+        return await call_next(request)
+
+    path = request.url.path
+    if path in _KILL_SWITCH_ALWAYS_ALLOW_PATHS:
+        return await call_next(request)
+    if any(path.startswith(p) for p in _KILL_SWITCH_ALLOW_PREFIXES):
+        return await call_next(request)
+
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "kernel suspended",
+            "suspended_at": registry.suspended_at,
+            "reason": registry.suspend_reason,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +682,8 @@ WS_DEFAULT_EVENT_TYPES: tuple[str, ...] = (
     "phrouros.anomaly.detected",     # ADR-034
     "zetesis.research.started",      # ADR-056
     "zetesis.research.completed",    # ADR-056
+    "kernel.suspended",              # ADR-069
+    "kernel.resumed",                # ADR-069
 )
 
 _WS_QUEUE_MAXSIZE: int = 256
@@ -698,6 +756,108 @@ async def kernel_design_tokens() -> dict[str, Any]:
     if fc is None:
         raise HTTPException(503, detail=registry.errors.get("frontend_contract"))
     return dict(await fc.get_design_tokens())
+
+
+# ---------------------------------------------------------------------------
+# Kill-switch endpoints — ADR-069 (Stage 1.5 Wave C)
+# ---------------------------------------------------------------------------
+
+
+async def _publish_kernel_event(event_type: str, payload: dict[str, Any]) -> None:
+    """Best-effort publish of a kernel lifecycle envelope.
+
+    Failure to publish (event bus down, malformed envelope) never blocks the
+    suspend/resume transition itself. Errors are silently swallowed — the
+    registry state is the authoritative source of truth; the WS frame is
+    an observability nicety.
+    """
+    bus = registry.event_bus
+    if bus is None:
+        return
+    try:
+        from ports.event_envelope import EventEnvelope
+
+        envelope = EventEnvelope(
+            event_type=event_type,
+            producer_plugin="kernel",
+            payload=payload,
+        )
+        await bus.publish(envelope)
+    except Exception:
+        # Never let observability failure break the control action.
+        pass
+
+
+@app.post("/api/kernel/kill")
+async def kernel_kill(request: Request) -> dict[str, Any]:
+    """Soft-suspend the kernel per ADR-069 D1.
+
+    Idempotent. Optional JSON body ``{reason?: str}`` is recorded verbatim.
+    Returns ``{status: "suspended", suspended_at, reason}``. On transition
+    (running → suspended), publishes a ``kernel.suspended`` envelope.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    reason: str | None = None
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            raw = body.get("reason")
+            if isinstance(raw, str) and raw.strip():
+                reason = raw.strip()
+    except Exception:
+        # No body / not JSON — acceptable; reason stays None.
+        pass
+
+    was_running = not registry.suspended
+    registry.suspended = True
+    if was_running:
+        registry.suspended_at = _dt.now(_tz.utc).isoformat()
+        registry.suspend_reason = reason
+        await _publish_kernel_event(
+            "kernel.suspended",
+            {
+                "suspended_at": registry.suspended_at,
+                "reason": registry.suspend_reason,
+            },
+        )
+    return {
+        "status": "suspended",
+        "suspended_at": registry.suspended_at,
+        "reason": registry.suspend_reason,
+    }
+
+
+@app.post("/api/kernel/resume")
+async def kernel_resume() -> dict[str, Any]:
+    """Clear kernel suspension per ADR-069 D2.
+
+    Idempotent. Returns ``{status: "running", resumed_at}``. On transition
+    (suspended → running), publishes a ``kernel.resumed`` envelope.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    was_suspended = registry.suspended
+    resumed_at = _dt.now(_tz.utc).isoformat()
+    registry.suspended = False
+    registry.suspended_at = None
+    registry.suspend_reason = None
+    if was_suspended:
+        await _publish_kernel_event(
+            "kernel.resumed",
+            {"resumed_at": resumed_at},
+        )
+    return {"status": "running", "resumed_at": resumed_at}
+
+
+@app.get("/api/kernel/suspension")
+async def kernel_suspension_status() -> dict[str, Any]:
+    """Read-only suspension state per ADR-069 D3. Never 503."""
+    return {
+        "suspended": registry.suspended,
+        "suspended_at": registry.suspended_at,
+        "reason": registry.suspend_reason,
+    }
 
 
 # ---------------------------------------------------------------------------

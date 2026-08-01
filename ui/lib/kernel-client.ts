@@ -132,6 +132,13 @@ export const kernelClient = {
   getOllamaStatus: () => getJSON<OllamaStatus>("/api/ollama/status"),
   getPraxisConstitution: () => getJSON<PraxisConstitution>("/api/praxis/constitution"),
   getPraxisApexPolicies: () => getJSON<PraxisApexPolicy[]>("/api/praxis/apex/policies"),
+
+  // ADR-069 Stage 1.5 Wave C — kernel kill-switch.
+  killKernel: (reason?: string) =>
+    postJSON<KernelKillResponse>("/api/kernel/kill", reason ? { reason } : {}),
+  resumeKernel: () => postJSON<KernelResumeResponse>("/api/kernel/resume", {}),
+  getSuspensionStatus: () =>
+    getJSON<KernelSuspensionStatus>("/api/kernel/suspension"),
 };
 
 // --- ADR-068 D1: /api/ollama/status ---
@@ -161,6 +168,22 @@ export interface PraxisApexPolicy {
   name: string;
   tier: ChangeApprovalTier;
   active_since: string;
+}
+
+// --- ADR-069 kernel kill-switch (Wave C) ---
+export interface KernelSuspensionStatus {
+  suspended: boolean;
+  suspended_at: string | null;
+  reason: string | null;
+}
+export interface KernelKillResponse {
+  status: "suspended";
+  suspended_at: string | null;
+  reason: string | null;
+}
+export interface KernelResumeResponse {
+  status: "running";
+  resumed_at: string;
 }
 
 export type AlgedonicWSEvent = { type: "algedonic"; payload: AlgedonicReceipt };
