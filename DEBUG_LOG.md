@@ -595,3 +595,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Special-case AGENT_TRACE in `PanelGrid` to always render `AgentTracePanel`, since Phrouros anomalies are surfaced directly from the kernel and are not owned by any panel-registering plugin.
 - **Files changed:** `ui/components/PanelGrid.tsx`.
 - **Related BUILD_LOG entry:** 2026-08-01 05:36 EDT.
+
+## 2026-08-01 05:40 EDT — Kernel `/` static mount shadows `/tektos-ui/*` (fixup #4 regression)
+
+- **Symptom:** `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py::test_tektos_ui_healthz_reachable` fails with `assert 404 == 200` after building `ui/out/`.
+- **Affected stage / plugin / port:** Stage 1 GUI same-origin mount vs. Stage 6.5.8 Tektos UI mount.
+- **Root cause:** The Stage 1 UI mount registered `/` at module scope (before lifespan). `/tektos-ui` mounts inside lifespan. Starlette matches routes in insertion order, so the module-scope `/` mount was resolved first and swallowed `/tektos-ui/healthz`.
+- **Fix applied:** Move UI mount inside lifespan, right after the `/tektos-ui` mount and before `yield`, so it lands last in `app.routes`. Idempotent name-guard prevents duplicate mounts across TestClient re-enters.
+- **Files changed:** `kernel/app.py`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:40 EDT.

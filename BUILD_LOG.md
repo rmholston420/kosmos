@@ -2344,3 +2344,14 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — awaiting Colossus re-run.
+
+## 2026-08-01 05:40 EDT — Stage 1 · GUI shell fixup #8 — move UI mount into lifespan so `/tektos-ui/*` resolves first
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · kernel same-origin mount.
+- **What changed:**
+  - Moved the Next.js static-export `StaticFiles` mount from module scope to inside the FastAPI `lifespan`, immediately after the `/tektos-ui` mount and before `yield`. Module-scope registration inserted the root `/` handler at the top of `app.routes`, shadowing `/tektos-ui/*` — `test_tektos_ui_healthz_reachable` failed with 404.
+  - `/gnosis-gate` remains module-scope at line ~1610; the UI marker block at line ~1619 now only documents the strategy and defers to the lifespan block.
+- **Files touched:** `kernel/app.py`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus pytest re-run + Playwright confirmation.

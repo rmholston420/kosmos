@@ -538,6 +538,30 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             registry.errors["tektos_ui"] = f"{type(exc).__name__}: {exc}"
 
+    # --- Stage 1 GUI mount: serve Next.js static export at kernel root "/"
+    # (ADR-067). Runs last so `/api/*`, `/health`, `/openapi.json`, `/docs`,
+    # `/gnosis-gate`, `/tektos-ui` all resolve first via Starlette's
+    # insertion-order routing. Skipped silently if `ui/out` is absent.
+    try:
+        from pathlib import Path as _KosmosPath
+        from fastapi.staticfiles import StaticFiles as _KosmosStaticFiles
+
+        _kosmos_ui_out = _KosmosPath(__file__).resolve().parent.parent / "ui" / "out"
+        if _kosmos_ui_out.is_dir() and not any(
+            getattr(r, "name", "") == "kosmos-ui" for r in app.routes
+        ):
+            app.mount(
+                "/",
+                _KosmosStaticFiles(directory=str(_kosmos_ui_out), html=True),
+                name="kosmos-ui",
+            )
+    except Exception as _kosmos_ui_exc:  # noqa: BLE001
+        import logging as _kosmos_logging
+
+        _kosmos_logging.getLogger(__name__).warning(
+            "Kosmos UI not mounted at /: %s", _kosmos_ui_exc
+        )
+
     yield
 
     # Shutdown — stop plugins/engines then close the event bus.
@@ -1617,27 +1641,8 @@ except Exception as _kosmos_gate_exc:  # noqa: BLE001
 # --- END KOSMOS_STAGE_1_GNOSIS_GATE_MOUNT ---
 
 # --- BEGIN KOSMOS_STAGE_1_UI_MOUNT ---
-# Stage 1 GUI mount: serve Next.js static export at kernel root "/".
-# Mounted last so /api/*, /health, /openapi.json, /docs, /gnosis-gate,
-# /tektos-ui remain first-match. Same-origin, no CORS. See ADR-067.
-# Skipped silently if ui/out has not been built.
-try:
-    from pathlib import Path as _KosmosPath
-    from fastapi.staticfiles import StaticFiles as _KosmosStaticFiles
-
-    _kosmos_ui_out = _KosmosPath(__file__).resolve().parent.parent / "ui" / "out"
-    if _kosmos_ui_out.is_dir() and not any(
-        getattr(r, "name", "") == "kosmos-ui" for r in app.routes
-    ):
-        app.mount(
-            "/",
-            _KosmosStaticFiles(directory=str(_kosmos_ui_out), html=True),
-            name="kosmos-ui",
-        )
-except Exception as _kosmos_ui_exc:  # noqa: BLE001
-    import logging as _kosmos_logging
-
-    _kosmos_logging.getLogger(__name__).warning(
-        "Kosmos UI not mounted at /: %s", _kosmos_ui_exc
-    )
+# Stage 1 GUI mount is performed inside the lifespan (see below), *after*
+# all sub-app mounts (`/tektos-ui`, `/gnosis-gate`) so those retain
+# first-match priority. Module-scope mounting would prepend the static
+# handler and shadow `/tektos-ui/*`. Left as a marker only.
 # --- END KOSMOS_STAGE_1_UI_MOUNT ---
