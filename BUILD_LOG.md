@@ -3561,3 +3561,15 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER Stage 3.14b `loop_guard` PLANNED→VENDORED. ADR-080 unchanged.
 - **Stop-condition status:** 54/54 executor tests green (39 pre-2b + 14 loop_guard + 1 extra ADR-007 AST slot for `loop_guard.py`). Step 2c next: `patcher.py` (`git apply --check` + `git apply` + two-identity commit via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` env). Then 2d `loop.py`. Then 2e flip 501 stubs to 200.
+
+## 2026-08-01 17:57 EDT — Stage 3.14b step 2c: patcher.py + real-git integration
+
+- **Stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` · consumes `ports.sandbox.SandboxProvider`
+- **What changed:** Landed `plugins/tektos/executor/patcher.py`. `Patcher.try_apply(patch, commit_message)` validates every patch with `git apply --check` first, then applies-and-stages atomically with `git apply --index` (this crucially excludes the temp patch file from the commit — an earlier `git add -A` variant swept the patch file into the SHA, caught by real-git integration test). Commits use argv-scoped two-identity (`git -c user.name=... -c user.email=... commit --author=...`) rather than `GIT_AUTHOR_*` env vars, because `SandboxProvider.exec` forwards env from the executor process's `os.environ` — race-unsafe under concurrent invocations. Returns `PatchApplied(commit_sha, files_changed)` on clean apply or `PatchRejected(reject_stderr, exit_code)` when `--check` refuses; other failures (apply-after-check, commit failure, rev-parse failure) raise `SandboxError`. `reset_worktree()` runs `git reset --hard` + `git clean -fdx` between attempts. Patch content is written to a `.tektos-patch-<uuid>.diff` file via a base64-encoded `python3 -c` one-liner through the sandbox (no host-fs escape) and best-effort removed in a `finally`.
+- **Files touched:**
+  - `plugins/tektos/executor/patcher.py` (new, 425 lines)
+  - `plugins/tektos/executor/tests/test_patcher.py` (new, 19 unit tests against a `FakeSandbox` recording harness)
+  - `plugins/tektos/executor/tests/test_patcher_integration.py` (new, 3 tests against a real `git` binary in a tmp repo — happy path with two-identity verification, rejection path, `reset_worktree`)
+- **Ports / adapters affected:** none created; consumes `SandboxProvider` interface only. ADR-007 clean (no plugin-to-plugin imports).
+- **PORTING_LEDGER / ADR updated:** —. ADR-080 already covers the patcher shape.
+- **Stop-condition status:** 76/76 executor tests green (54 pre-2c + 22 patcher + 1 extra ADR-007 AST slot). Real-git integration test verifies both author + committer fields are `Tektos-Agent`, ambient repo identity is fully overridden, no stray temp patch files remain, and rejection leaves the worktree pristine. Step 2d next: `loop.py` (`TektosExecutorLoop.run_plan`), which composes `ColossusResourceGuard` + `SandboxProvider` + `Patcher` + `LoopGuard` + LLM to produce `TaskResult`/`PlanResult` outcomes with zero-trust MemoryPort events. Step 2e final: flip `/execute` + `/diff` from 501 to 200.

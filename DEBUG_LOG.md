@@ -852,3 +852,14 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Introduced a module-level `_AUTO_DETECT = object()` sentinel. `__init__` now only auto-discovers when the argument identity is `_AUTO_DETECT`; an explicit `None` means "binary is missing" and is honored, so tests can force the UNAVAILABLE branch on any host. No callers outside the tests currently pass this argument, so no production callers are affected.
 - **Files changed:** `plugins/tektos/executor/resource_guard.py` (sentinel + branching in `__init__`).
 - **Related BUILD_LOG entry:** 2026-08-01 17:47 EDT (step 2a landing).
+
+## 2026-08-01 17:57 EDT — patcher: git add -A polluted commits with temp patch file
+
+- **Symptom:** `plugins/tektos/executor/tests/test_patcher_integration.py::test_real_patch_applies_and_commits_with_two_identity` failed with `assert 2 == 1` on `PatchApplied.files_changed`. Actual commit included the intended file plus the temp `.tektos-patch-<uuid>.diff` staging file.
+- **Affected stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor.patcher.Patcher.try_apply`
+- **Root cause:** After `git apply --verbose <patch_path>` applied the patch to the working tree, the flow ran `git add -A` to stage everything. `-A` picked up the temp patch file (still on disk, not deleted until the `finally` block after commit) alongside the intended changes, so every commit smuggled the raw diff into itself.
+- **Fix applied:** Replaced the two-step `git apply --verbose ...` + `git add -A` with a single `git apply --index --verbose <patch_path>`. `--index` stages exactly the changes the patch produces, ignoring untracked files like the temp patch file. Also updated the error path branch to name `git apply --index failed` and removed the now-unreachable `git add -A failed` branch + its unit test.
+- **Files changed:**
+  - `plugins/tektos/executor/patcher.py` (2. Apply step + docstring)
+  - `plugins/tektos/executor/tests/test_patcher.py` (dropped `test_git_add_failure_raises`, updated happy-path response sequence)
+- **Related BUILD_LOG entry:** 2026-08-01 17:57 EDT (Stage 3.14b step 2c landing).
