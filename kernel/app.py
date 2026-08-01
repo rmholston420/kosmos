@@ -1,32 +1,22 @@
-"""Kosmos kernel FastAPI application — Stage 6.4 landing.
+"""Kosmos kernel FastAPI app (Stage 6.5 — Zetesis mount).
 
-Boots against REAL adapter constructors discovered by audit of
-rmholston420/kosmos @ main. Every subsystem bootstraps behind a
-try/except so a single failure does not brick the kernel — failing
-subsystems return 503 with the exception text under their route.
+Boot sequence:
 
-Endpoints wired at 6.4:
-  GET /health
-  GET /api/kernel/schema
-  GET /api/kernel/routes
-  GET /api/kernel/panels
-  GET /api/kernel/plugins
-  GET /api/kernel/design-tokens
-  GET /api/resources/balances
-  GET /api/approvals
-  GET /api/approvals/{approval_id}
-  GET /api/phrouros/anomalies
-  GET /api/notifications/health
+1. Six kernel subsystems boot behind per-subsystem try/except:
+   ``notification``, ``frontend_contract``, ``resource``, ``event_bus``,
+   ``approval``, ``phrouros`` (deferred to a later stage).
+2. Zetesis plugin mounts once ``frontend_contract`` has booted (real
+   adapter mount, ADR-058). Failure is degraded, not fatal — the plugin
+   error surfaces under ``registry.errors["zetesis"]`` and
+   ``/api/kernel/plugins`` returns ``[]``.
 
-Zetesis plugin remains NOT registered at boot — it requires 10 live
-ports and its own start(). It lands via a follow-up mount PR when
-memory/vector/observability backends are provisioned on Colossus.
+Kernel HTTP endpoints are unchanged from Stage 6.4.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -47,6 +37,7 @@ class _BootRegistry:
         self.notification: Any = None
         self.phrouros: Any = None
         self.event_bus: Any = None
+        self.zetesis: Any = None
 
 
 registry = _BootRegistry()
@@ -148,15 +139,47 @@ async def lifespan(app: FastAPI):
     # --- Phrouros (best-effort — needs TraceFeedPort we don't wire yet) ------
     # We intentionally skip PhrourosEngine at 6.4 boot: it requires a real
     # TraceFeedPort adapter which is not yet in adapters/. Anomalies endpoint
-    # returns 503 until Stage 6.5.
+    # returns 503 until Stage 6.5.1+.
     registry.errors["phrouros"] = (
-        "PhrourosEngine not wired at 6.4 — TraceFeedPort adapter not yet "
+        "PhrourosEngine not wired at 6.5 — TraceFeedPort adapter not yet "
         "provisioned. See ADR-046."
     )
 
+    # --- Zetesis plugin mount (ADR-058) ---------------------------------------
+    # Depends on frontend_contract having booted; reuses the same
+    # KernelFrontendContractAdapter, event_bus, resource, and notification
+    # instances so descriptor registration is visible on /api/kernel/plugins
+    # and /api/kernel/routes without duplicate state.
+    if registry.frontend_contract is None:
+        registry.errors["zetesis"] = (
+            "zetesis depends on frontend_contract; it failed to boot"
+        )
+    else:
+        try:
+            from plugins.zetesis.adapters.real.factory import (
+                build_stage_6_5_zetesis_plugin,
+            )
+
+            plugin = build_stage_6_5_zetesis_plugin(
+                frontend_contract=registry.frontend_contract,
+                event_bus=registry.event_bus,
+                resource=registry.resource,
+                notification=registry.notification,
+            )
+            await plugin.start()
+            registry.zetesis = plugin
+        except Exception as exc:  # noqa: BLE001
+            registry.errors["zetesis"] = f"{type(exc).__name__}: {exc}"
+
     yield
 
-    # Shutdown — event bus is the only adapter needing explicit close
+    # Shutdown — stop the plugin then close the event bus.
+    if registry.zetesis is not None:
+        try:
+            await registry.zetesis.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
     if registry.event_bus is not None:
         try:
             await registry.event_bus.close()
@@ -168,7 +191,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.4.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -188,9 +211,9 @@ def health() -> dict[str, Any]:
             "event_bus": registry.event_bus is not None,
             "approval": registry.approval is not None,
             "phrouros": registry.phrouros is not None,
+            "zetesis": registry.zetesis is not None,
         },
     }
-
 
 @app.get("/api/kernel/schema")
 async def kernel_schema() -> dict[str, Any]:

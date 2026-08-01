@@ -1983,3 +1983,24 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** kernel serialization only; port surfaces unchanged.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met — all six kernel-side endpoints now return valid JSON when their subsystem is up.
+
+## 2026-08-01 01:36 EDT — Stage 6.5 · Zetesis mounts into kernel lifespan (ADR-058)
+
+- **Stage / plugin / port:** Stage 6.5 · Kernel · ZetesisPlugin mount
+- **What changed:**
+  - Authored `docs/adrs/ADR-058-stage-6-5-zetesis-kernel-mount.md` (Ratified v25). Locks three decisions: (D1) plugin mount is a seventh subsystem behind per-subsystem try/except — failure degrades, not fatal; (D2) five previously-stubbed ports (MemoryPort, VectorPort, DataPort, ResourcePort, NotificationPort) bind to real adapter classes with in-memory or shared backends (real DozerDB / Graphiti / AMG backends land at 6.5.1 once Compose is up on Colossus); (D3) FrontendContractPort + EventBusPort + ResourcePort + NotificationPort reuse the kernel's live adapter instances so the descriptor becomes visible on `/api/kernel/plugins` and `/api/kernel/routes`.
+  - Added `plugins/zetesis/adapters/real/factory.py::build_stage_6_5_zetesis_plugin(*, frontend_contract=None, event_bus=None, resource=None, notification=None, ...)`. Preserves the 6.3.9 factory verbatim so the ADR-054 5.33/6 rater trial stays apples-to-apples.
+  - Amended `kernel/app.py` lifespan: gained a seventh boot block that instantiates the plugin against the kernel-shared adapters and calls `await plugin.start()`. `_BootRegistry` gains a `zetesis` field; `/health.subsystems` gains a `zetesis` bool. Kernel version bumped 6.4.0 → 6.5.0. Shutdown gains `await registry.zetesis.stop()` before event-bus close.
+  - Added `plugins/zetesis/tests/test_stage_6_5_zetesis_mount.py` — 6 fast integration tests: health reports zetesis up, `/api/kernel/plugins` lists `kosmos.plugin.zetesis`, `/api/kernel/routes` contains `/zetesis`, all 6.4 endpoints still 200, registration holds after start, factory wires all 10 ports to non-stub adapters.
+  - Amended `docs/adrs/README.md`: added ADR-058 row and updated the "one remaining open decision" line.
+  - Amended `PORTING_LEDGER.md`: added Stage 6.5 Zetesis Mount block listing DozerDbMemoryAdapter, QdrantVectorAdapter, FilesystemDataAdapter, OllamaAdapter, SearxngAdapter, OtelStackObservabilityAdapter as `WIRED` at 6.5.
+- **Files touched:**
+  - `docs/adrs/ADR-058-stage-6-5-zetesis-kernel-mount.md` (new)
+  - `docs/adrs/README.md` (row insertion)
+  - `plugins/zetesis/adapters/real/factory.py` (extended — new fn, 6.3.9 fn preserved)
+  - `kernel/app.py` (lifespan gains zetesis block; version bump)
+  - `plugins/zetesis/tests/test_stage_6_5_zetesis_mount.py` (new)
+  - `PORTING_LEDGER.md` (Stage 6.5 block appended)
+- **Ports / adapters affected:** MemoryPort (real DozerDbMemoryAdapter + in-memory backends), VectorPort (real QdrantVectorAdapter + InMemoryQdrantBackend), DataPort (FilesystemDataAdapter rooted at `~/.local/state/kosmos/data`), ResourcePort (shared kernel `SqliteResourceAdapter`), NotificationPort (shared kernel `KernelNotificationAdapter`), FrontendContractPort (shared kernel instance — required for descriptor visibility), EventBusPort (shared), LLMPort (real `OllamaAdapter`), SearchPort (real `SearxngAdapter`), ObservabilityPort (real `OtelStackObservabilityAdapter` with `StubOtelBackend`).
+- **PORTING_LEDGER / ADR updated:** ADR-058 (new); `PORTING_LEDGER.md` Stage 6.5 block appended.
+- **Stop-condition status:** in-progress — DoD conditions asserted by `test_stage_6_5_zetesis_mount.py`; Colossus smoke pending post-pull. Tag `stage-6-5-zetesis-mount` deferred until Colossus 11-endpoint smoke + new integration tier both green.
