@@ -1,21 +1,19 @@
 """Stage 4.2 corpora + runner (Hybrid tier).
 
-Three deterministic corpora + a runner that drives them against either
-an always-green in-memory `TemporalIndex` fake or the real
-`GraphitiTemporalIndex` (env-gated `KOSMOS_STAGE_42_LIVE=1`). Colocated
-with the DozerDB adapter package that owns the ports being tuned; the
-Gnosis plugin skeleton lands at Stage 4.4 per spec §4.4.
+Three deterministic corpora + a runner that drives them against an
+always-green in-memory `TemporalIndex` fake. ADR-075 D1 hard-deleted
+the Graphiti-backed live tier; the in-memory runner is the only
+supported path until a replacement temporal backend is proposed.
+Colocated with the DozerDB adapter package that owns the ports being
+tuned; the Gnosis plugin skeleton lands at Stage 4.4 per spec §4.4.
 """
 
 from __future__ import annotations
 
 from .corpus_runner import (
     InMemoryTemporalIndex,
-    build_live_index,
-    live_tier_requested,
     run_corpus,
     run_corpus_in_memory,
-    run_corpus_live,
 )
 from .humanities_bilara import CORPUS as HUMANITIES_BILARA_CORPUS
 from .humanities_bilara import load_corpus as load_humanities_bilara_corpus
@@ -56,12 +54,9 @@ __all__ = [
     "SUPERPOWERS_CORPUS",
     "SYNTHETIC_LIFELINE_CORPUS",
     "TemporalQuery",
-    "build_live_index",
-    "live_tier_requested",
     "load_humanities_bilara_corpus",
     "load_rigpa_export_corpus",
     "load_superpowers_corpus",
     "run_corpus",
     "run_corpus_in_memory",
-    "run_corpus_live",
 ]

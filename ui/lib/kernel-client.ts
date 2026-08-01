@@ -170,6 +170,10 @@ export const kernelClient = {
   },
   annotateGraphNode: (body: GnosisAnnotationBody) =>
     postJSON<GnosisAnnotationResult>("/api/gnosis/graph/annotate", body),
+
+  // ADR-075 D2 Stage 1.6 Phase 2 — semantic memory search.
+  memorySearchSemantic: (body: MemorySearchSemanticBody) =>
+    postJSON<MemorySearchSemanticResult>("/api/memory/search-semantic", body),
 };
 
 // --- ADR-070 D1: /api/gnosis/graph/* ---
@@ -228,6 +232,27 @@ export interface GnosisAnnotationBody {
 export interface GnosisAnnotationResult {
   memory_event_id: string;
   written_at: string;
+}
+
+// --- ADR-075 D2: /api/memory/search-semantic ---
+export interface MemorySearchSemanticBody {
+  query: string;
+  corpus?: string | null;
+  limit?: number;
+  min_score?: number;
+}
+export interface MemoryHitRow {
+  id: string;
+  payload: Record<string, unknown>;
+  score: number | null;
+  as_of: string | null;
+}
+export interface MemorySearchSemanticResult {
+  hits: MemoryHitRow[];
+  query: string;
+  corpus: string | null;
+  degraded: boolean;
+  reason?: string;
 }
 
 // --- ADR-068 D1: /api/ollama/status ---

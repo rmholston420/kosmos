@@ -397,15 +397,15 @@ async def lifespan(app: FastAPI):
     #   ``in_memory`` (default)  — InMemoryGraphBackend + InMemoryTemporalIndex
     #                              + NoOpAmgPolicy. CI/test-safe, no external
     #                              services required.
-    #   ``dozerdb``              — DozerDbGraphBackend + GraphitiTemporalIndex
+    #   ``dozerdb``              — DozerDbGraphBackend + InMemoryTemporalIndex
     #                              + AmgGuardPolicy(tiered). Requires
     #                              ``KOSMOS_DOZERDB_URI``, ``_USER``,
     #                              ``_PASSWORD`` (and optional ``_DATABASE``).
-    #                              Graphiti additionally uses
-    #                              ``KOSMOS_OLLAMA_BASE_URL``,
-    #                              ``KOSMOS_TEKTOS_MODEL`` (LLM) and
-    #                              ``KOSMOS_EMBED_MODEL`` (default
-    #                              ``nomic-embed-text``).
+    #                              ADR-075 D1: GraphitiTemporalIndex was hard-
+    #                              deleted; temporal writes flow through
+    #                              ``InMemoryTemporalIndex`` alongside DozerDB
+    #                              graph writes until a replacement temporal
+    #                              backend is proposed in a future ADR.
     @_try("memory")
     def _boot_memory():
         import os
@@ -424,25 +424,10 @@ async def lifespan(app: FastAPI):
             user = os.environ["KOSMOS_DOZERDB_USER"]
             password = os.environ["KOSMOS_DOZERDB_PASSWORD"]
             database = os.environ.get("KOSMOS_DOZERDB_DATABASE", "neo4j")
-            # Graphiti calls Ollama via the OpenAI-compat ``/v1`` prefix,
-            # not the native Ollama HTTP API root that ``OllamaAdapter``
-            # uses. Separate env var so the two callers stay independent.
-            llm_url = os.environ.get(
-                "KOSMOS_GRAPHITI_LLM_URL", "http://127.0.0.1:11434/v1"
-            )
-            llm_model = os.environ.get(
-                "KOSMOS_OLLAMA_DEFAULT_MODEL", "qwen2.5:32b-instruct-q4_K_M"
-            )
-            embed_model = os.environ.get(
-                "KOSMOS_EMBED_MODEL", "nomic-embed-text"
-            )
 
             from adapters.memory.dozerdb.amg_policy import AmgGuardPolicy
             from adapters.memory.dozerdb.dozerdb_graph_backend import (
                 DozerDbGraphBackend,
-            )
-            from adapters.memory.dozerdb.graphiti_temporal_index import (
-                GraphitiTemporalIndex,
             )
 
             graph = DozerDbGraphBackend(
@@ -451,18 +436,9 @@ async def lifespan(app: FastAPI):
                 password=password,
                 database=database,
             )
-            # ADR-073 D4: pass the kernel-owned EmbeddingsPort to Graphiti
-            # so it uses OllamaEmbeddingsAdapter's native /api/embed path
-            # instead of the deprecated OpenAI-shim.
-            temporal = GraphitiTemporalIndex(
-                uri=uri,
-                user=user,
-                password=password,
-                llm_url=llm_url,
-                llm_model=llm_model,
-                embed_model=embed_model,
-                embeddings=registry.embeddings,
-            )
+            # ADR-075 D1: GraphitiTemporalIndex hard-deleted; use the
+            # in-memory temporal index until a replacement backend lands.
+            temporal = InMemoryTemporalIndex()
             amg = AmgGuardPolicy(policy_preset="tiered")
             # ADR-074 D3: pass EmbeddingsPort + VectorPort so the
             # adapter can compose them into its semantic memory lane.
@@ -588,8 +564,49 @@ async def lifespan(app: FastAPI):
                         # payload is the authoritative wire format; we do
                         # not reconstruct a ``ResearchReport``.
                         payload = getattr(env, "payload", None)
-                        if isinstance(payload, dict):
-                            registry.zetesis_reports.append(payload)
+                        if not isinstance(payload, dict):
+                            continue
+                        registry.zetesis_reports.append(payload)
+
+                        # ADR-075 D3: fan-out to MemoryPort.write_event so
+                        # the report becomes semantically searchable. Best-
+                        # effort per ADR-058: subscriber failures land in
+                        # ``registry.errors['zetesis_fanout']`` and do not
+                        # block the queue. Zero-trust write floor: static
+                        # provenance + confidence 1.0 (report came from a
+                        # kernel-owned event bus subscription).
+                        if registry.memory is None:
+                            continue
+                        try:
+                            report_id = str(
+                                payload.get("report_id")
+                                or payload.get("id")
+                                or getattr(env, "event_id", "")
+                                or "unknown"
+                            )
+                            summary = str(
+                                payload.get("summary")
+                                or payload.get("answer")
+                                or payload.get("question")
+                                or ""
+                            )
+                            if not summary:
+                                continue
+                            await registry.memory.write_event(
+                                subject=f"zetesis.report:{report_id}",
+                                predicate="zetesis.research.completed",
+                                object=summary,
+                                provenance="zetesis.event_bus",
+                                confidence=1.0,
+                                attributes={
+                                    "report_id": report_id,
+                                    "kind": "zetesis.report",
+                                },
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            registry.errors["zetesis_fanout"] = (
+                                f"{type(exc).__name__}: {exc}"
+                            )
 
                 registry._zetesis_drain_task = _asyncio_wave_e.create_task(
                     _drain_zetesis_reports()
@@ -773,7 +790,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.11.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.12.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -2084,6 +2101,80 @@ async def annotate_gnosis_node(
     return {
         "memory_event_id": str(memory_event_id),
         "written_at": _dt.now(_tz.utc).isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Semantic memory search (ADR-075 D2) — thin HTTP wrapper around
+# ``MemoryPort.search_semantic``. Kernel-owned per ADR-057 so any
+# plugin can hit the same route; degrades to an empty ``hits`` list
+# when the semantic lane is not booted (both EmbeddingsPort and
+# VectorPort must be present).
+# ---------------------------------------------------------------------------
+
+
+class _MemorySearchSemanticBody(BaseModel):
+    """Request body for ``POST /api/memory/search-semantic`` (ADR-075 D2).
+
+    ``query`` is the natural-language search string; ``corpus`` selects
+    the logical vector collection (``None`` uses the adapter's default);
+    ``limit`` caps returned hits; ``min_score`` filters cosine
+    similarity below the given floor.
+    """
+
+    query: str = Field(..., min_length=1)
+    corpus: str | None = Field(default=None)
+    limit: int = Field(default=20, ge=1, le=100)
+    min_score: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+@app.post("/api/memory/search-semantic")
+async def memory_search_semantic(
+    body: _MemorySearchSemanticBody,
+) -> dict[str, Any]:
+    """Semantic nearest-neighbour retrieval over ``MemoryPort``.
+
+    Wraps ``MemoryPort.search_semantic``. Returns 200 with an empty
+    ``hits`` list when the semantic lane is not booted — lets the UI
+    render a coherent degraded state instead of a hard 503.
+    """
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        return {
+            "hits": [],
+            "query": body.query,
+            "corpus": body.corpus,
+            "degraded": True,
+            "reason": registry.errors.get("memory") or "memory unavailable",
+        }
+
+    try:
+        hits = await memory.search_semantic(
+            body.query,
+            corpus=body.corpus,
+            limit=body.limit,
+            min_score=body.min_score,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {
+        "hits": [
+            {
+                "id": h.id,
+                "payload": h.payload,
+                "score": h.score,
+                "as_of": h.as_of.isoformat() if h.as_of else None,
+            }
+            for h in hits
+        ],
+        "query": body.query,
+        "corpus": body.corpus,
+        "degraded": False,
     }
 
 

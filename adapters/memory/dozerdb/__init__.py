@@ -14,7 +14,10 @@ from adapters.memory.dozerdb.adapter import (
 )
 from adapters.memory.dozerdb.amg_policy import AmgGuardPolicy, AmgV02Policy
 from adapters.memory.dozerdb.dozerdb_graph_backend import DozerDbGraphBackend
-from adapters.memory.dozerdb.graphiti_temporal_index import GraphitiTemporalIndex
+
+# ADR-075 D1: GraphitiTemporalIndex + KosmosGraphitiEmbedder hard-deleted.
+# The `TemporalIndex` port survives; `InMemoryTemporalIndex` is the only
+# in-tree implementation. Kernel boot uses it unconditionally.
 
 __all__ = [
     "AlwaysBlockAmgPolicy",
@@ -26,7 +29,6 @@ __all__ = [
     "DozerDbGraphBackend",
     "DozerDbMemoryAdapter",
     "GraphBackend",
-    "GraphitiTemporalIndex",
     "InMemoryGraphBackend",
     "InMemoryTemporalIndex",
     "NoOpAmgPolicy",

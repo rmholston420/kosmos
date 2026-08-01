@@ -110,24 +110,5 @@ def test_llama_swap_embed_deprecation_warning(monkeypatch) -> None:
     assert any("ADR-073" in str(w.message) for w in deprecations)
 
 
-def test_kosmos_graphiti_embedder_bridge() -> None:
-    """KosmosGraphitiEmbedder unwraps single-str vs list-str shape."""
-    import asyncio
-
-    from adapters.memory.dozerdb.kosmos_graphiti_embedder import (
-        KosmosGraphitiEmbedder,
-    )
-
-    class _FakeEmbeddings:
-        async def embed(self, *, texts, model=None):
-            return [[0.1, 0.2, 0.3] for _ in texts]
-
-    bridge = KosmosGraphitiEmbedder(_FakeEmbeddings())
-
-    # Single-str case: returns single vector (not wrapped in list)
-    single = asyncio.run(bridge.create("hello"))
-    assert single == [0.1, 0.2, 0.3]
-
-    # Batch case: returns list of vectors
-    batch = asyncio.run(bridge.create(["a", "b"]))
-    assert batch == [[0.1, 0.2, 0.3], [0.1, 0.2, 0.3]]
+# ADR-075 D1: KosmosGraphitiEmbedder was hard-deleted with the rest of
+# the Graphiti wiring. Its bridge-shape test is removed with the class.
