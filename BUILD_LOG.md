@@ -2849,3 +2849,24 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** ADR-072 §D amended (item 4)
 - **Stop-condition status:** in-progress — awaits third Colossus verify (expect 65/6/0 or 66/6/0 with the 2 tests removed).
+
+## 2026-08-01 10:24 EDT — ADR-073 authored (Proposed) · EmbeddingsPort split
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 0 · EmbeddingsPort (new)
+- **What changed:**
+  - Authored ADR-073 (Proposed) documenting the EmbeddingsPort split from LLMPort.
+  - Locks five decisions:
+    - D1: `ports/embeddings.py` new `EmbeddingsPort` Protocol (batch-only embed, dimensions, is_healthy, close).
+    - D2: `adapters/embeddings/ollama/adapter.py` primary adapter calling Ollama native `/api/embed` (default `nomic-embed-text`, 768-dim).
+    - D3: `LLMPort.embed()` deprecated with `warnings.warn(DeprecationWarning)` in Ollama + llama-swap adapters; retained through deprecation window (Stage 6.3.9 factory parity).
+    - D4: Graphiti wiring migrated to accept `EmbeddingsPort` and drop the `OpenAIEmbedderConfig(api_key="ollama-not-used")` inline shim.
+    - D5: `kernel/app.py` `6.9.0 → 6.10.0` on ratification code PR.
+  - Design rationale corrects earlier session-handoff claim of an "ODR OpenAI credential fallback in F6" — code inspection showed no such thing; the real issue is category coupling on `LLMPort.embed()` plus the Graphiti inline OpenAI-shim in `adapters/memory/dozerdb/graphiti_temporal_index.py`.
+  - ADR index README updated with ADR-073 Proposed row.
+  - No code changes in this PR — ratification PR (after user approval) will land the port + adapter + Graphiti migration + version bump.
+- **Files touched:**
+  - `docs/adrs/ADR-073-embeddings-port.md` (new, 99 lines)
+  - `docs/adrs/README.md` (ADR-073 index row appended)
+- **Ports / adapters affected:** none this commit; ADR names the surfaces
+- **PORTING_LEDGER / ADR updated:** ADR-073 authored as Proposed
+- **Stop-condition status:** in-progress — awaits user ratification of ADR-073 before code PR lands.
