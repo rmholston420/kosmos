@@ -1,6 +1,6 @@
 # ADR-070 — Stage 1.5 MEMORY_INTEGRITY Graph (Cytoscape.js + Gnosis graph endpoints)
 
-**Status:** Proposed
+**Status:** Ratified v25 (2026-08-01)
 **Lock-in phase:** Stage 1.5 · Wave D (GUI realization)
 **Supersedes:** —
 
