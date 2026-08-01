@@ -184,7 +184,7 @@ export interface ProvenanceChain {
 
 const GNOSIS_GATE_BASE = process.env.NEXT_PUBLIC_GNOSIS_GATE_BASE ?? "/gnosis-gate";
 
-async function getJSONFromBase(base, path) {
+async function getJSONFromBase(base: string, path: string): Promise<unknown> {
   const res = await fetch(base + path, { cache: "no-store" });
   if (!res.ok) throw new Error("GET " + base + path + " -> " + res.status);
   return res.json();
@@ -192,17 +192,18 @@ async function getJSONFromBase(base, path) {
 
 export const gnosisGateClient = {
   listCorpora: () => getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpora"),
-  getCorpusDetail: (corpusName) => getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpus/" + corpusName),
-  getProvenance: (corpusName, eventId) =>
+  getCorpusDetail: (corpusName: string) =>
+    getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpus/" + corpusName),
+  getProvenance: (corpusName: string, eventId: string) =>
     getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpus/" + corpusName + "/provenance/" + eventId),
-  query: (corpusName, q, asOf, limit) =>
+  query: (corpusName: string, q: string, asOf?: string, limit?: number) =>
     getJSONFromBase(
       GNOSIS_GATE_BASE,
       "/api/corpus/" + corpusName + "/query?q=" + encodeURIComponent(q || "") +
       (asOf ? "&as_of=" + asOf : "") + "&limit=" + (limit || 20)
     ),
-  traverse: (corpusName, eventId) =>
+  traverse: (corpusName: string, eventId: string) =>
     getJSONFromBase(GNOSIS_GATE_BASE, "/api/corpus/" + corpusName + "/traverse/" + eventId),
   htmlIndexUrl: () => GNOSIS_GATE_BASE + "/",
-  htmlCorpusUrl: (corpusName) => GNOSIS_GATE_BASE + "/corpus/" + corpusName,
+  htmlCorpusUrl: (corpusName: string) => GNOSIS_GATE_BASE + "/corpus/" + corpusName,
 };

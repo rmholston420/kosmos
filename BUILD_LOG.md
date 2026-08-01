@@ -2275,3 +2275,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — awaiting Colossus re-run of `next build`, `pytest tests/kernel/`, and `npx playwright test`.
+
+## 2026-08-01 05:10 EDT — Stage 1 · GUI shell fixup #2 — gnosisGateClient param typing
+
+- **Stage / plugin / port:** Stage 1 · GUI shell.
+- **What changed:** Added TypeScript parameter types to every method of `gnosisGateClient` in `ui/lib/kernel-client.ts`; marked `asOf` and `limit` on `query()` optional. Under `"strict": true`, untyped parameters are implicitly required, so `gnosisGateClient.query(corpusName, query)` was rejected because the caller only passed 2 of 4 (mistakenly-required) args. Also typed `getJSONFromBase(base, path)` explicitly (`string, string` → `Promise<unknown>`).
+- **Files touched:** `ui/lib/kernel-client.ts`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run.

@@ -532,3 +532,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Fixed the underlying TS2345 errors (see entry above). No Playwright-config change needed.
 - **Files changed:** none in this entry
 - **Related BUILD_LOG entry:** 2026-08-01 05:07 EDT
+
+## 2026-08-01 05:10 EDT — `next build` TS "Expected 4 arguments, but got 2" on `gnosisGateClient.query`
+
+- **Symptom:** `./app/gnosis/[corpusName]/page.tsx:43:22 Type error: Expected 4 arguments, but got 2. gnosisGateClient.query(corpusName, query).then(...)`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell (`ui/lib/kernel-client.ts`).
+- **Root cause:** `gnosisGateClient.query(corpusName, q, asOf, limit)` had all four params untyped. Under `"strict": true`, TypeScript treats them all as implicitly required. Caller only passed 2 args → TS2554.
+- **Fix applied:** Explicit types on every `gnosisGateClient.*` method parameter. Marked `asOf?: string, limit?: number` optional on `query()`. Same treatment applied to `getJSONFromBase`.
+- **Files changed:** `ui/lib/kernel-client.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:10 EDT.
