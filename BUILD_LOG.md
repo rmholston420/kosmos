@@ -3027,3 +3027,14 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (test-only).
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — Playwright verify runs on Colossus.
+
+## 2026-08-01 11:26 EDT — Stage 1.6 Phase 1 merged to main (PR #25 → 47695f9)
+
+- **Stage / plugin / port:** Stage 1.6 Phase 1 · ADR-074 D1–D5 · MemoryPort/VectorPort/EmbeddingsPort
+- **What changed:** Merged PR #25 with `--admin --squash --delete-branch`. Ratifies semantic memory path (Ollama nomic-embed-text → Qdrant), 2D/3D graph visualization page, kernel version 6.10.0→6.11.0.
+- **Files touched:** merge commit only; underlying diff already logged in prior entries
+- **Ports / adapters affected:** MemoryPort (`search_semantic` added), VectorPort (RealQdrantBackend adapter registered at boot), EmbeddingsPort (wired to DozerDB adapter)
+- **PORTING_LEDGER / ADR updated:** ADR-074 Ratified v25 (PR #24 · 7bafcac); Phase 1 ledger entries stand
+- **Round 2 fixes applied on branch before merge:** `03d4178` (bumped version assertion 6.9.0→6.11.0 in 13-* spec), `ea80f58` (React 19: `JSX.Element`→`ReactElement`), `55efe35` (trailing-slash assertion in 20-* spec)
+- **Verify:** pytest 25 pass / 6 skip live-tier · Playwright 69 pass / 6 skip / 0 fail on Colossus
+- **Stop-condition status:** met — Stage 1.6 Phase 1 DoD complete
