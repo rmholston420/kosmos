@@ -1,40 +1,28 @@
-# Session Handoff — Stage 1.6 Phase 3
+# Session Handoff — Paused at end of Stage 1.6 Phase 3
 
-## Current stage/plugin/port
-Stage 1.6 Phase 3. Sequence: D4 ✅ → D5 ✅ → D6.5 ✅ → **D6 (CODE LANDED, verify pending)** → 3.12 real executor.
+## Current stage
+Stage 1.6 Phase 3 **fully closed** (D4/D5/D6.5/D6 all green on Colossus at commit `470ef7f`). D7 (kernel version bump 6.12.0 → 6.13.0) deferred to land naturally with Tektos 3.14.
 
-## Completed this session
-- **D4 / D5 / D6.5 fully closed** (all tiers green on Colossus).
-- **D6 code landed:**
-  - `QuarantinedPage.total_count` field
-  - `_verdict_counter` module-level Counter + `get_verdict_counts()` + `reset_verdict_counter()`
-  - `write_event` increments counter for every verdict
-  - `list_quarantined(limit=0)` accepted (count-only mode)
-  - `AmgGuardPolicy.policy_preset` property + `active_detectors()` method
-  - `GET /api/memory/amg/status` route
-  - `AmgStatusPill` component + mounted on `/memory`
-  - 5 new fast-tier + 3 Playwright + 2 live-tier tests
-- BUILD_LOG appended.
+## Session paused
+User asked to pause Kosmos-memory work and pivot to Tektos so the frontend GUI becomes usable as a coding assistant for Kosmos development itself.
 
-## Remaining before D6 DoD
-Colossus verify:
-```bash
-cd ~/dev/kosmos
-git fetch origin stage-1-6-p3-code && git checkout stage-1-6-p3-code && git pull
-sudo systemctl restart kosmos-kernel
-sleep 3
-pytest adapters/memory/dozerdb/test_contract.py -q
-(cd ui && npm run build && npx playwright test 27-amg-status)
-KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_amg_status_live.py -q
-```
+## Next session — start here
+1. Read `SESSION_HANDOFF_TEKTOS.md` (transient pointer).
+2. Read `docs/seeds/tektos-3.12.md` (full seed — scope, DoD, ports, tests, donor code, constraints).
+3. Start on Tektos 3.12.
 
-## Open questions
-None — all D6 spec ambiguities resolved (custom-yaml preset name, active_detectors fallback, verdict_counter placement).
+## Locked scope for next session
 
-## Next action
-After D6 verify green, D7 remains (kernel version bump 6.12.0 → 6.13.0 + PORT_CONTRACTS audit) before this branch is ready for Phase 3 exit. Then Phase 3.12 real executor (Tektos NopExecutor → OpenHands SDK-backed ExecutorPort).
+- **3.12** — `POST /api/tektos/intentions` + `<IntentionForm />` on `/tektos`.
+- **3.13** — `RealExecutor` (LLMPort + MemoryPort + repo_root) replaces `NopExecutor`.
+- **3.14** — `POST /api/tektos/apply/{approval_id}` + Apply button on `/tektos/detail`.
+
+Every backend slice ships its frontend GUI in the same commit.
+
+## Stop condition
+User opens `/tektos`, types a coding intention, watches a plan appear, approves it, clicks Execute, reviews the real diff, clicks Apply, files change on disk.
 
 ## Git state
-- Branch: `stage-1-6-p3-code`
-- Latest push pending: D6 code
-- Previous: `66ebde4` (D6.5), `a9ed4fc` (D5 test cleanup), `3c1b45c` (D5 static-export refactor), `fee591a` (D5), `31d593e` (D4 pseudo-cypher fix), `c52be79` (D4)
+- Branch: `stage-1-6-p3-code`, PR #34 open
+- Latest commit: `470ef7f` (D6)
+- Seed docs pending commit: `docs/seeds/tektos-3.12.md`, `SESSION_HANDOFF_TEKTOS.md`, `SESSION_HANDOFF.md` (this file), `BUILD_LOG.md`

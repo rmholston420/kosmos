@@ -3375,3 +3375,10 @@ Landed ADR-076 D6.
   - `ui/tests/27-amg-status.spec.ts` — 3 Playwright smokes (mount, terminal-state resolution, expander toggle)
   - `tests/integration/test_amg_status_live.py` — 2 live-tier tests (route in openapi, shape or 503)
 - **Stop condition:** D6 DoD — visible AMG status pill on /memory with color-coded state + expandable details, backed by real AMG registry.
+
+## 2026-08-01 15:20 EDT — Stage 1.6 Phase 3 D6 verify + Tektos seed pause
+
+- D6 verify on Colossus: fast-tier 60/60, UI build clean, Playwright 3/3, live-tier 2/2 (all green).
+- Stage 1.6 Phase 3 D4/D5/D6.5/D6 all closed. D7 (kernel version bump) deferred to naturally land with Tektos 3.14.
+- Pause point: session paused to write Tektos seed docs (`docs/seeds/tektos-3.12.md` versioned + `SESSION_HANDOFF_TEKTOS.md` transient) so the next session can begin building Tektos as a real coding-assistant loop via the frontend GUI.
+- Scope of the next session (locked): Tektos 3.12 (intentions endpoint + IntentionForm) → 3.13 (RealExecutor over LLMPort) → 3.14 (Apply diff to working tree). Every backend slice ships its frontend GUI in the same commit.
