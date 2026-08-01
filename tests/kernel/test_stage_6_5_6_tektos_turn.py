@@ -43,23 +43,10 @@ class _FakeLLMPort:
     calls: list[dict[str, Any]] = field(default_factory=list)
     fail_with: Exception | None = None
 
-    async def generate_text(
-        self,
-        prompt: str,
-        *,
-        model: str | None = None,
-        system_prompt: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        stop: list[str] | None = None,
-    ) -> str:
-        self.calls.append(
-            {
-                "prompt": prompt,
-                "model": model,
-                "system_prompt": system_prompt,
-            }
-        )
+    async def generate_text(self, *args: Any, **kwargs: Any) -> str:
+        # ``TektosAgent`` calls with kwargs ``prompt=``, ``model=``,
+        # ``system=``. Accept anything the port might grow to.
+        self.calls.append({"args": args, "kwargs": kwargs})
         if self.fail_with is not None:
             raise self.fail_with
         return self.reply
@@ -212,7 +199,9 @@ def test_turn_returns_tektos_step(
 
     # LLM was called exactly once with the prompt built from the message.
     assert len(fake_llm.calls) == 1
-    assert fake_llm.calls[0]["prompt"] == "hello"
+    call = fake_llm.calls[0]
+    prompt_arg = call["kwargs"].get("prompt") or (call["args"][0] if call["args"] else None)
+    assert prompt_arg == "hello"
 
     # Memory received the assistant reply as an event.
     assert len(fake_memory.events) == 1
