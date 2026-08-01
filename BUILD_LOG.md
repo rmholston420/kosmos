@@ -2620,3 +2620,35 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (ratification only)
 - **PORTING_LEDGER / ADR updated:** ADR-071 ratified
 - **Stop-condition status:** met — Wave E DoD closed. Stage 1.5 GUI realization COMPLETE.
+
+## 2026-08-01 08:58 EDT — Stage 1.5 Wave F · F0 + F1 + F2 shipped in PR #18 · Colossus 6/6 GREEN
+
+- **Stage / plugin / port:** Stage 1.5 · Wave F · kernel-authoritative Operate panels + shell theme + EventBus WS consumer
+- **What changed:**
+  - **F0 · Tibetan theme realization.** Diagnosed: `@tailwindcss/postcss` never installed and no `postcss.config` existed, so `@import "tailwindcss"` in `ui/app/globals.css` was passed through unprocessed — the shell rendered raw black-on-white browser defaults. Fix: added `@tailwindcss/postcss@^4.0.0` + `postcss@^8.4.47` to devDependencies, added `ui/postcss.config.mjs`, expanded `ui/app/globals.css` from 12 lines to 506 lines with the full Five-Wisdom OKLCH palette (Vairochana / Akshobhya / Ratnasambhava / Amitabha / Amoghasiddhi + Nagtang elevation ramp), directional hue-per-function panel borders (Command=Amitabha red, Operate=Amoghasiddhi green, Govern=Ratnasambhava gold, Observe=Akshobhya blue, Memory=Vairochana white), Ratnasambhava gold hairline reserved for `[data-status="signed"|"data-signed=true"|"data-ratified=true"]` only. Styled via `[data-testid]` attribute selectors — zero component-file churn, every prior Playwright anchor preserved.
+  - **F1 · EventsWSProvider.** New `ui/lib/events-ws.tsx` — single WebSocket to `/api/events/ws` at shell root, exponential 500 ms→8 s backoff, ignores `{frame:"ready"}` handshake, `useEventListener(type, callback)` API. Default subscribed types: `phrouros.anomaly.detected`, `zetesis.research.started`, `zetesis.research.completed`, `kernel.suspended`, `kernel.resumed`. Wired: `AgentTracePanel` refetches on `phrouros.anomaly.detected`; `ApprovalsQueuePanel` refetches on `zetesis.research.completed` + `kernel.resumed`. `PersistentShell` wraps children in `<EventsWSProvider>`.
+  - **F2 · Operate panel completion.** Four kernel-authoritative panels replace `PlaceholderPanel` on the Operate page. `StubDegradationPanel` (`GET /api/kernel/schema`, refresh on `kernel.resumed`), `ModelSwapSLOPanel` (`GET /api/ollama/status` polled every 5 s), `ContextPressurePanel` (`GET /api/resources/balances` polled every 15 s + `kernel.resumed`, all six ResourceKinds), `HardwareResiliencePanel` (`GET /health` + `GET /api/ollama/status` polled every 10 s). `PanelGrid` renders these four unconditionally, matching `MEMORY_INTEGRITY` / `AGENT_TRACE` pattern.
+  - Also folded: `ui/tsconfig.json` Next 16 regenerated shape (adds `.next/types/**/*.ts`, `next` plugin, `jsx: react-jsx`) — ends the recurring `pnpm build` dirty-checkout diff.
+  - ADR-072 authored (Proposed); ADR-index row appended.
+  - PR #18 opened on `stage-1-5-wave-f-panel-completion`; commits `21be756` (F1) + `2fb09cc` (F0+F2).
+  - Colossus post-pull: `pnpm ui install` clean, `pnpm ui build` 13/13 static pages, Playwright `14-wave-f-operate-panels.spec.ts` **6/6 GREEN** in 807 ms. `git stash drop` cleared the tsconfig-next16-shape stash (superseded by branch commit).
+- **Files touched:**
+  - `ui/package.json` (`@tailwindcss/postcss` + `postcss`)
+  - `ui/postcss.config.mjs` (new)
+  - `ui/app/globals.css` (12→506 lines)
+  - `ui/lib/events-ws.tsx` (new)
+  - `ui/components/PersistentShell.tsx` (wrap in provider)
+  - `ui/components/panels/AgentTracePanel.tsx` (event listener)
+  - `ui/components/panels/ApprovalsQueuePanel.tsx` (event listener × 2)
+  - `ui/components/panels/StubDegradationPanel.tsx` (new)
+  - `ui/components/panels/ModelSwapSLOPanel.tsx` (new)
+  - `ui/components/panels/ContextPressurePanel.tsx` (new)
+  - `ui/components/panels/HardwareResiliencePanel.tsx` (new)
+  - `ui/components/PanelGrid.tsx` (4 always-render branches)
+  - `ui/tsconfig.json` (Next 16 regen shape)
+  - `ui/tests/14-wave-f-operate-panels.spec.ts` (new, 6 tests)
+  - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md` (new, Proposed)
+  - `docs/adrs/README.md` (ADR-072 index row appended after ADR-071)
+- **Ports / adapters affected:** EventBusPort (kernel dispatch → WS consumer path exercised end-to-end); FrontendContractPort (four Operate slots switch from placeholder to kernel-backed).
+- **PORTING_LEDGER / ADR updated:** ADR-072 authored (Proposed); no new vendored components (`@tailwindcss/postcss` is a first-party Tailwind package, not a vendored port).
+- **Stop-condition status:** F0+F1+F2 slice **met**. Colossus Playwright `14-wave-f-operate-panels.spec.ts` 6/6 GREEN. PR #18 awaiting merge. F3+F4+F5 for PR #19 remain. Full Wave F Definition of Done (target ≥55/6/0 full suite, kernel `6.9.0` after ratification PR) still open.

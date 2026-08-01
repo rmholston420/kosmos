@@ -1,15 +1,505 @@
 @import "tailwindcss";
 
+/* -------------------------------------------------------------------------
+ * Kosmos Visual Design System — Tibetan Five-Wisdom Theme
+ * -------------------------------------------------------------------------
+ * Grounded in UX Design Spec §"Tibetan-Inspired Visual Theme". Each hue
+ * is OKLCH-tuned to a matte-luminous register that reads as mineral
+ * pigment (lapis, malachite, cinnabar, ochre, gold leaf), never flat
+ * digital saturation.
+ *
+ * Application rules (spec-derived):
+ *   1. Dark-first Nagtang base with wisdom colors as accents, never fills.
+ *   2. Ratnasambhava gold reserved for signed / completed / governance-
+ *      locked states as thin hairline borders only.
+ *   3. Directional hue-per-function mapping:
+ *        - Amitabha red / west  -> urgency (Command / algedonic)
+ *        - Amoghasiddhi green / north -> active + healthy (Operate)
+ *        - Ratnasambhava gold / south -> governance-locked (Govern)
+ *        - Akshobhya blue / east -> observational (Observe)
+ *        - Vairochana white / center -> knowledge base (Memory)
+ *   4. Geometric sans for all body text; Uchen-style display font
+ *      reserved for the wordmark and section dividers.
+ *   5. No literal deity / lotus / mandala ornament — beauty comes from
+ *      the color doctrine, gold restraint, and whitespace.
+ * ---------------------------------------------------------------------- */
+
 @theme {
-  --color-vairochana: oklch(97% 0.01 90);
-  --color-akshobhya: oklch(45% 0.12 250);
-  --color-ratnasambhava: oklch(80% 0.15 85);
-  --color-amitabha: oklch(50% 0.18 25);
-  --color-amoghasiddhi: oklch(50% 0.13 145);
-  --color-nagtang: oklch(12% 0.005 260);
+  /* Five Buddha Family pigments — mineral-derived OKLCH */
+  --color-vairochana:      oklch(97% 0.01 90);
+  --color-vairochana-soft: oklch(88% 0.015 90);
+  --color-vairochana-dim:  oklch(70% 0.02 90);
+  --color-akshobhya:       oklch(55% 0.14 250);
+  --color-akshobhya-soft:  oklch(65% 0.12 250);
+  --color-ratnasambhava:   oklch(80% 0.15 85);
+  --color-ratnasambhava-hairline: oklch(72% 0.12 85);
+  --color-amitabha:        oklch(55% 0.18 25);
+  --color-amitabha-soft:   oklch(65% 0.15 25);
+  --color-amoghasiddhi:    oklch(58% 0.13 145);
+  --color-amoghasiddhi-soft: oklch(68% 0.11 145);
+
+  /* Nagtang black-ground protector palette */
+  --color-nagtang:         oklch(12% 0.005 260);
+  --color-nagtang-elev-1:  oklch(16% 0.006 260);  /* chrome (top bar, sidebar) */
+  --color-nagtang-elev-2:  oklch(20% 0.007 260);  /* cards / panels */
+  --color-nagtang-elev-3:  oklch(24% 0.008 260);  /* hover / focus surfaces */
+  --color-nagtang-border:  oklch(30% 0.008 260);
+  --color-nagtang-border-soft: oklch(24% 0.007 260);
+
+  /* Semantic aliases */
+  --color-bg:              var(--color-nagtang);
+  --color-surface:         var(--color-nagtang-elev-2);
+  --color-surface-elev:    var(--color-nagtang-elev-3);
+  --color-chrome:          var(--color-nagtang-elev-1);
+  --color-border:          var(--color-nagtang-border);
+  --color-border-soft:     var(--color-nagtang-border-soft);
+  --color-text:            var(--color-vairochana);
+  --color-text-soft:       var(--color-vairochana-soft);
+  --color-text-dim:        var(--color-vairochana-dim);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "DDC Uchen", "Noto Serif Tibetan", "Kokonor",
+    "Times New Roman", serif;
+
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --hairline: 1px;
+}
+
+/* ------------------------------------------------------------------------
+ * Base
+ * --------------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+html { color-scheme: dark; }
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 [data-theme="nagtang"] body {
-  background-color: var(--color-nagtang);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  margin: 0 0 0.5rem 0;
+}
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em;
+     color: var(--color-text-dim); font-weight: 500; }
+h3 { font-size: 0.95rem; }
+
+p { margin: 0 0 0.5rem 0; color: var(--color-text-soft); }
+
+a {
+  color: var(--color-akshobhya-soft);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+a:hover { color: var(--color-vairochana); }
+
+button {
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: var(--hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+button:hover {
+  background: var(--color-surface-elev);
+  border-color: var(--color-akshobhya);
+}
+button:focus-visible {
+  outline: 2px solid var(--color-akshobhya);
+  outline-offset: 2px;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-nagtang);
+  border: var(--hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.5rem;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--color-akshobhya);
+  box-shadow: 0 0 0 2px oklch(55% 0.14 250 / 0.25);
+}
+
+dl { margin: 0; }
+dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-dim);
+  margin-top: 0.5rem;
+}
+dd { margin: 0.125rem 0 0 0; color: var(--color-text); font-variant-numeric: tabular-nums; }
+
+ul { list-style: none; padding: 0; margin: 0; }
+
+/* ------------------------------------------------------------------------
+ * Shell — top bar, sidebar, drawer
+ * --------------------------------------------------------------------- */
+
+#kosmos-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+[data-testid="top-bar"] {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-chrome);
+  border-bottom: var(--hairline) solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  min-height: 48px;
+}
+
+[data-testid="shell-body"] {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+[data-testid="shell-content"] {
+  flex: 1;
+  padding: 1.25rem 1.5rem;
+  overflow-x: auto;
+}
+
+/* Sidebar */
+[data-testid="sidebar"] {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--color-chrome);
+  border-right: var(--hairline) solid var(--color-border);
+  padding: 1rem 0;
+  overflow-y: auto;
+}
+[data-testid="sidebar"] section {
+  padding: 0 0.75rem 1rem 0.75rem;
+}
+[data-testid="sidebar"] section + section {
+  border-top: var(--hairline) solid var(--color-border-soft);
+  padding-top: 1rem;
+}
+[data-testid="sidebar"] h2 {
+  font-size: 0.7rem;
+  padding: 0 0.5rem;
+  margin-bottom: 0.5rem;
+}
+[data-testid="sidebar"] li a {
+  display: block;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-soft);
+  border-left: 2px solid transparent;
+}
+[data-testid="sidebar"] li a:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+[data-testid="sidebar"] li a[data-active="true"] {
+  color: var(--color-vairochana);
+  background: var(--color-surface);
+  border-left-color: var(--color-akshobhya);
+}
+
+/* Top-bar controls */
+[data-testid="algedonic-pill"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  border: var(--hairline) solid var(--color-border);
+  font-size: 0.75rem;
+  color: var(--color-text-soft);
+  background: var(--color-nagtang);
+}
+[data-testid="algedonic-pill"][data-status="active"] {
+  color: var(--color-vairochana);
+  background: color-mix(in oklch, var(--color-amitabha) 20%, var(--color-nagtang));
+  border-color: var(--color-amitabha);
+}
+[data-testid="algedonic-pill"][data-status="active"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-amitabha);
+  box-shadow: 0 0 6px var(--color-amitabha);
+  animation: kosmos-pulse 1.6s ease-in-out infinite;
+}
+[data-testid="algedonic-pill"][data-status="clear"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-amoghasiddhi);
+}
+
+@keyframes kosmos-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+[data-testid="model-swap-indicator"] {
+  display: inline-flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  margin-left: auto;
+}
+[data-testid="model-swap-model-name"] {
+  color: var(--color-akshobhya-soft);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+[data-testid="model-swap-vram"] { font-variant-numeric: tabular-nums; }
+
+/* Kill switch: destructive Amitabha register */
+[data-testid="kill-switch-trigger"],
+[data-testid="kill-switch"] > button:first-of-type {
+  color: var(--color-amitabha-soft);
+  border-color: var(--color-amitabha);
+  background: transparent;
+}
+[data-testid="kill-switch-trigger"]:hover {
+  background: color-mix(in oklch, var(--color-amitabha) 15%, var(--color-nagtang));
+}
+
+[data-testid="drawer-trigger"] { color: var(--color-text-soft); }
+
+/* Radix drawer */
+[data-testid="drawer-overlay"] {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 0.55);
+  z-index: 100;
+}
+[data-testid="contextual-drawer"] {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  background: var(--color-chrome);
+  border-left: var(--hairline) solid var(--color-border);
+  padding: 1.25rem 1.5rem;
+  z-index: 101;
+  overflow-y: auto;
+}
+
+/* Command palette */
+[data-testid="cmdk-root"] {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding-top: 12vh;
+  background: oklch(0% 0 0 / 0.5);
+  z-index: 200;
+}
+
+/* Algedonic full-width banner */
+[data-testid="algedonic-banner"] {
+  padding: 0.5rem 1rem;
+  background: color-mix(in oklch, var(--color-amitabha) 20%, var(--color-nagtang));
+  border-bottom: var(--hairline) solid var(--color-amitabha);
+  color: var(--color-vairochana);
+  font-size: 0.85rem;
+}
+
+/* ------------------------------------------------------------------------
+ * Job pages + panels
+ * --------------------------------------------------------------------- */
+
+main[data-testid^="job-"] {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 1400px;
+}
+
+main[data-testid^="job-"] > [data-testid$="-header"] {
+  border-bottom: var(--hairline) solid var(--color-border-soft);
+  padding-bottom: 0.75rem;
+}
+main[data-testid^="job-"] h1 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  letter-spacing: 0.01em;
+}
+
+/* Panels — cards on Nagtang elevation 2 */
+article[data-testid^="panel-"] {
+  background: var(--color-surface);
+  border: var(--hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.125rem;
+  min-height: 120px;
+  transition: border-color 160ms ease;
+}
+article[data-testid^="panel-"]:hover {
+  border-color: var(--color-nagtang-border);
+}
+
+/* Directional hue-per-function borders */
+main[data-testid="job-command"] article[data-testid^="panel-"] {
+  border-top: 2px solid var(--color-amitabha);
+}
+main[data-testid="job-operate"] article[data-testid^="panel-"] {
+  border-top: 2px solid var(--color-amoghasiddhi);
+}
+main[data-testid="job-govern"] article[data-testid^="panel-"] {
+  border-top: 2px solid var(--color-ratnasambhava-hairline);
+}
+main[data-testid="job-observe"] article[data-testid^="panel-"] {
+  border-top: 2px solid var(--color-akshobhya);
+}
+main[data-testid="job-memory"] article[data-testid^="panel-"] {
+  border-top: 2px solid var(--color-vairochana-soft);
+}
+
+/* Job pages use single-column stack; shell "/" uses multi-column grid */
+[data-testid="shell-content"] > main[data-testid="job-command"],
+[data-testid="shell-content"] > main[data-testid="job-govern"],
+[data-testid="shell-content"] > main[data-testid="job-memory"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+[data-testid="shell-content"] > main[data-testid="job-observe"],
+[data-testid="shell-content"] > main[data-testid="job-operate"] {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* Approval rows */
+[data-testid^="approval-"] {
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: var(--hairline) solid var(--color-border-soft);
+  margin-top: 0.5rem;
+}
+[data-testid^="approval-"][data-tier="HUMAN_REQUIRED"] {
+  border-left: 2px solid var(--color-amitabha);
+}
+[data-testid^="approval-"][data-tier="HUMAN_REVIEW"] {
+  border-left: 2px solid var(--color-ratnasambhava-hairline);
+}
+[data-testid^="approval-"][data-tier="AUTONOMOUS"] {
+  border-left: 2px solid var(--color-amoghasiddhi);
+}
+
+/* Governance surfaces get the Ratnasambhava gold hairline on locked/signed */
+[data-status="signed"], [data-signed="true"], [data-ratified="true"] {
+  outline: var(--hairline) solid var(--color-ratnasambhava-hairline);
+  outline-offset: -1px;
+}
+
+/* Progressbar (ModelSwapSLO VRAM bar) */
+[role="progressbar"] {
+  height: 6px;
+  background: var(--color-nagtang);
+  border: var(--hairline) solid var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+[data-testid="model-swap-slo-bar-fill"] {
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    var(--color-amoghasiddhi),
+    var(--color-ratnasambhava)
+  );
+  transition: width 300ms ease;
+}
+
+/* Degraded plugin rows: cinnabar cue */
+[data-degraded="true"] [data-testid^="stub-degradation-badge-"] {
+  color: var(--color-amitabha-soft);
+  border: var(--hairline) solid var(--color-amitabha);
+  padding: 0.125rem 0.375rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  margin-left: 0.5rem;
+}
+
+/* Empty / loading / error states */
+[data-testid$="-empty"], [data-testid$="-loading"] {
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+[data-testid$="-error"], [role="alert"] {
+  color: var(--color-amitabha-soft);
+}
+
+/* Panel lists */
+article[data-testid^="panel-"] ul > li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.375rem 0;
+  border-bottom: var(--hairline) solid var(--color-border-soft);
+  font-size: 0.875rem;
+}
+article[data-testid^="panel-"] ul > li:last-child { border-bottom: none; }
+
+/* Tabular numerics everywhere balances/counts appear */
+[data-testid^="context-pressure-balance-"],
+[data-testid^="stub-degradation-routes-"],
+[data-testid^="stub-degradation-panels-"],
+[data-testid^="hardware-resilience-"],
+[data-testid^="model-swap-slo-vram"],
+[data-testid^="model-swap-slo-ram"] {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--color-akshobhya-soft);
+}
+
+/* Job header description */
+main[data-testid^="job-"] [data-testid$="-description"] {
+  color: var(--color-text-dim);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+/* Wordmark hook — the shell has no explicit wordmark yet; when added it
+ * should carry the Uchen display face via .kosmos-wordmark. */
+.kosmos-wordmark {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  letter-spacing: 0.02em;
   color: var(--color-vairochana);
 }

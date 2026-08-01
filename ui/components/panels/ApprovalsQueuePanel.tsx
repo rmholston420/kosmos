@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { useEventListener } from "../../lib/events-ws";
 import {
   kernelClient,
   type ApprovalRecord,
@@ -40,6 +41,10 @@ export default function ApprovalsQueuePanel({
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [domainFilter]);
+
+  // F1 · Wave F: refresh on lifecycle & research events that may enqueue approvals.
+  useEventListener("zetesis.research.completed", refresh);
+  useEventListener("kernel.resumed", refresh);
 
   const approve = (id: string) => {
     kernelClient.resolveApproval(id, true, { resolved_by: "kosmos_ui" }).then(refresh);
