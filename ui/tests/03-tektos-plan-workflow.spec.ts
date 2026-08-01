@@ -17,7 +17,7 @@ test.describe("Tektos Plan -> Approve -> Execute -> Diff", () => {
   });
 
   test("full plan lifecycle: approve, execute, diff with sha256 badge", async ({ page }) => {
-    await page.goto(`/tektos/${seedId}`);
+    await page.goto(`/tektos/detail?id=${encodeURIComponent(seedId)}`);
     await expect(page.getByTestId("tektos-plan-id")).toHaveText(seedId!);
     await expect(page.getByTestId("tektos-plan-status")).toHaveText("PENDING");
 

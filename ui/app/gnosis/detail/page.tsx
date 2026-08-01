@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { gnosisGateClient } from "../../../lib/kernel-client";
 
 type Claim = {
@@ -19,10 +19,9 @@ type Provenance = {
 
 type Edge = { kind: string; dst_subject: string };
 
-export default function GnosisCorpusDetail() {
-  const params = useParams();
-  const rawCorpus = params?.corpusName;
-  const corpusName = Array.isArray(rawCorpus) ? rawCorpus[0] : (rawCorpus ?? "");
+function GnosisCorpusDetailInner() {
+  const searchParams = useSearchParams();
+  const corpusName = searchParams?.get("corpus") ?? "";
 
   const [detail, setDetail] = useState<unknown | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,5 +121,13 @@ export default function GnosisCorpusDetail() {
         </section>
       )}
     </main>
+  );
+}
+
+export default function GnosisCorpusDetail() {
+  return (
+    <Suspense fallback={<main data-testid="gnosis-detail-loading">Loading corpus…</main>}>
+      <GnosisCorpusDetailInner />
+    </Suspense>
   );
 }

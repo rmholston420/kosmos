@@ -68,7 +68,7 @@ test.describe("Gnosis-surrogate gate", () => {
   });
 
   test("humanities-bilara traversal renders CIDOC-CRM typed edge kinds verbatim", async ({ page }) => {
-    await page.goto("/gnosis/humanities-bilara");
+    await page.goto("/gnosis/detail?corpus=humanities-bilara");
     const detail = page.getByTestId("gnosis-corpus-detail");
     if (!(await detail.count())) {
       test.skip(true, "JSON API not available for this corpus route");

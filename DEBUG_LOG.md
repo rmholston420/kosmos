@@ -541,3 +541,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Explicit types on every `gnosisGateClient.*` method parameter. Marked `asOf?: string, limit?: number` optional on `query()`. Same treatment applied to `getJSONFromBase`.
 - **Files changed:** `ui/lib/kernel-client.ts`.
 - **Related BUILD_LOG entry:** 2026-08-01 05:10 EDT.
+
+## 2026-08-01 05:13 EDT — `next build` fails: `Page "/gnosis/[corpusName]" is missing "generateStaticParams()"`
+
+- **Symptom:** `Error: Page "/gnosis/[corpusName]" is missing "generateStaticParams()" so it cannot be used with "output: export" config.`
+- **Affected stage / plugin / port:** Stage 1 · GUI shell (`ui/next.config.js` uses `output: "export"`).
+- **Root cause:** Under `output: "export"`, Next.js pre-renders every route at build time. Dynamic segments (`[corpusName]`, `[approvalId]`) demand a `generateStaticParams()` function that enumerates every possible value — impossible here because IDs are only known at runtime against a running kernel + graph store.
+- **Fix applied:** Replaced both dynamic-segment routes with static routes that read the identifier from a query string via `useSearchParams()`. Wrapped the `useSearchParams()`-using tree in `<Suspense>` per Next 16 static-export contract. Updated internal link generators and Playwright tests to point at the new URLs.
+- **Files changed:** `ui/app/gnosis/[corpusName]/page.tsx` (removed), `ui/app/tektos/[approvalId]/page.tsx` (removed), `ui/app/gnosis/detail/page.tsx` (new), `ui/app/tektos/detail/page.tsx` (new), `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/tests/03-tektos-plan-workflow.spec.ts`, `ui/tests/07-gnosis-gate.spec.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:13 EDT.

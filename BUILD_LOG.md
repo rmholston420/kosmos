@@ -2284,3 +2284,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run.
+
+## 2026-08-01 05:13 EDT — Stage 1 · GUI shell fixup #3 — replace dynamic routes with query-string routes for static export
+
+- **Stage / plugin / port:** Stage 1 · GUI shell.
+- **What changed:**
+  - Removed `ui/app/gnosis/[corpusName]/page.tsx` and `ui/app/tektos/[approvalId]/page.tsx`. Next.js `output: "export"` rejects dynamic segments without a `generateStaticParams()` provider, which is unimplementable when the corpus/approval IDs are only known at runtime.
+  - Added `ui/app/gnosis/detail/page.tsx` — same component, reads `?corpus=<name>` via `useSearchParams()`. Wrapped in `<Suspense>` per Next 16 static-export requirement for `useSearchParams`.
+  - Added `ui/app/tektos/detail/page.tsx` — same component, reads `?id=<approval_id>`. Wrapped in `<Suspense>`.
+  - Updated link generators in `ui/app/gnosis/page.tsx` and `ui/app/tektos/page.tsx` to point at the new query-string URLs (`/gnosis/detail?corpus=...`, `/tektos/detail?id=...`, URL-encoded).
+  - Updated Playwright specs `ui/tests/03-tektos-plan-workflow.spec.ts` and `ui/tests/07-gnosis-gate.spec.ts` to navigate the new URLs.
+- **Files touched:** `ui/app/gnosis/[corpusName]/page.tsx` (removed), `ui/app/tektos/[approvalId]/page.tsx` (removed), `ui/app/gnosis/detail/page.tsx` (new), `ui/app/tektos/detail/page.tsx` (new), `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/tests/03-tektos-plan-workflow.spec.ts`, `ui/tests/07-gnosis-gate.spec.ts`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run.

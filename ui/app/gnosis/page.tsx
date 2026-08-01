@@ -59,7 +59,7 @@ export default function GnosisIndex() {
             {corpora.map((c) => (
               <tr data-testid={"gnosis-corpus-row-" + c.name} key={c.name}>
                 <td>
-                  <a data-testid={"gnosis-corpus-link-" + c.name} href={"/gnosis/" + c.name}>
+                  <a data-testid={"gnosis-corpus-link-" + c.name} href={"/gnosis/detail?corpus=" + encodeURIComponent(c.name)}>
                     {c.name}
                   </a>
                 </td>

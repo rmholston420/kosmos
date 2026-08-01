@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   kernelClient,
   type ApprovalRecord,
@@ -8,9 +8,9 @@ import {
   type ExecutionResult,
 } from "../../../lib/kernel-client";
 
-export default function TektosPlanDetail() {
-  const params = useParams<{ approvalId: string }>();
-  const approvalId = params.approvalId;
+function TektosPlanDetailInner() {
+  const searchParams = useSearchParams();
+  const approvalId = searchParams?.get("id") ?? "";
 
   const [record, setRecord] = useState<ApprovalRecord | null>(null);
   const [execResult, setExecResult] = useState<ExecutionResult | null>(null);
@@ -18,10 +18,11 @@ export default function TektosPlanDetail() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () => {
+    if (!approvalId) return;
     kernelClient
       .getPlanDetail(approvalId)
-      .then(setRecord)
-      .catch((e) => setError(String(e)));
+      .then((r: ApprovalRecord) => setRecord(r))
+      .catch((e: unknown) => setError(String(e)));
   };
 
   useEffect(() => {
@@ -29,12 +30,14 @@ export default function TektosPlanDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [approvalId]);
 
-  const approve = () => kernelClient.approveTektosPlan(approvalId).then((r) => setRecord(r));
+  const approve = () =>
+    kernelClient.approveTektosPlan(approvalId).then((r: ApprovalRecord) => setRecord(r));
 
   const execute = () =>
-    kernelClient.executeTektosPlan(approvalId).then((res) => setExecResult(res));
+    kernelClient.executeTektosPlan(approvalId).then((res: ExecutionResult) => setExecResult(res));
 
-  const showDiff = () => kernelClient.getTektosDiff(approvalId).then((d) => setDiff(d));
+  const showDiff = () =>
+    kernelClient.getTektosDiff(approvalId).then((d: DiffRender) => setDiff(d));
 
   if (error) return <main data-testid="tektos-plan-error">{error}</main>;
   if (!record) return <main data-testid="tektos-plan-loading">Loading plan…</main>;
@@ -72,5 +75,13 @@ export default function TektosPlanDetail() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function TektosPlanDetail() {
+  return (
+    <Suspense fallback={<main data-testid="tektos-plan-loading">Loading plan…</main>}>
+      <TektosPlanDetailInner />
+    </Suspense>
   );
 }
