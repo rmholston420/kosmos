@@ -1,6 +1,6 @@
 # ADR-075 — Stage 1.6 Phase 2: Semantic Memory Surface + Graph Pagination + Zetesis Wiring + Graphiti Hard-Delete
 
-**Status:** Proposed
+**Status:** Ratified v25
 **Lock-in phase:** Stage 1.6 · Phase 2
 **Supersedes:** ADR-073 §4 refactor step (the deprecation-window language for
 `graphiti_temporal_index.py`)

@@ -3065,3 +3065,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none yet — code lands in a follow-on PR after ratification
 - **PORTING_LEDGER / ADR updated:** ADR-075 (Proposed)
 - **Stop-condition status:** in-progress — awaiting PR review + ratification
+
+## 2026-08-01 11:43 EDT — ADR-075 ratified (Proposed → Ratified v25)
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · umbrella ADR
+- **What changed:** Flipped ADR-075 status Proposed → Ratified v25 in ADR body + index row (same-PR flip, matching Phase 1 shape).
+- **Files touched:** docs/adrs/ADR-075-stage-1-6-phase-2.md; docs/adrs/README.md
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** ADR-075 Ratified v25
+- **Stop-condition status:** in-progress — merge PR #27 then cut code branch
