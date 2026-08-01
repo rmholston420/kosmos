@@ -1,16 +1,24 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { kernelClient, type AnomalyRecord, type Panel } from "../../lib/kernel-client";
+import { useEventListener } from "../../lib/events-ws";
 
 export default function AgentTracePanel({ panels }: { panels: Panel[] }) {
   const [anomalies, setAnomalies] = useState<AnomalyRecord[]>([]);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     kernelClient
       .listAnomalies()
       .then((r: unknown) => setAnomalies(Array.isArray(r) ? (r as AnomalyRecord[]) : []))
       .catch(() => setAnomalies([]));
   }, []);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  // F1 · Wave F: live invalidate on phrouros anomaly events.
+  useEventListener("phrouros.anomaly.detected", refetch);
 
   return (
     <article data-testid="panel-AGENT_TRACE" data-populated="true">

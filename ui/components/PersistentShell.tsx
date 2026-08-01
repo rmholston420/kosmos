@@ -9,6 +9,7 @@ import ModelSwapIndicator from "./ModelSwapIndicator";
 import CommandPalette from "./CommandPalette";
 import KillSwitch from "./KillSwitch";
 import DesignTokenHydrator from "./DesignTokenHydrator";
+import { EventsWSProvider } from "../lib/events-ws";
 
 // PersistentShell wraps every page with the top bar (Cmd+K, algedonic pill,
 // model-swap indicator, kill-switch), the left sidebar (job segments +
@@ -30,6 +31,7 @@ export default function PersistentShell({ children }: { children: ReactNode }) {
   const pluginRoutes = schema ? schema.plugins.flatMap((p) => p.routes) : [];
 
   return (
+    <EventsWSProvider>
     <div id="kosmos-shell">
       <DesignTokenHydrator />
 
@@ -76,5 +78,6 @@ export default function PersistentShell({ children }: { children: ReactNode }) {
         </Dialog.Portal>
       </Dialog.Root>
     </div>
+    </EventsWSProvider>
   );
 }
