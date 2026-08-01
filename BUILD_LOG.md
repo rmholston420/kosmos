@@ -3164,3 +3164,21 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** FrontendContractPort (dedupe), EventBusPort (WS wire-format unwrap)
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met — Colossus Playwright diagnostic green on all three symptoms; PR #31 + PR #32 squashed into main
+
+## 2026-08-01 13:22 EDT — DozerDB persistence wired; systemd unit authored
+
+- **Stage / plugin / port:** Stage 1.8 · MemoryPort · DozerDB adapter (ADR-008)
+- **What changed:** Verified DozerDB backend end-to-end on Colossus:
+  - `docker compose -f ops/compose/memory.yml up -d` brings up `kosmos-dozerdb` (Neo4j-compat, bolt://127.0.0.1:7687, Bolt healthcheck green, `restart: unless-stopped`).
+  - Env-inlined restart of the kernel (`KOSMOS_MEMORY_BACKEND=dozerdb ...`) proves the MemoryPort factory at `kernel/app.py:_boot_memory` picks the DozerDB branch when the env is present.
+  - Persistence proven: node count survived a kernel restart (696 → 696).
+  - Fresh Zetesis query `"what is chan buddhism"` (trial `bd5a22cc69a64d57ab35d04044bff751`, latency 101.4s, memory_event `8404631b-231b-401b-8a54-9e1da9dd0f88`) round-tripped: SSE `completed` event received, `GET /api/gnosis/graph/nodes` now returns the corresponding `zetesis_report` node.
+  - Authored systemd unit + EnvironmentFile so the kernel restarts with the DozerDB env under `systemctl` supervision without shell-level `export` gymnastics.
+- **Files touched:**
+  - ops/systemd/kosmos-kernel.service
+  - ops/systemd/kosmos-kernel.env
+  - ops/systemd/README.md
+  - BUILD_LOG.md
+- **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (DozerDbGraphBackend + InMemoryTemporalIndex + AmgGuardPolicy composition)
+- **PORTING_LEDGER / ADR updated:** — (ADR-008 already Ratified v25)
+- **Stop-condition status:** met — DozerDB reachable, kernel boots with dozerdb backend, memory writes survive restart, gnosis graph reads through the adapter
