@@ -1,6 +1,6 @@
 # ADR-071 — Stage 1.5 Wave E · Post-Realization Polish
 
-**Status:** Proposed
+**Status:** Ratified v25 (2026-08-01)
 **Lock-in phase:** Stage 1.5 · Wave E (post-realization polish)
 **Supersedes:** —
 
