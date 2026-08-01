@@ -3644,3 +3644,12 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —.
 - **Stop-condition status:** unblocks the seeded e2e run. Not yet re-run on Colossus.
+
+## 2026-08-01 19:29 EDT — GitWorktree sandbox adapter: bind per-slot .git/worktrees/<slot> writable
+
+- **Stage / plugin / port:** Stage 3.14b step 3 · adapters/sandbox/gitworktree · SandboxProvider
+- **What changed:** Extended `_bwrap_argv` to add a writable `--bind` for `<repo_root>/.git/worktrees/<handle.worktree_path.name>` after the writable-worktree bind. Fixes EROFS on `index.lock` when the executor loop runs `git apply --index` / `git commit` / `git reset` inside the sandbox namespace.
+- **Files touched:** adapters/sandbox/gitworktree/adapter.py
+- **Ports / adapters affected:** SandboxProvider (adapter only, port unchanged)
+- **PORTING_LEDGER / ADR updated:** — (no license/ADR change; ADR-079 boundary invariants preserved — parent `.git/worktrees/` and rest of `.git/` remain read-only, only the specific slot's metadata is writable)
+- **Stop-condition status:** in-progress — spec 03 lifecycle test still needs to observe SUCCEEDED/PARTIAL/FAILED end-to-end after a kernel restart.

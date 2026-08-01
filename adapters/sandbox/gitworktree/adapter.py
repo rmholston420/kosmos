@@ -311,6 +311,21 @@ class GitWorktreeSandboxAdapter:
         ]
         # Overlay: the specific worktree is writable.
         argv += ["--bind", str(handle.worktree_path), str(handle.worktree_path)]
+        # Overlay: the worktree's per-slot git metadata dir under the
+        # main repo's .git/worktrees/<slot>/ must be writable so that
+        # git operations inside the worktree (index.lock, HEAD, ORIG_HEAD,
+        # logs/) can write. Without this, `git apply --index`, `git commit`,
+        # and `git reset` fail with EROFS on index.lock. The parent
+        # .git/worktrees/ stays read-only from the outer --ro-bind.
+        worktree_gitdir = (
+            self._repo_root / ".git" / "worktrees" / handle.worktree_path.name
+        )
+        if worktree_gitdir.exists():
+            argv += [
+                "--bind",
+                str(worktree_gitdir),
+                str(worktree_gitdir),
+            ]
         # Explicitly re-assert PROTECTED_READONLY_PATHS as --ro-bind
         # (belt-and-suspenders: even if the worktree contains a copy
         # of one of these paths, it stays read-only).

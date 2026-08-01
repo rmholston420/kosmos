@@ -882,3 +882,12 @@ Entry format per `kosmos-log-maintenance` skill:
   - `plugins/tektos/executor/tests/test_patcher.py`
   - `plugins/tektos/executor/tests/test_patcher_integration.py`
 - **Related BUILD_LOG entry:** 2026-08-01 19:02 EDT
+
+## 2026-08-01 19:29 EDT — Sandbox git apply --index fails with EROFS on index.lock
+
+- **Symptom:** `POST /api/tektos/plan/<id>/execute` returns HTTP 500. Kernel traceback: `ports.sandbox.SandboxError: git apply --check passed but git apply --index failed (exit 128): fatal: Unable to create '/home/rmholston/dev/kosmos/.git/worktrees/<slot>/index.lock': Read-only file system`
+- **Affected stage / plugin / port:** Stage 3.14b step 3 · adapters/sandbox/gitworktree · SandboxProvider
+- **Root cause:** The bwrap envelope in `GitWorktreeSandboxAdapter._bwrap_argv` binds the main repo root `--ro-bind`, then binds only the sandbox worktree directory writable. It never overlays a writable bind for the per-slot metadata dir at `<repo_root>/.git/worktrees/<slot>/`. `git apply --index` (and every subsequent `git commit`/`git reset`) writes `index.lock`, `HEAD`, `ORIG_HEAD`, and `logs/` under that per-slot dir, which is inside the read-only `.git/` mount. First real execute after the endpoint went live crashed at patcher step 2.
+- **Fix applied:** Added an explicit `--bind <repo_root>/.git/worktrees/<slot> <repo_root>/.git/worktrees/<slot>` after the writable-worktree bind. Scope is a single slot — the parent `.git/worktrees/` and the rest of `.git/` remain read-only, so ADR-079 boundary invariants (no writes to main repo history, refs, hooks) hold.
+- **Files changed:** adapters/sandbox/gitworktree/adapter.py
+- **Related BUILD_LOG entry:** 2026-08-01 19:29 EDT (this commit)
