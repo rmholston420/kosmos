@@ -3528,3 +3528,13 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** Executor plugin will consume `ports.sandbox.SandboxProvider` (ADR-079), `ports.llm.LLMPort`, `ports.memory.MemoryPort`, `ports.approval.ApprovalResolverPort`, `ports.trace_feed.TraceFeedPort` in step 2. No new port; executor is a plugin.
 - **PORTING_LEDGER / ADR updated:** ADR-080 amended in-flight (see model swap above). No new vendored source (qwen3-coder is an operational Ollama artifact, not source code).
 - **Stop-condition status:** Scaffold + stubs in place; 21 tests green (policy freeze + AST guard + endpoint branches). Step 2 next: `loop.py` (TektosExecutorLoop), `patcher.py` (git apply + two-identity commit), `resource_guard.py` (ColossusResourceGuard). Step 3: UI + Playwright.
+
+## 2026-08-01 17:43 EDT — Stage 3.14b step 1.5: PORTING_LEDGER entry for Forge-OH loop_guard (PLANNED)
+
+- **Stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` · no port (executor-internal helper)
+- **What changed:** Added PLANNED entry to `PORTING_LEDGER.md` for `loop_guard.py` — Forge-OH `bff/services/loop_guard.py`, commit `9e7209d`, MIT-licensed (LICENSE added upstream 2026-08-01). Lands in Stage 3.14b step 2 as `plugins/tektos/executor/loop_guard.py`. Logging PLANNED now, before code vendoring, so the ledger acts as a pre-commitment record per Kosmos custom instructions (source URL, commit hash, SPDX license, and modification notes captured before first vendored line lands).
+- **Files touched:**
+  - `PORTING_LEDGER.md` (+11 lines — new "Stage 3.14b · Tektos Executor" section)
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** ledger appended; ADR-080 unchanged
+- **Stop-condition status:** unchanged. Step 2 is next.

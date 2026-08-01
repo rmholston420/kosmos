@@ -384,6 +384,18 @@ into Kosmos beyond the existing memory adapter usage.
 - **ADR:** ADR-079 (chose bubblewrap over `python-landlock`: bwrap gives mount-namespace read-only overlays, seccomp, network unshare, and pid-namespace in one binary; §156 subprocess-boundary inheritance satisfied by namespace construction; zero new pip deps)
 - **Logged:** 2026-08-01 17:22 EDT
 
+## Stage 3.14b · Tektos Executor (ADR-080)
+
+#### loop_guard — PLANNED (Forge-OH donor)
+- **Source:** [rmholston420/Forge-OH `bff/services/loop_guard.py`](https://github.com/rmholston420/Forge-OH/blob/9e7209d/bff/services/loop_guard.py)
+- **Commit / Version:** `9e7209d` (Forge-OH `main`, LICENSE added 2026-08-01)
+- **License:** MIT (SPDX: MIT)
+- **Kosmos location:** `plugins/tektos/executor/loop_guard.py` (planned — lands with Stage 3.14b step 2)
+- **Port(s):** none (executor-internal helper)
+- **Modifications:** planned — renamed to executor-namespaced, keep the `ActionFingerprint`/`LoopGuard` API (window+threshold sliding-window detector), drop nothing. Consumed by `TektosExecutorLoop.run_plan` between attempts to detect the LLM emitting the same failing diff shape twice; when `is_looping` fires, the loop escalates via `suggest_escalation` and skips attempt 2.
+- **ADR:** ADR-080
+- **Logged:** 2026-08-01 17:43 EDT
+
 ## Historical entries
 
 Full history through ADR-056 lives in `docs/adrs/README.md`. Notable
