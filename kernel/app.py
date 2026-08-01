@@ -1,4 +1,4 @@
-"""Kosmos kernel FastAPI app (Stage 6.5.7 — Gnosis retrieval surrogate mount).
+"""Kosmos kernel FastAPI app (Stage 6.5.8 — Tektos UI kernel mount).
 
 Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
 
@@ -93,6 +93,12 @@ class _BootRegistry:
         self.tektos: Any = None
         self.tektos_agent: Any = None
         self.tektos_agent_lock: Any = None
+        # Stage 6.5.8 (ADR-065): Tektos UI sub-app + its executor. Mounted at
+        # ``/tektos-ui`` independently of ``registry.tektos`` (Option B):
+        # the UI only needs ``registry.approval`` + ``registry.memory``, so it
+        # stays reachable when the agent is down for triage of stuck plans.
+        self.tektos_ui: Any = None
+        self.tektos_ui_executor: Any = None
         # Stage 6.5.7 (ADR-064): Gnosis seeder state. ``gnosis_corpus_counts``
         # maps corpus name -> number of facts successfully written this boot
         # (``0`` when the seeder didn't run or write-blocked every fact).
@@ -495,6 +501,40 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             registry.errors["tektos"] = f"{type(exc).__name__}: {exc}"
 
+    # --- Tektos UI sub-app mount (ADR-065, Stage 6.5.8) -----------------------
+    # Depends on ``registry.approval`` (ADR-062) + ``registry.memory``
+    # (ADR-063) only. Deliberately does NOT depend on ``registry.tektos``
+    # (the agent plugin) so the change-approval UI stays reachable during
+    # LLM/agent outages — a triage requirement per ADR-065 Option B.
+    if registry.approval is None or registry.memory is None:
+        missing = [
+            name
+            for name, val in (
+                ("approval", registry.approval),
+                ("memory", registry.memory),
+            )
+            if val is None
+        ]
+        registry.errors["tektos_ui"] = (
+            f"tektos_ui depends on {missing}; one or more failed to boot"
+        )
+    else:
+        try:
+            from plugins.tektos.ui.executor import NopExecutor
+            from plugins.tektos.ui.server import build_tektos_ui_app
+
+            _tektos_ui_executor = NopExecutor()
+            _tektos_ui_app = build_tektos_ui_app(
+                approval_resolver=registry.approval,
+                memory=registry.memory,
+                executor=_tektos_ui_executor,
+            )
+            registry.tektos_ui = _tektos_ui_app
+            registry.tektos_ui_executor = _tektos_ui_executor
+            app.mount("/tektos-ui", _tektos_ui_app)
+        except Exception as exc:  # noqa: BLE001
+            registry.errors["tektos_ui"] = f"{type(exc).__name__}: {exc}"
+
     yield
 
     # Shutdown — stop plugins/engines then close the event bus.
@@ -539,7 +579,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.7", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.8", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -577,6 +617,7 @@ def health() -> dict[str, Any]:
             "llm": registry.llm is not None,
             "memory": registry.memory is not None,
             "tektos": registry.tektos is not None,
+            "tektos_ui": registry.tektos_ui is not None,
         },
     }
 
