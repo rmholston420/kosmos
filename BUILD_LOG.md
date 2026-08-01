@@ -2703,3 +2703,22 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** EventBusPort consumer path — the tray joins the existing `EventsWSProvider` subscription set alongside `AlgedonicPill`, `AlgedonicBanner`, `AgentTracePanel`, `ApprovalsQueuePanel`.
 - **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F4 falls under Wave F "make placeholders real"; no new vendored components (Radix Dialog already vendored at Stage 1.5 Wave A).
 - **Stop-condition status:** F4 slice **met** on branch; awaiting Colossus verification.
+
+## 2026-08-01 09:34 EDT — Stage 1.5 Wave F · F5 · /kernel introspection page
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Kernel · FrontendContractPort read surface
+- **What changed:**
+  - New `ui/app/kernel/page.tsx` (288 lines): read-only browsable renderer of `/api/kernel/schema`. Three sections:
+    1. **Plugins** — one card per `PluginDescriptor` showing name, version, `kernel_compat`, `state_namespace`, routes (path + label list), panels (id → slot, priority), and a collapsible design-tokens map.
+    2. **All Panels** — aggregate `schema.panels[]` list sorted by priority: id · slot · priority · plugin_name.
+    3. **Design tokens** — aggregate `schema.design_tokens{}` map, alphabetically sorted, inside a `<details>` collapsible.
+  - Header shows `schema.generated_at`, `schema.title`, and plugin/panel counts.
+  - Wired into `Sidebar.tsx` as the sixth Job route (`/kernel`, label "Kernel", description "Plugin registry & schema introspection"). Follows the existing static export `trailingSlash: true` convention.
+  - Uses ADR-072 Tibetan design tokens (`--rgpa-border`, `--rgpa-surface-1`, `--rgpa-fg-{1,2,3}`, `--rgpa-mono`) with sensible dark-mode fallbacks.
+- **Files touched:**
+  - `ui/app/kernel/page.tsx` (new, 288 lines)
+  - `ui/components/Sidebar.tsx` (1 line: `/kernel` row added to `JOB_ROUTES`)
+  - `ui/tests/19-kernel-introspection-f5.spec.ts` (new, 3 tests: sidebar link routes to /kernel + shows title, page renders all three sections, first plugin surfaced with name/namespace/version testids and cross-checked against `GET /api/kernel/schema`)
+- **Ports / adapters affected:** FrontendContractPort read-only browse surface. No new endpoints; `renderKernelSchema()` already existed.
+- **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F5 falls under Wave F "make placeholders real".
+- **Stop-condition status:** F5 slice **met** on branch; awaiting Colossus verification. PR #19 F3+F4+F5+F6 slice complete; ready to open.
