@@ -10,16 +10,32 @@ cover shape, validation, filtering, error mapping, and idempotency.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Iterator
+import os
 
-import pytest
-from fastapi.testclient import TestClient
+# --------------------------------------------------------------------------
+# Env preamble — force safe in-memory boot regardless of the shell env.
+#
+# ``kernel.app`` builds its FastAPI app at import time. If the developer
+# shell still has ``KOSMOS_MEMORY_BACKEND=dozerdb`` (or
+# ``KOSMOS_GNOSIS_SEED=1``) exported from a live smoke session, importing
+# this test module would try to connect to real DozerDB + Ollama in the
+# lifespan and either hang or emit misleading errors before the fake
+# ``MemoryPort`` swap can take effect. Pin the boot env to in-memory /
+# no-seed for the whole test module.
+# --------------------------------------------------------------------------
+os.environ["KOSMOS_MEMORY_BACKEND"] = "in_memory"
+os.environ["KOSMOS_GNOSIS_SEED"] = "0"
 
-from kernel import app as kernel_app_module
-from kernel.app import GNOSIS_CORPORA_MANIFEST, app
-from ports.memory import MemoryEventId, MemoryHit, MemoryWriteBlocked
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+from typing import Any, Iterator  # noqa: E402
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from kernel import app as kernel_app_module  # noqa: E402
+from kernel.app import GNOSIS_CORPORA_MANIFEST, app  # noqa: E402
+from ports.memory import MemoryEventId, MemoryHit, MemoryWriteBlocked  # noqa: E402
 
 
 # --------------------------------------------------------------------------

@@ -468,3 +468,13 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:**
   - `kernel/app.py` (added `import os` at module top)
 - **Related BUILD_LOG entry:** 2026-08-01 03:05 EDT
+
+## 2026-08-01 03:32 EDT — Stage 6.5.7 pytest hang: TestClient lifespan boots real DozerDB + Ollama
+
+- **Symptom:** `pytest tests/kernel/test_stage_6_5_7_gnosis_retrieval.py -v` hangs indefinitely after `collected 21 items` (>20 min observed on Colossus, GPU visibly active). No test rows print. No traceback. Kill required.
+- **Affected stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · MemoryPort test fixtures
+- **Root cause:** `kernel.app` builds the FastAPI application at import time (module-level `app = create_app()`). The Stage 6.5.7 test file imports that module-level singleton (`from kernel.app import ..., app`) and wraps it in `TestClient(app)`. `TestClient`'s context-manager form runs the FastAPI lifespan, which executes the full boot sequence — including `_boot_memory` (respecting `KOSMOS_MEMORY_BACKEND`) and the new Gnosis seeder (respecting `KOSMOS_GNOSIS_SEED`). If the developer shell still has `KOSMOS_MEMORY_BACKEND=dozerdb` + `KOSMOS_GNOSIS_SEED=1` exported from a prior live-smoke session, the lifespan tries to open real Bolt sessions to DozerDB and real Ollama HTTP calls for embeddings, then seed ~40 corpus facts through the real adapter. The fake `_FakeMemoryPort` swap in the `fake_memory` fixture only runs **after** the lifespan finishes, so it cannot short-circuit the real boot. Net result: the process blocks in the lifespan retrying real backends before any test body ever runs.
+- **Fix applied:** Added an env preamble at the top of `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` — pins `KOSMOS_MEMORY_BACKEND=in_memory` and `KOSMOS_GNOSIS_SEED=0` **before** the `from kernel.app import ...` statement. The `# noqa: E402` markers cover the intentional post-env imports. Deterministic in-memory boot regardless of shell state; module-level `app` singleton preserved.
+- **Files changed:**
+  - `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (env preamble + noqa markers)
+- **Related BUILD_LOG entry:** 2026-08-01 03:32 EDT

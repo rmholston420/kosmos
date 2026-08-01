@@ -2122,3 +2122,15 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest.
+
+## 2026-08-01 03:32 EDT — Stage 6.5.7 · Test env preamble to prevent shell-env lifespan hang
+
+- **Stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · MemoryPort test fixtures
+- **What changed:** Added an env preamble at the top of `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (before the `from kernel.app import ...` statement) that pins `KOSMOS_MEMORY_BACKEND=in_memory` and `KOSMOS_GNOSIS_SEED=0`. Prevents the module-level `app = create_app()` from booting against real DozerDB + Ollama when the developer shell still exports live-smoke env vars, which caused the pytest run to hang indefinitely on Colossus. Uses `# noqa: E402` for the intentionally-late imports.
+- **Files touched:**
+  - `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (env preamble)
+  - `DEBUG_LOG.md` (new entry for the hang symptom)
+  - `SESSION_HANDOFF.md` (overwritten with retest posture)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest.
