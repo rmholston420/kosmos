@@ -26,6 +26,8 @@ Read path:
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -38,6 +40,8 @@ from ports.memory import (
     MemoryHit,
     MemoryPort,
     MemoryWriteBlocked,
+    QuarantinedEntry,
+    QuarantinedPage,
     validate_zero_trust_write,
 )
 from ports.vector import VectorPort
@@ -490,6 +494,192 @@ class DozerDbMemoryAdapter:
         # Quarantined writes are NOT indexed in Graphiti — they are not
         # semantic memory until reviewed and promoted (spec §115).
         return MemoryEventId(id=event_id, written_at=written_at)
+
+    # ── quarantine review (ADR-076 D4) ──────────────────────────────────
+    #
+    # Uses ``query_cypher("label:Quarantined")`` — the minimum common
+    # subset both ``InMemoryGraphBackend`` and ``DozerDbGraphBackend``
+    # honour. All since/limit/cursor filtering happens in Python because
+    # the quarantine lane is a human-review queue: volume is bounded to
+    # what a reviewer can process, not millions of rows.
+
+    @staticmethod
+    def _encode_cursor(quarantined_at: str, event_id: str) -> str:
+        raw = json.dumps({"q": quarantined_at, "i": event_id}, sort_keys=True)
+        return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+    @staticmethod
+    def _decode_cursor(cursor: str) -> tuple[str, str]:
+        try:
+            raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+            obj = json.loads(raw)
+            return str(obj["q"]), str(obj["i"])
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"invalid quarantine cursor: {exc}") from exc
+
+    async def list_quarantined(
+        self,
+        *,
+        since: str | None = None,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> QuarantinedPage:
+        if not isinstance(limit, int) or limit < 1 or limit > 100:
+            raise ValueError(
+                f"list_quarantined limit must be int in [1, 100], got {limit!r}"
+            )
+
+        rows = await self._graph.query_cypher("label:Quarantined")
+
+        # ADR-076 D4 compensating-delete: filter :Quarantined rows whose id
+        # already exists as a promoted :MemoryEvent (write landed, delete
+        # pending). Prevents duplicate display of promoted-but-not-swept rows.
+        events = await self._graph.query_cypher("label:MemoryEvent")
+        promoted_original_ids: set[str] = set()
+        for e in events:
+            attrs = e.get("attributes") if isinstance(e, dict) else None
+            if isinstance(attrs, dict):
+                oid = attrs.get("original_event_id")
+                if isinstance(oid, str) and oid:
+                    promoted_original_ids.add(oid)
+
+        entries: list[tuple[str, str, QuarantinedEntry]] = []
+        for r in rows:
+            qid = str(r.get("id") or "")
+            if not qid or qid in promoted_original_ids:
+                continue
+            qat = str(r.get("written_at") or "")
+            if since is not None and qat < since:
+                continue
+            try:
+                qat_dt = datetime.fromisoformat(qat)
+            except ValueError:
+                continue
+            payload_raw = r.get("quarantined_payload")
+            if not isinstance(payload_raw, dict):
+                payload_raw = {}
+            conf_raw = r.get("confidence")
+            try:
+                conf = float(conf_raw) if conf_raw is not None else 0.0
+            except (TypeError, ValueError):
+                conf = 0.0
+            entries.append(
+                (
+                    qat,
+                    qid,
+                    QuarantinedEntry(
+                        event_id=qid,
+                        payload=dict(payload_raw),
+                        reason=str(r.get("reason") or ""),
+                        provenance=str(r.get("provenance") or ""),
+                        confidence=conf,
+                        quarantined_at=qat_dt,
+                    ),
+                )
+            )
+
+        # Newest-first; ties broken by id lex.
+        entries.sort(key=lambda t: (t[0], t[1]), reverse=True)
+
+        if cursor is not None:
+            cq, ci = self._decode_cursor(cursor)
+            entries = [t for t in entries if (t[0], t[1]) < (cq, ci)]
+
+        page = entries[:limit]
+        next_cursor: str | None = None
+        if len(entries) > limit and page:
+            last_q, last_i, _ = page[-1]
+            next_cursor = self._encode_cursor(last_q, last_i)
+
+        return QuarantinedPage(
+            entries=[e for _, _, e in page],
+            next_cursor=next_cursor,
+        )
+
+    async def _load_quarantined_row(self, event_id: str) -> dict[str, Any]:
+        rows = await self._graph.query_cypher("label:Quarantined")
+        for r in rows:
+            if str(r.get("id") or "") == event_id:
+                return r
+        raise ValueError(f"quarantine entry not found: event_id={event_id!r}")
+
+    async def approve_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> MemoryEventId:
+        if not isinstance(reviewer, str) or not reviewer:
+            raise ValueError("approve_quarantined requires non-empty reviewer")
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("approve_quarantined requires non-empty reason")
+
+        eid = event_id.id if isinstance(event_id, MemoryEventId) else str(event_id)
+        row = await self._load_quarantined_row(eid)
+
+        payload = row.get("quarantined_payload")
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"quarantine entry {eid!r} has malformed payload; cannot promote"
+            )
+
+        original_conf_raw = row.get("confidence")
+        try:
+            original_conf = float(original_conf_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"quarantine entry {eid!r} has malformed confidence; cannot promote"
+            ) from exc
+
+        subject = str(payload.get("subject", eid))
+        predicate = str(payload.get("predicate", "quarantine.promoted"))
+        obj = str(payload.get("object", json.dumps(payload, sort_keys=True)))
+
+        attributes = dict(payload.get("attributes") or {})
+        attributes["promoted_from_quarantine"] = True
+        attributes["promotion_reviewer"] = reviewer
+        attributes["promotion_reason"] = reason
+        attributes["original_event_id"] = eid
+
+        promoted = await self.write_event(
+            subject,
+            predicate,
+            obj,
+            provenance=f"quarantine.approved:{reviewer}",
+            confidence=original_conf,
+            source_citation=payload.get("source_citation"),
+            pii_tier=str(payload.get("pii_tier", "Public")),
+            attributes=attributes,
+        )
+
+        try:
+            await self._graph.delete_node(eid)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "quarantine approve: promotion succeeded but delete failed; "
+                "list_quarantined will filter via tombstone. event_id=%r err=%s",
+                eid,
+                exc,
+            )
+
+        return promoted
+
+    async def reject_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> None:
+        if not isinstance(reviewer, str) or not reviewer:
+            raise ValueError("reject_quarantined requires non-empty reviewer")
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("reject_quarantined requires non-empty reason")
+
+        eid = event_id.id if isinstance(event_id, MemoryEventId) else str(event_id)
+        await self._load_quarantined_row(eid)
+        await self._graph.delete_node(eid)
 
     # ── reads ───────────────────────────────────────────────────────────
 

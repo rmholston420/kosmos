@@ -2198,6 +2198,180 @@ async def memory_search_semantic(
 
 
 # ---------------------------------------------------------------------------
+# Kernel identity (ADR-076 D4) — reviewer identity source for the quarantine
+# UI. Kosmos is single-user local-first; the operator is read from
+# ``KOSMOS_OPERATOR`` (default: ``rmholston420``). Read-only, never 503.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/kernel/identity")
+async def kernel_identity() -> dict[str, Any]:
+    """Return the current signed-in operator (ADR-076 D4).
+
+    Kosmos is a single-user system; the operator is set by ``KOSMOS_OPERATOR``
+    at kernel boot (defaults to ``rmholston420``, matching the git identity
+    used across the workstation).
+    """
+    import os as _os
+
+    return {"reviewer": _os.environ.get("KOSMOS_OPERATOR", "rmholston420")}
+
+
+# ---------------------------------------------------------------------------
+# Memory quarantine review (ADR-076 D4) — list / approve / reject the
+# :Quarantined lane. Degrades to 200 ``{"entries": [], "degraded": true}``
+# when ``registry.memory`` is None, matching the ADR-075 D2 pattern.
+# ---------------------------------------------------------------------------
+
+
+class _QuarantineReviewBody(BaseModel):
+    """Request body for approve/reject routes (ADR-076 D4)."""
+
+    reviewer: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+
+
+@app.get("/api/memory/quarantined")
+async def memory_quarantined_list(
+    since: str | None = None,
+    limit: int = 100,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """List :Quarantined lane entries awaiting review (ADR-076 D4).
+
+    Query params: ``since`` (ISO-8601), ``limit`` (1-100), ``cursor`` (opaque).
+    Degrades to 200 with empty ``entries`` when memory is not booted.
+    """
+    if not isinstance(limit, int) or limit < 1 or limit > 100:
+        raise HTTPException(422, detail="limit must be int in [1, 100]")
+
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        return {
+            "entries": [],
+            "next_cursor": None,
+            "degraded": True,
+            "reason": registry.errors.get("memory") or "memory unavailable",
+        }
+
+    try:
+        page = await memory.list_quarantined(
+            since=since, limit=limit, cursor=cursor
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {
+        "entries": [
+            {
+                "event_id": e.event_id,
+                "payload": e.payload,
+                "reason": e.reason,
+                "provenance": e.provenance,
+                "confidence": e.confidence,
+                "quarantined_at": e.quarantined_at.isoformat(),
+            }
+            for e in page.entries
+        ],
+        "next_cursor": page.next_cursor,
+        "degraded": False,
+    }
+
+
+@app.post("/api/memory/quarantined/{event_id}/approve")
+async def memory_quarantined_approve(
+    event_id: str,
+    body: _QuarantineReviewBody,
+) -> dict[str, Any]:
+    """Promote a :Quarantined entry into durable memory (ADR-076 D4).
+
+    Re-runs the original payload through ``write_event`` under
+    ``provenance=quarantine.approved:<reviewer>`` with the original
+    confidence preserved, then deletes the :Quarantined node.
+    """
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        raise HTTPException(503, detail="memory unavailable")
+
+    from ports.memory import MemoryEventId
+    from datetime import datetime as _dt, timezone as _tz
+
+    handle = MemoryEventId(id=event_id, written_at=_dt.now(_tz.utc))
+    try:
+        promoted = await memory.approve_quarantined(
+            handle, reviewer=body.reviewer, reason=body.reason
+        )
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    await _publish_kernel_event(
+        "memory.quarantine.approved",
+        {
+            "original_event_id": event_id,
+            "promoted_event_id": promoted.id,
+            "reviewer": body.reviewer,
+            "reason": body.reason,
+        },
+    )
+
+    return {
+        "status": "approved",
+        "original_event_id": event_id,
+        "promoted_event_id": promoted.id,
+        "promoted_at": promoted.written_at.isoformat(),
+    }
+
+
+@app.post("/api/memory/quarantined/{event_id}/reject")
+async def memory_quarantined_reject(
+    event_id: str,
+    body: _QuarantineReviewBody,
+) -> dict[str, Any]:
+    """Reject a :Quarantined entry (ADR-076 D4).
+
+    Deletes the :Quarantined node and publishes
+    ``memory.quarantine.rejected`` for audit.
+    """
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        raise HTTPException(503, detail="memory unavailable")
+
+    from ports.memory import MemoryEventId
+    from datetime import datetime as _dt, timezone as _tz
+
+    handle = MemoryEventId(id=event_id, written_at=_dt.now(_tz.utc))
+    try:
+        await memory.reject_quarantined(
+            handle, reviewer=body.reviewer, reason=body.reason
+        )
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    await _publish_kernel_event(
+        "memory.quarantine.rejected",
+        {
+            "event_id": event_id,
+            "reviewer": body.reviewer,
+            "reason": body.reason,
+        },
+    )
+
+    return {"status": "rejected", "event_id": event_id}
+
+
+# ---------------------------------------------------------------------------
 # Ollama status (ADR-068 D1) — passthrough to Ollama /api/ps for the top-bar
 # model-swap indicator. Hardcoded ``vram_capacity_bytes`` reflects Colossus's
 # RTX 5090 (32 GiB). Never fabricates a shape when Ollama is unreachable —

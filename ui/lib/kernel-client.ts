@@ -192,7 +192,66 @@ export const kernelClient = {
   // ADR-075 D2 Stage 1.6 Phase 2 — semantic memory search.
   memorySearchSemantic: (body: MemorySearchSemanticBody) =>
     postJSON<MemorySearchSemanticResult>("/api/memory/search-semantic", body),
+
+  // ADR-076 D4 Stage 1.6 Phase 3 — quarantine review surface.
+  getKernelIdentity: () =>
+    getJSON<KernelIdentity>("/api/kernel/identity"),
+  listQuarantined: (opts?: {
+    since?: string;
+    limit?: number;
+    cursor?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    if (opts?.since) qs.set("since", opts.since);
+    if (opts?.limit) qs.set("limit", String(opts.limit));
+    if (opts?.cursor) qs.set("cursor", opts.cursor);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return getJSON<QuarantinedListResult>(`/api/memory/quarantined${suffix}`);
+  },
+  approveQuarantined: (eventId: string, body: QuarantineReviewBody) =>
+    postJSON<QuarantineApproveResult>(
+      `/api/memory/quarantined/${encodeURIComponent(eventId)}/approve`,
+      body,
+    ),
+  rejectQuarantined: (eventId: string, body: QuarantineReviewBody) =>
+    postJSON<QuarantineRejectResult>(
+      `/api/memory/quarantined/${encodeURIComponent(eventId)}/reject`,
+      body,
+    ),
 };
+
+// --- ADR-076 D4: /api/kernel/identity + /api/memory/quarantined/* ---
+export interface KernelIdentity {
+  reviewer: string;
+}
+export interface QuarantinedEntry {
+  event_id: string;
+  payload: Record<string, unknown>;
+  reason: string;
+  provenance: string;
+  confidence: number;
+  quarantined_at: string;
+}
+export interface QuarantinedListResult {
+  entries: QuarantinedEntry[];
+  next_cursor: string | null;
+  degraded: boolean;
+  reason?: string;
+}
+export interface QuarantineReviewBody {
+  reviewer: string;
+  reason: string;
+}
+export interface QuarantineApproveResult {
+  status: "approved";
+  original_event_id: string;
+  promoted_event_id: string;
+  promoted_at: string;
+}
+export interface QuarantineRejectResult {
+  status: "rejected";
+  event_id: string;
+}
 
 // --- ADR-070 D1: /api/gnosis/graph/* ---
 export type GraphNodeKind = "subject" | "object" | "zetesis_report";

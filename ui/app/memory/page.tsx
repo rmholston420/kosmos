@@ -20,6 +20,9 @@ export default function MemoryPage() {
         <Link data-testid="memory-search-link" href="/memory/search/">
           Semantic search →
         </Link>
+        <Link data-testid="memory-quarantine-link" href="/memory/quarantine/">
+          Quarantine review →
+        </Link>
       </nav>
       <JobPage
         jobId="memory"

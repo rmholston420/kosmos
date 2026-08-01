@@ -3285,3 +3285,39 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** — (no code change; verification of 273e79f).
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** **D3 met**. D1 + Qdrant + D2 + D3 all green. D4–D7 remain (plus optional D6.5 pending user decision). Session recommended for fork at commit 273e79f.
+
+## 2026-08-01 14:45 EDT — ADR-076 D4 quarantine review shipped
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · MemoryPort quarantine lane · kernel routes · UI memory surface
+- **What changed:**
+  - `ports/memory.py`: added `QuarantinedEntry`/`QuarantinedPage` dataclasses + three `MemoryPort` methods (`list_quarantined`, `approve_quarantined`, `reject_quarantined`).
+  - `adapters/memory/dozerdb/adapter.py`: implemented the three methods on `DozerDbMemoryAdapter`. Cursor is base64 URL-safe JSON `{q, i}`. Newest-first sort, ties broken by id lex. Compensating-delete tombstone filter (list_quarantined suppresses rows whose original id already exists as a promoted `:MemoryEvent` via `attributes.original_event_id`). `approve_quarantined` re-runs the payload through `write_event` under `provenance=quarantine.approved:<reviewer>` preserving original confidence, then best-effort deletes the `:Quarantined` node (warning-logs on delete failure).
+  - `kernel/app.py`: added `GET /api/kernel/identity` (single-user reviewer identity from `KOSMOS_OPERATOR` env, default `rmholston420`) and three quarantine routes `GET /api/memory/quarantined`, `POST /api/memory/quarantined/{event_id}/approve`, `POST /api/memory/quarantined/{event_id}/reject`. Degradation matches ADR-075 D2 (200 with `{entries: [], degraded: true}`). Approve/reject publish `memory.quarantine.approved` / `memory.quarantine.rejected` kernel events via `_publish_kernel_event`.
+  - `ui/lib/kernel-client.ts`: added `getKernelIdentity`, `listQuarantined`, `approveQuarantined`, `rejectQuarantined` + type block.
+  - `ui/app/memory/page.tsx`: new nav link to `/memory/quarantine/`.
+  - `ui/app/memory/quarantine/page.tsx`: new page. Reviewer chip loaded from `/api/kernel/identity`. Per-row reason input required to enable approve/reject. Loading / error / degraded / empty / list terminal states.
+  - `ui/tests/24-memory-quarantine-review.spec.ts`: 4 Playwright smokes.
+  - `adapters/memory/dozerdb/test_contract.py`: 8 new fast-tier tests (list, since filter, cursor pagination, approve promotes + removes, approve validation, reject deletes, reject-missing raises, bad-limit).
+  - `tests/integration/test_quarantine_live.py`: 3 live-tier tests gated on `KOSMOS_STAGE_16_LIVE=1` covering identity, list shape, and reject 404-on-missing.
+- **Files touched:**
+  - `ports/memory.py`
+  - `adapters/memory/dozerdb/adapter.py`
+  - `adapters/memory/dozerdb/test_contract.py`
+  - `kernel/app.py`
+  - `ui/lib/kernel-client.ts`
+  - `ui/app/memory/page.tsx`
+  - `ui/app/memory/quarantine/page.tsx` (new)
+  - `ui/tests/24-memory-quarantine-review.spec.ts` (new)
+  - `tests/integration/test_quarantine_live.py` (new)
+  - `BUILD_LOG.md`
+  - `SESSION_HANDOFF.md`
+- **Ports / adapters affected:** MemoryPort (+3 methods), DozerDbMemoryAdapter (+3 methods + 2 static helpers + 1 private loader)
+- **PORTING_LEDGER / ADR updated:** none (in-tree implementation, no vendored code)
+- **Stop-condition status:** D4 complete pending user verification on Colossus. Fast-tier + live-tier + Playwright test files added; sandbox lacks `pytest-asyncio` so contract tests were not executed here — direct `asyncio.run` smoke of `list_quarantined`/`approve_quarantined`/`reject_quarantined` on `InMemoryGraphBackend` passed. On Colossus run: `pytest adapters/memory/dozerdb/test_contract.py -k quarantined -q` and `KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_quarantine_live.py -q` and `cd ui && npx playwright test 24-memory-quarantine-review`.
+
+## Decisions logged (ADR-076 D4)
+
+- **Reviewer identity source:** new `GET /api/kernel/identity` route (Kosmos is single-user; env `KOSMOS_OPERATOR`, default `rmholston420`). Not a full ADR — inline decision.
+- **Event publish location:** kernel route publishes `memory.quarantine.rejected` / `memory.quarantine.approved`; adapter stays event-bus-agnostic (no DI churn).
+- **Atomicity:** compensating delete — approve writes via `write_event` first, then best-effort deletes the `:Quarantined` node. `list_quarantined` filters rows whose id already exists in `:MemoryEvent.attributes.original_event_id` (tombstone-safe).
+- **Cursor:** base64 URL-safe JSON `{q: quarantined_at, i: event_id}`; server-side Python sort + slice (quarantine lane is human-review-bounded, not millions of rows).

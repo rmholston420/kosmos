@@ -1,40 +1,44 @@
-# Kosmos Session Handoff — 2026-08-01 14:31 EDT
+# Kosmos Session Handoff — 2026-08-01 14:45 EDT
 
 ## Current build-sequencing position
 - **Stage / phase:** Stage 1.6 Phase 3 (ADR-076)
-- **Plugin / kernel component:** MemoryPort · Zetesis fan-out · UI memory surfaces
+- **Plugin / kernel component:** MemoryPort · UI memory surfaces
 - **Branch:** `stage-1-6-p3-code` (rolling, PR #34 OPEN)
-- **Latest commit:** `273e79f` (D3 fan-out reachability fix — live-tier green)
+- **Latest commit:** pending — D4 changes staged locally in `/home/user/workspace/kosmos`, ready to `git push`.
 
 ## Completed this session
-- **D1** — `tests/integration/test_semantic_hits_live.py` (3 tests, live tier). Green on Colossus.
-- **Qdrant deployment** — Kosmos-owned Qdrant on 127.0.0.1:6339 / 6340 via `ops/compose/memory.yml`. Kernel env `KOSMOS_QDRANT_URL=http://127.0.0.1:6339` in `ops/systemd/kosmos-kernel.env`. Logged in PORTING_LEDGER.md.
-- **D2** — UI memory search polish (`ui/app/memory/search/page.tsx`): highlighting, corpus `<select>` from `/api/gnosis/corpora`, empty state, error state, facet counts. 13/13 Playwright green.
-- **D3** — Kernel fan-out amendment at `kernel/app.py:604` stamps `attributes["corpus_name"]="zetesis-reports"` + attributes `trial_id`. Zetesis plugin completed-event payload amended (plugin.py:614+) to include `answer` and `report_id` — restores the fan-out from unreachable dead code (see DEBUG_LOG 2026-08-01 14:20 EDT). `tests/integration/test_zetesis_semantic_roundtrip_live.py`: 2 pytest live-tier tests behind `KOSMOS_STAGE_16_LIVE=1`. Live-tier green on Colossus (2 passed in 402.90s).
+- **D4 — Quarantine port + routes + UI (ADR-076 §D4). See BUILD_LOG.md 2026-08-01 14:45 EDT entry for detail.**
+  - `ports/memory.py`: `QuarantinedEntry`, `QuarantinedPage`, `list_quarantined`, `approve_quarantined`, `reject_quarantined` on `MemoryPort`.
+  - `adapters/memory/dozerdb/adapter.py`: three methods + base64 cursor helpers + tombstone-filtered list.
+  - `kernel/app.py`: `GET /api/kernel/identity` + `GET /api/memory/quarantined` + `POST /api/memory/quarantined/{id}/approve` + `POST /api/memory/quarantined/{id}/reject`. Publishes `memory.quarantine.approved` / `memory.quarantine.rejected`. Degrades to 200 `{entries: [], degraded: true}` when memory port not booted.
+  - `ui/lib/kernel-client.ts` + `ui/app/memory/quarantine/page.tsx` + `ui/app/memory/page.tsx` nav link.
+  - Fast-tier: 8 new pytest cases in `adapters/memory/dozerdb/test_contract.py`.
+  - Live-tier: `tests/integration/test_quarantine_live.py` (3 tests, `KOSMOS_STAGE_16_LIVE=1`).
+  - Playwright: `ui/tests/24-memory-quarantine-review.spec.ts` (4 smokes).
 
-## Two-lane Zetesis memory writes (locked in as of D3)
-Every Zetesis research call now produces TWO memory events by design (ADR-075 D3 intent, restored by ADR-076 D3):
-1. **Plugin direct write** (plugin.py:580): `provenance="zetesis_research"`, `confidence=0.75`, no `corpus_name` → lands in `kosmos-memory-default`. Zero-trust lane.
-2. **Kernel fan-out write** (kernel/app.py:612): `provenance="zetesis.event_bus"`, `confidence=1.0`, `attributes["corpus_name"]="zetesis-reports"` → lands in `kosmos-memory-zetesis-reports`. Kernel-vouched lane.
-
-Corpus isolation is verified per-run via `trial_id` fingerprinting.
+## Two-lane Zetesis memory writes (unchanged from D3)
+1. **Plugin direct** (plugin.py:580): `provenance="zetesis_research"`, `confidence=0.75`, no `corpus_name` → default corpus.
+2. **Kernel fan-out** (kernel/app.py:612): `provenance="zetesis.event_bus"`, `confidence=1.0`, `corpus_name="zetesis-reports"`.
 
 ## Remaining before current Definition of Done
-- **D4** — Quarantine port + routes + UI (ADR-076 lines 140+)
-- **D5** — Provenance route + UI
-- **D6** — AMG status route + pill
-- **D6.5 (proposed, awaiting user)** — Phrouros anomalies table on /observe (replace GovernancePanel placeholder). Option A from 2026-08-01 14:12 EDT proposal.
+- **D5** — Provenance route + UI (ADR-076 §D5)
+- **D6** — AMG status route + pill (ADR-076 §D6)
+- **D6.5 (proposed, awaiting user)** — Phrouros anomalies table on /observe
 - **D7** — Kernel version bump + Qdrant image 1.12 → 1.15+ + PORT_CONTRACTS audit
 
 ## Open questions / awaiting user answer
-- **Fork the session?** YES (recommended, this session is heavily compacted). Fork point clean at commit `273e79f`.
-- **Add D6.5 (Phrouros anomalies UI) to Phase 3?** Default recommendation: Option A (minimal anomalies table + WS live-invalidate on `phrouros.anomaly.detected`).
+- **Post-D4 next work item (per user 2026-08-01):** 3.12 real executor vs 6.5.9 praxis governance mount vs other candidate (D6.5 Phrouros anomalies). Decision matrix to be presented at session end.
 
-## Phrouros surface note (context for next session)
-- **Backend built + live** on Colossus. `GET /api/phrouros/anomalies` returns AnomalyRecord list. `phrouros.anomaly.detected` event topic published on WS.
-- **Frontend is placeholder-only** (`ui/components/panels/GovernancePanel.tsx:108-109`). AgentTracePanel listens for the event but only invalidates trace queries, doesn't render anomalies. No table, no live toast, no filter, no kind badges.
-- 5 detectors registered: `loop`, `unauthorized_tool` real; `model_swap_slo`, `stub_degradation`, `bus_factor_1` skeleton for Stage 3+.
+## Verification commands (Colossus)
+```
+cd /home/rmholston420/dev/kosmos
+git fetch origin stage-1-6-p3-code && git checkout stage-1-6-p3-code && git pull
+pytest adapters/memory/dozerdb/test_contract.py -k quarantined -q
+KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_quarantine_live.py -q
+cd ui && npm run build && npx playwright test 24-memory-quarantine-review
+```
 
 ## Exact next action
-1. User decides: fork now (recommended) + Option A for D6.5.
-2. On resume (this or next session), start **D4 — Quarantine port + routes + UI**. Read `docs/adrs/ADR-076-stage-1-6-phase-3.md` §D4 first, then inspect `ports/memory.py` for the closest existing quarantine analog before writing the new port.
+1. Push D4 commit to origin `stage-1-6-p3-code`.
+2. Run verification block above on Colossus.
+3. Decide next work item (Praxis governance mount 6.5.9 vs Tektos 3.12 real executor vs D6.5 Phrouros anomalies UI).

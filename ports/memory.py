@@ -29,6 +29,8 @@ __all__ = [
     "MemoryPort",
     "MemoryWriteBlocked",
     "MEMORY_REQUIRED_FIELDS",
+    "QuarantinedEntry",
+    "QuarantinedPage",
     "validate_zero_trust_write",
 ]
 
@@ -60,6 +62,36 @@ class MemoryHit:
     payload: dict[str, Any]
     score: float | None = None
     as_of: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantinedEntry:
+    """One row of a :Quarantined lane listing (ADR-076 D4).
+
+    Immutable snapshot of a quarantined write awaiting Tier-1/Tier-2 review.
+    ``event_id`` is the id assigned by ``quarantine_write``. ``payload`` is
+    the original untrusted payload verbatim. ``reason`` is the AMG (or caller-
+    supplied) rationale for routing to the quarantine lane.
+    """
+
+    event_id: str
+    payload: dict[str, Any]
+    reason: str
+    provenance: str
+    confidence: float
+    quarantined_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantinedPage:
+    """Paginated result of ``MemoryPort.list_quarantined`` (ADR-076 D4).
+
+    ``next_cursor`` is opaque to callers — the adapter that produced it is
+    the only component that can decode it. ``None`` means no more pages.
+    """
+
+    entries: list[QuarantinedEntry]
+    next_cursor: str | None
 
 
 class MemoryWriteBlocked(RuntimeError):
@@ -192,6 +224,65 @@ class MemoryPort(Protocol):
 
         Raises:
             ValueError: port-level zero-trust guard failed.
+        """
+        ...
+
+    async def list_quarantined(
+        self,
+        *,
+        since: str | None = None,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> QuarantinedPage:
+        """List :Quarantined lane entries awaiting review (ADR-076 D4).
+
+        ``since`` filters entries with ``quarantined_at >= since`` (ISO-8601).
+        ``limit`` caps returned rows (1-100). ``cursor`` is an opaque token
+        returned by a previous call; pass it back to fetch the next page.
+
+        Entries already promoted via ``approve_quarantined`` MUST be filtered
+        out even if the compensating delete has not landed yet — the adapter
+        is responsible for enforcing this invariant (ADR-076 D4 compensating-
+        delete atomicity model).
+        """
+        ...
+
+    async def approve_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> MemoryEventId:
+        """Promote a quarantined entry into durable memory (ADR-076 D4).
+
+        Re-runs the original payload through ``write_event`` with
+        ``provenance="quarantine.approved:<reviewer>"`` and the original
+        write's confidence preserved. On write success, deletes the
+        ``:Quarantined`` node. Returns the newly-minted ``MemoryEventId``
+        of the promoted event.
+
+        Raises:
+            ValueError: port-level zero-trust guard failed or unknown event_id.
+            MemoryWriteBlocked: AMG returned `block` during promotion.
+        """
+        ...
+
+    async def reject_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> None:
+        """Reject a quarantined entry (ADR-076 D4).
+
+        Deletes the ``:Quarantined`` node. The audit event
+        (``memory.quarantine.rejected``) is published by the kernel route,
+        not the adapter, to keep adapter DI narrow (ADR-076 D4 decision).
+
+        Raises:
+            ValueError: unknown event_id.
         """
         ...
 

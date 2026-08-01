@@ -440,3 +440,120 @@ async def test_close_swallows_backend_close_errors() -> None:
     )
     await adapter.close()  # must not raise
     assert any("boom" in e for e in adapter._state.close_errors_swallowed)  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# ADR-076 D4 — quarantine review (list / approve / reject).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_returns_written_row() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    await adapter.write_event("s", "p", "o", provenance="test", confidence=0.5)
+    page = await adapter.list_quarantined()
+    assert len(page.entries) == 1
+    assert page.next_cursor is None
+    e = page.entries[0]
+    assert e.provenance == "test"
+    assert e.confidence == 0.5
+    assert e.payload["subject"] == "s"
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_rejects_bad_limit() -> None:
+    adapter = _fresh_adapter()
+    with pytest.raises(ValueError):
+        await adapter.list_quarantined(limit=0)
+    with pytest.raises(ValueError):
+        await adapter.list_quarantined(limit=101)
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_since_filter() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    await adapter.write_event("s", "p", "o", provenance="p", confidence=0.5)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    page = await adapter.list_quarantined(since=future)
+    assert page.entries == []
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_cursor_pagination() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    for i in range(3):
+        await adapter.write_event(
+            f"s{i}", "p", "o", provenance="test", confidence=0.5
+        )
+    page1 = await adapter.list_quarantined(limit=2)
+    assert len(page1.entries) == 2
+    assert page1.next_cursor is not None
+    page2 = await adapter.list_quarantined(limit=2, cursor=page1.next_cursor)
+    assert len(page2.entries) == 1
+    # No overlap between pages.
+    ids1 = {e.event_id for e in page1.entries}
+    ids2 = {e.event_id for e in page2.entries}
+    assert ids1.isdisjoint(ids2)
+
+
+@pytest.mark.asyncio
+async def test_approve_quarantined_promotes_and_removes_row() -> None:
+    graph = InMemoryGraphBackend()
+    quar = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    written = await quar.write_event(
+        "subj", "pred", "obj", provenance="orig", confidence=0.7
+    )
+    promoter = _fresh_adapter(graph=graph, amg=NoOpAmgPolicy())
+    promoted = await promoter.approve_quarantined(
+        written, reviewer="rmholston420", reason="verified"
+    )
+    assert promoted.id != written.id
+    # Quarantined row is gone.
+    page = await promoter.list_quarantined()
+    assert page.entries == []
+    # Promoted row lives in :MemoryEvent.
+    events = await graph.query_cypher("label:MemoryEvent")
+    assert any(e.get("id") == promoted.id for e in events)
+
+
+@pytest.mark.asyncio
+async def test_approve_quarantined_rejects_empty_reviewer_or_reason() -> None:
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    written = await adapter.write_event(
+        "s", "p", "o", provenance="p", confidence=0.5
+    )
+    with pytest.raises(ValueError):
+        await adapter.approve_quarantined(written, reviewer="", reason="ok")
+    with pytest.raises(ValueError):
+        await adapter.approve_quarantined(written, reviewer="me", reason="")
+
+
+@pytest.mark.asyncio
+async def test_reject_quarantined_deletes_row() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    written = await adapter.write_event(
+        "s", "p", "o", provenance="test", confidence=0.5
+    )
+    await adapter.reject_quarantined(
+        written, reviewer="rmholston420", reason="malformed"
+    )
+    page = await adapter.list_quarantined()
+    assert page.entries == []
+
+
+@pytest.mark.asyncio
+async def test_reject_quarantined_missing_raises() -> None:
+    adapter = _fresh_adapter()
+    from ports.memory import MemoryEventId
+
+    handle = MemoryEventId(
+        id="does-not-exist", written_at=datetime.now(timezone.utc)
+    )
+    with pytest.raises(ValueError):
+        await adapter.reject_quarantined(
+            handle, reviewer="me", reason="test"
+        )
