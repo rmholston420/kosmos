@@ -50,6 +50,81 @@ Statuses: `VENDORED` · `PATTERN-VENDORED` · `PLANNED` ·
   inject their own DI which conflicts with our formal-port Protocol
   seams. Hand-build ratified.
 
+
+## Stage 6.5 · Zetesis Kernel Mount (ADR-058)
+
+The following adapters go from `PLANNED` / `VENDORED` to `WIRED` at
+Stage 6.5 — the kernel lifespan constructs each one via
+`build_stage_6_5_zetesis_plugin()` and holds the resulting plugin
+under `registry.zetesis`. Real backends (DozerDB compose, real Qdrant
+client, OTEL collector) attach at Stage 6.5.1+.
+
+#### DozerDbMemoryAdapter — WIRED
+- **Source:** `adapters/memory/dozerdb/adapter.py`
+- **Backend at 6.5:** `InMemoryGraphBackend` + `InMemoryTemporalIndex`
+  + `NoOpAmgPolicy` (real DozerDB/Graphiti/AMG backends attach at
+  6.5.1 once neo4j-compose is up on Colossus)
+- **License:** MIT (Kosmos code) + GPLv3 (embedded DozerDB backend)
+- **Kosmos location:** `plugins/zetesis/adapters/real/factory.py`
+- **Port(s):** `MemoryPort`
+- **Modifications:** none — factory wires seams via DI
+- **ADR:** ADR-058 · ADR-027 (adapter shape) · ADR-047 (backend)
+- **Logged:** 2026-08-01 01:36 EDT
+
+#### QdrantVectorAdapter — WIRED
+- **Source:** `adapters/vector/qdrant/adapter.py`
+- **Backend at 6.5:** `InMemoryQdrantBackend` (spec-endorsed until
+  Compose lands per adapter docstring §7)
+- **License:** MIT
+- **Kosmos location:** `plugins/zetesis/adapters/real/factory.py`
+- **Port(s):** `VectorPort`
+- **Modifications:** none
+- **ADR:** ADR-058 · ADR-026 (adapter shape)
+- **Logged:** 2026-08-01 01:36 EDT
+
+#### FilesystemDataAdapter — WIRED
+- **Source:** `adapters/data/filesystem/adapter.py`
+- **Backend at 6.5:** on-disk storage rooted at
+  `~/.local/state/kosmos/data` (created lazily on first write)
+- **License:** MIT
+- **Kosmos location:** `plugins/zetesis/adapters/real/factory.py`
+- **Port(s):** `DataPort`
+- **Modifications:** none
+- **ADR:** ADR-058 · ADR-028 (adapter shape)
+- **Logged:** 2026-08-01 01:36 EDT
+
+#### OllamaAdapter — WIRED (via Zetesis plugin)
+- **Source:** `adapters/llm/ollama/adapter.py`
+- **Backend at 6.5:** local Ollama at `http://127.0.0.1:11434/v1`,
+  default model `qwen2.5:32b-instruct-q4_K_M`
+- **License:** MIT
+- **Kosmos location:** `plugins/zetesis/adapters/real/factory.py`
+- **Port(s):** `LLMPort`
+- **Modifications:** none
+- **ADR:** ADR-058 · ADR-022 (LLMPort surface)
+- **Logged:** 2026-08-01 01:36 EDT
+
+#### SearxngAdapter — WIRED (via Zetesis plugin)
+- **Source:** `adapters/search/searxng/adapter.py`
+- **Backend at 6.5:** local SearXNG at `http://127.0.0.1:8888`
+- **License:** MIT
+- **Kosmos location:** `plugins/zetesis/adapters/real/factory.py`
+- **Port(s):** `SearchPort`
+- **Modifications:** none
+- **ADR:** ADR-058 · ADR-021 (SearchPort surface)
+- **Logged:** 2026-08-01 01:36 EDT
+
+#### OtelStackObservabilityAdapter — WIRED (via Zetesis plugin)
+- **Source:** `adapters/observability/otel_stack/adapter.py`
+- **Backend at 6.5:** `StubOtelBackend` (real OTEL collector attaches
+  at 6.5.1+ once the observability compose service lands)
+- **License:** MIT
+- **Kosmos location:** `plugins/zetesis/adapters/real/factory.py`
+- **Port(s):** `ObservabilityPort`
+- **Modifications:** none
+- **ADR:** ADR-058
+- **Logged:** 2026-08-01 01:36 EDT
+
 ## Historical entries
 
 Full history through ADR-056 lives in `docs/adrs/README.md`. Notable
