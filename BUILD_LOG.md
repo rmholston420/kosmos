@@ -2004,3 +2004,44 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort (real DozerDbMemoryAdapter + in-memory backends), VectorPort (real QdrantVectorAdapter + InMemoryQdrantBackend), DataPort (FilesystemDataAdapter rooted at `~/.local/state/kosmos/data`), ResourcePort (shared kernel `SqliteResourceAdapter`), NotificationPort (shared kernel `KernelNotificationAdapter`), FrontendContractPort (shared kernel instance — required for descriptor visibility), EventBusPort (shared), LLMPort (real `OllamaAdapter`), SearchPort (real `SearxngAdapter`), ObservabilityPort (real `OtelStackObservabilityAdapter` with `StubOtelBackend`).
 - **PORTING_LEDGER / ADR updated:** ADR-058 (new); `PORTING_LEDGER.md` Stage 6.5 block appended.
 - **Stop-condition status:** in-progress — DoD conditions asserted by `test_stage_6_5_zetesis_mount.py`; Colossus smoke pending post-pull. Tag `stage-6-5-zetesis-mount` deferred until Colossus 11-endpoint smoke + new integration tier both green.
+
+## 2026-08-01 01:48 EDT — Stage 6.5.1+6.5.2 · Phrouros wire + resource seed (ADR-059)
+
+- **Stage / plugin / port:** Stage 6.5.1 · Kernel · TraceFeedPort + Stage 6.5.2 · ResourcePort seed
+- **What changed:**
+  - Authored `docs/adrs/ADR-059-stage-6-5-1-2-phrouros-wire-and-resource-seed.md` (Ratified). Locks three decisions: (D1) Phrouros wires on kernel start over `InMemoryTraceFeedAdapter` with `LoopDetector` only — the three skeleton detectors raise `DetectorNotImplementedError` per `plugins/phrouros/detector.py` docstring and `UnauthorizedToolDetector` requires a curated tool allowlist not yet defined at kernel level; (D2) resource seed of the six canonical `ResourceKind` values written at boot via `replenish()` — `time=1440`, `money=100.00`, `attention=100`, `compute=100`, `knowledge=0`, `energy=100`; failure is best-effort (surfaces under `registry.errors["resource_seed"]` without degrading the resource subsystem); (D3) kernel version 6.5.0 → 6.5.2.
+  - Amended `kernel/app.py`: added `KERNEL_RESOURCE_SEED` module constant. Resource-seed block runs after `_boot_resource` in the lifespan. Phrouros boot block composes `PhrourosEngine(trace_feed=InMemoryTraceFeedAdapter(), detectors=(LoopDetector(),), notification_port=..., resource_port=..., event_bus=...)` and calls `await engine.start()`. `_BootRegistry` gains a `trace_feed` slot. Shutdown stops Phrouros then closes the trace feed before closing the event bus.
+  - Added `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py` — 5 fast integration tests: `/health.subsystems.phrouros` is True, `/api/phrouros/anomalies` returns 200 with `[]` on boot, publishing 6 identical `TraceEvent`s into `registry.trace_feed` produces a `loop_detector` anomaly visible on `/api/phrouros/anomalies`, `/api/resources/balances` returns non-None `ResourceBalance` for all six canonical kinds, seed values match `KERNEL_RESOURCE_SEED`.
+  - Amended `docs/adrs/README.md`: added ADR-059 row.
+- **Files touched:**
+  - `docs/adrs/ADR-059-stage-6-5-1-2-phrouros-wire-and-resource-seed.md` (new)
+  - `docs/adrs/README.md` (row insertion)
+  - `kernel/app.py` (resource seed + Phrouros wire; version 6.5.0 → 6.5.2)
+  - `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py` (new)
+- **Ports / adapters affected:** TraceFeedPort now bound to `InMemoryTraceFeedAdapter` at kernel level; ResourcePort seeded via `replenish()`; no new adapter files.
+- **PORTING_LEDGER / ADR updated:** ADR-059 (new); PORTING_LEDGER unchanged (all adapters already listed).
+- **Stop-condition status:** in-progress — DoD conditions asserted by the new test tier; Colossus smoke pending post-pull. `/api/phrouros/anomalies` transitions from 503 → 200; `/api/resources/balances` transitions from null-fields → real balances.
+
+## 2026-08-01 01:56 EDT — Stage 6.5.1+6.5.2 · fixup (asyncio.run in test; knowledge seed 0→1)
+
+- **Stage / plugin / port:** Stage 6.5.1+6.5.2 fixup · Kernel tests + ResourcePort seed
+- **What changed:**
+  - `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py::test_phrouros_loop_anomaly_fires` was using `anyio.from_thread.run()` which requires an AnyIO worker-thread token TestClient does not provide. Rewrote the anomaly-firing sequence as a nested async function driven by `asyncio.run()` — `InMemoryTraceFeedAdapter` and `PhrourosEngine` hold no loop-affine primitives, so a fresh loop drives `publish→_on_event→_escalate` cleanly.
+  - `SqliteResourceAdapter.replenish(kind, amount)` raises `ValueError` when `amount <= 0`. Original seed had `knowledge=0` which silently failed and left `/api/resources/balances["knowledge"] == None`. Changed to `Decimal("1")` — nominal starting unit, accrues from Zetesis / research output. ADR-059 §D2 table + `docs/adrs/README.md` row + `KERNEL_RESOURCE_SEED` module constant all updated in lockstep.
+- **Files touched:**
+  - `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py` (import `asyncio`; `test_phrouros_loop_anomaly_fires` uses `asyncio.run` instead of `anyio.from_thread.run`)
+  - `kernel/app.py` (`KERNEL_RESOURCE_SEED["knowledge"] = Decimal("1")`)
+  - `docs/adrs/ADR-059-stage-6-5-1-2-phrouros-wire-and-resource-seed.md` (D2 seed table row updated)
+  - `docs/adrs/README.md` (ADR-059 row updated)
+- **Ports / adapters affected:** none — port surfaces unchanged.
+- **PORTING_LEDGER / ADR updated:** ADR-059 amended in place (row still Ratified; table value change only).
+- **Stop-condition status:** in-progress — Colossus reruns pending; expect 5 / 5 green on PR #3.
+
+## 2026-08-01 01:59 EDT — Stage 6.5.1+6.5.2 · fixup 2 (compute-seed band assertion)
+
+- **Stage / plugin / port:** Stage 6.5.1+6.5.2 fixup · Kernel tests
+- **What changed:** `test_resource_seed_values_match_kernel_constant` was asserting exact-match for all six kinds. The anomaly test (ordered earlier) runs Phrouros `_escalate` → `resource_port.allocate(COMPUTE, 32)`, ratcheting compute from 100 → 68 in shared `client` fixture state. Assert exact-match only for the five kinds Phrouros does not touch (time/money/attention/knowledge/energy) and a `0 ≤ actual ≤ seed` band for compute.
+- **Files touched:** `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py`
+- **Ports / adapters affected:** none — test-only fix.
+- **PORTING_LEDGER / ADR updated:** none (test hygiene).
+- **Stop-condition status:** in-progress — awaiting 5/5 green on Colossus.
