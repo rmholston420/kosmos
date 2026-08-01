@@ -58,7 +58,12 @@ export default function GnosisIndex() {
 
   return (
     <main data-testid="gnosis-index">
-      <h1>Gnosis Corpora</h1>
+      <header style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+        <h1 style={{ marginRight: "auto" }}>Gnosis Corpora</h1>
+        <Link data-testid="gnosis-graph-link" href="/gnosis/graph">
+          View graph →
+        </Link>
+      </header>
       {corpora.length === 0 ? (
         <p data-testid="gnosis-empty">No corpora registered</p>
       ) : (

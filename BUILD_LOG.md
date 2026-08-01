@@ -2936,3 +2936,94 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (docs-only).
 - **PORTING_LEDGER / ADR updated:** ADR-074 status.
 - **Stop-condition status:** met — code PR next.
+
+## 2026-08-01 11:05 EDT — ADR-074 D1: MemoryPort.search_semantic + MemoryHit.score
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1 · MemoryPort
+- **What changed:**
+  - `MemoryHit.score: float | None = None` (was `float`) — accommodates non-semantic returns from `search_recent` / `select`.
+  - Added `MemoryPort.search_semantic(query, *, corpus=None, limit=20, min_score=0.0) -> list[MemoryHit]` to the Protocol.
+  - `DozerDbMemoryAdapter.search_semantic()` delegates to `SemanticMemoryPath` when the semantic wiring is present, else returns `[]` (graceful degradation).
+- **Files touched:**
+  - `ports/memory.py`
+  - `adapters/memory/dozerdb/adapter.py`
+- **Ports / adapters affected:** `MemoryPort`, `DozerDbMemoryAdapter`.
+- **PORTING_LEDGER / ADR updated:** none new (ADR-074 already authored + ratified).
+- **Stop-condition status:** in-progress — Definition of Done covers D1–D5.
+
+## 2026-08-01 11:05 EDT — ADR-074 D2: registry.vector + _boot_vector + memory boot fan-out
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1 · Kernel boot · VectorPort
+- **What changed:**
+  - Added `_BootRegistry.vector: Any = None` and a `_boot_vector` block behind the `KOSMOS_VECTOR_ENABLED` env gate (default `"1"`).
+  - `_boot_vector` wires `QdrantVectorAdapter(backend=RealQdrantBackend(url=…, api_key=…))`.
+  - New `adapters/vector/qdrant/real_backend.py` implementing the `QdrantBackend` Protocol against `qdrant_client.AsyncQdrantClient` (lazy import; cosine distance; graceful `is_healthy()`).
+  - `_boot_memory` (both `dozerdb` and `in-memory` branches) now passes `embeddings=registry.embeddings, vector=registry.vector` into `DozerDbMemoryAdapter`.
+  - Kernel FastAPI `version` bumped `6.10.0` → `6.11.0`.
+- **Files touched:**
+  - `kernel/app.py`
+  - `adapters/vector/qdrant/real_backend.py` (new)
+- **Ports / adapters affected:** `VectorPort` (kernel-booted for the first time), `MemoryPort` (semantic ports injected).
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER Stage 1.6 Phase 1 section (qdrant-client real backend entry).
+- **Stop-condition status:** in-progress.
+
+## 2026-08-01 11:05 EDT — ADR-074 D3: SemanticMemoryPath adapter helper
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1 · MemoryPort
+- **What changed:**
+  - New `adapters/memory/dozerdb/semantic_memory_path.py`: `SemanticMemoryPath` encapsulates `embed_and_upsert` + `semantic_lookup`, plus `memory_collection_for(corpus)` → `kosmos-memory-{corpus or "default"}`.
+  - Zero-trust preserved (VectorPort.upsert re-enforces provenance + confidence; violations re-raise).
+  - `_payload_to_embed_text` flattens the payload triple, source_citation, and attributes into a single embedding string.
+  - `DozerDbMemoryAdapter.write_event` now fans out to `SemanticMemoryPath.embed_and_upsert` when both `embeddings` and `vector` are wired; degrades silently when either is absent (backward-compatible for stage-1.5 boots).
+  - `DozerDbMemoryAdapter.search_semantic` uses the same helper and MemoryHit id-restoration path (`payload["event_id"]` reverses the `_to_point_id` UUIDv5 hash).
+- **Files touched:**
+  - `adapters/memory/dozerdb/semantic_memory_path.py` (new)
+  - `adapters/memory/dozerdb/adapter.py`
+- **Ports / adapters affected:** `MemoryPort` (semantic write-through), `VectorPort` (consumer of), `EmbeddingsPort` (consumer of).
+- **PORTING_LEDGER / ADR updated:** none new.
+- **Stop-condition status:** in-progress.
+
+## 2026-08-01 11:05 EDT — ADR-074 D4: Zetesis embedder migration verified no-op
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1 · Zetesis
+- **What changed:** ADR-074 §D4 called for Zetesis to consume `EmbeddingsPort` instead of `LLMPort.embed`. Grep across `plugins/zetesis/` returned zero runtime call sites (`grep -rn "\.embed(" plugins/zetesis/`). The only remaining `embed` symbol is `plugins/zetesis/adapters/llm_stub.py:56`, which is a `NotImplementedError` stub kept for `LLMPort` Protocol conformance (ADR-073 deferred hard-delete). No code change required; the deprecation window from ADR-073 covers this cleanly.
+- **Files touched:** none (verification-only entry).
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** met for D4.
+
+## 2026-08-01 11:05 EDT — ADR-074 D5: UI graph visualization (DimensionalForceGraph + toggle + page)
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1 · UI (Gnosis)
+- **What changed:**
+  - Ported three Rigpa-LMS files to Kosmos:
+    - `ui/lib/graph/graphDimensionStore.ts` (Zustand store; localStorage key `kosmos-graph-dimension`; Vite demo flag removed).
+    - `ui/components/graph/DimensionalForceGraph.tsx` (thin dimension-conditional wrapper over `react-force-graph-2d` / `react-force-graph-3d`).
+    - `ui/components/graph/GraphDimensionToggle.tsx` (radiogroup; Kosmos design-token styling; demo checkbox dropped).
+  - New page `ui/app/gnosis/graph/page.tsx` — dynamic SSR-off import; fetches `/api/gnosis/graph/{nodes,edges}` via `kernelClient.fetchGraphNodes` / `fetchGraphEdges`; corpus filter; empty/error states; graph-stats footer.
+  - Linked from `ui/app/gnosis/page.tsx` corpora index header (`data-testid="gnosis-graph-link"`).
+  - `ui/package.json`: `react-force-graph-2d ^1.29.1`, `react-force-graph-3d ^1.29.1`, `three ^0.185.1`, dev `@types/three ^0.185.0`.
+- **Files touched:**
+  - `ui/lib/graph/graphDimensionStore.ts` (new)
+  - `ui/components/graph/DimensionalForceGraph.tsx` (new)
+  - `ui/components/graph/GraphDimensionToggle.tsx` (new)
+  - `ui/app/gnosis/graph/page.tsx` (new)
+  - `ui/app/gnosis/page.tsx` (added graph link)
+  - `ui/package.json`
+- **Ports / adapters affected:** none (UI surface; consumes existing `/api/gnosis/graph/*` routes).
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER Stage 1.6 Phase 1 section (npm deps + Rigpa donor entries).
+- **Stop-condition status:** in-progress — awaiting Colossus `npm install` + Playwright verify.
+
+## 2026-08-01 11:05 EDT — ADR-074 tests: semantic memory contract + graph smoke
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1
+- **What changed:**
+  - New `adapters/memory/dozerdb/test_semantic_memory_path.py` — 11 contract tests (write path, corpus isolation, embed-failure degradation, zero-trust guard, empty-query short-circuit, min_score threshold, as_of round-trip, missing-collection degradation, MemoryHit.score-optional). Sandbox pytest: 11/11 pass.
+  - Sandbox pytest for `adapters/vector/qdrant/` still 34/34 green (D2 real-backend module doesn't break in-memory contract tests).
+  - New Playwright smoke `ui/tests/20-gnosis-graph-viz.spec.ts` (3 tests: link on corpora index; page scaffold renders; 2D/3D toggle persists to localStorage).
+- **Files touched:**
+  - `adapters/memory/dozerdb/test_semantic_memory_path.py` (new)
+  - `ui/tests/20-gnosis-graph-viz.spec.ts` (new)
+- **Ports / adapters affected:** none (test-only).
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — Playwright verify runs on Colossus.

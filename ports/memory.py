@@ -47,11 +47,18 @@ class MemoryEventId:
 
 @dataclass(frozen=True, slots=True)
 class MemoryHit:
-    """One row of a query_temporal / query result. Immutable."""
+    """One row of a query_temporal / search_semantic / query result. Immutable.
+
+    ``score`` is optional: temporal queries populate it with a naive
+    substring-match indicator (``1.0`` on match), semantic queries populate
+    it with the vector-similarity score returned by the underlying
+    ``VectorPort`` adapter, and callers that don't care about score set it
+    to ``None``.
+    """
 
     id: str
     payload: dict[str, Any]
-    score: float
+    score: float | None = None
     as_of: datetime | None = None
 
 
@@ -185,6 +192,33 @@ class MemoryPort(Protocol):
 
         Raises:
             ValueError: port-level zero-trust guard failed.
+        """
+        ...
+
+    async def search_semantic(
+        self,
+        query: str,
+        *,
+        corpus: str | None = None,
+        limit: int = 20,
+        min_score: float = 0.0,
+    ) -> list[MemoryHit]:
+        """Semantic nearest-neighbour retrieval (ADR-074).
+
+        Embeds ``query`` via ``EmbeddingsPort`` and searches the DozerDB
+        memory-vector namespace via ``VectorPort``, then re-hydrates each
+        vector hit into a ``MemoryHit`` carrying the full stored payload
+        (including provenance + confidence) and the raw similarity score.
+
+        ``corpus`` selects the logical vector collection
+        (``kosmos-memory-{corpus or "default"}``). ``min_score`` filters
+        out hits below the given cosine similarity; ``0.0`` keeps every
+        hit the vector store returns.
+
+        Adapters MAY degrade to an empty list when the composed
+        ``EmbeddingsPort`` or ``VectorPort`` is not booted; they MUST
+        NOT swallow port-level guard failures (``ValueError`` is
+        re-raised so callers see the bug immediately).
         """
         ...
 

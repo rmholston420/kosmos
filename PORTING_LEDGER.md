@@ -273,6 +273,91 @@ vendored). Graphiti's ``EmbedderClient`` shape is duck-typed via
 into Kosmos beyond the existing memory adapter usage.
 
 
+## Stage 1.6 Phase 1 · Semantic memory + graph visualization (ADR-074)
+
+#### qdrant-client — VectorPort real backend (continued satisfaction)
+- **Source:** https://github.com/qdrant/qdrant-client
+- **Commit / Version:** already declared as `qdrant-client>=1.11` in
+  `pyproject.toml`; no new version bump. Live-tier binding lands in
+  Phase 1 with `adapters/vector/qdrant/real_backend.py`.
+- **License:** Apache-2.0 (SPDX)
+- **Kosmos location:** `adapters/vector/qdrant/real_backend.py`
+  (lazy `AsyncQdrantClient` import inside `__init__`)
+- **Port(s):** `VectorPort` via `QdrantBackend` seam (ADR-026)
+- **Modifications:** none — Kosmos adds a wrapper backend around
+  `AsyncQdrantClient` implementing the `QdrantBackend` Protocol.
+- **ADR:** ADR-074
+- **Logged:** 2026-08-01 11:05 EDT
+
+#### react-force-graph-2d — DimensionalForceGraph 2D renderer
+- **Source:** https://github.com/vasturiano/react-force-graph
+- **Commit / Version:** ^1.29.1 (npm)
+- **License:** MIT (SPDX)
+- **Kosmos location:** `ui/components/graph/DimensionalForceGraph.tsx`
+  (SSR-off dynamic import from `ui/app/gnosis/graph/page.tsx`)
+- **Port(s):** none — DOM-only rendering component; consumed via
+  `next/dynamic({ ssr: false })`
+- **Modifications:** none (unmodified npm dep)
+- **ADR:** ADR-074
+- **Logged:** 2026-08-01 11:05 EDT
+
+#### react-force-graph-3d — DimensionalForceGraph 3D renderer
+- **Source:** https://github.com/vasturiano/react-force-graph
+- **Commit / Version:** ^1.29.1 (npm)
+- **License:** MIT (SPDX)
+- **Kosmos location:** `ui/components/graph/DimensionalForceGraph.tsx`
+- **Port(s):** none — DOM-only
+- **Modifications:** none
+- **ADR:** ADR-074
+- **Logged:** 2026-08-01 11:05 EDT
+
+#### three — WebGL runtime for react-force-graph-3d
+- **Source:** https://github.com/mrdoob/three.js
+- **Commit / Version:** ^0.185.1 (runtime), ^0.185.0 (types)
+- **License:** MIT (SPDX)
+- **Kosmos location:** transitive dep of `react-force-graph-3d`
+- **Port(s):** none — pure WebGL runtime
+- **Modifications:** none
+- **ADR:** ADR-074
+- **Logged:** 2026-08-01 11:05 EDT
+
+#### DimensionalForceGraph.tsx — Rigpa-LMS donor
+- **Source:** https://github.com/rmholston420/Rigpa-LMS
+- **Commit / Version:** 2026-08-01 clone (Apache-2.0)
+- **License:** Apache-2.0 (SPDX)
+- **Kosmos location:** `ui/components/graph/DimensionalForceGraph.tsx`
+- **Port(s):** none — presentational React component
+- **Modifications:** dropped Vite-specific `import.meta.env.DEV` demo
+  affordance (Next.js does not expose that global); tightened prop
+  types to the shared 2D/3D intersection surface; renamed export to
+  match Kosmos file naming.
+- **ADR:** ADR-074
+- **Logged:** 2026-08-01 11:05 EDT
+
+#### graphDimensionStore.ts — Rigpa-LMS donor
+- **Source:** https://github.com/rmholston420/Rigpa-LMS
+- **Commit / Version:** 2026-08-01 clone (Apache-2.0)
+- **License:** Apache-2.0 (SPDX)
+- **Kosmos location:** `ui/lib/graph/graphDimensionStore.ts`
+- **Port(s):** none — Zustand store
+- **Modifications:** renamed persistence key
+  `rigpa-graph-dimension` → `kosmos-graph-dimension`; removed
+  demo-data flag branch (single-user local-first).
+- **ADR:** ADR-074
+- **Logged:** 2026-08-01 11:05 EDT
+
+#### GraphDimensionToggle.tsx — Rigpa-LMS donor
+- **Source:** https://github.com/rmholston420/Rigpa-LMS
+- **Commit / Version:** 2026-08-01 clone (Apache-2.0)
+- **License:** Apache-2.0 (SPDX)
+- **Kosmos location:** `ui/components/graph/GraphDimensionToggle.tsx`
+- **Port(s):** none
+- **Modifications:** dropped the Vite dev-only “Demo data” checkbox;
+  restyled with Kosmos design-token CSS variables
+  (`--space-1/2`, `--color-*`).
+- **ADR:** ADR-074
+- **Logged:** 2026-08-01 11:05 EDT
+
 ## Historical entries
 
 Full history through ADR-056 lives in `docs/adrs/README.md`. Notable
