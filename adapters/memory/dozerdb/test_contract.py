@@ -464,8 +464,10 @@ async def test_list_quarantined_returns_written_row() -> None:
 @pytest.mark.asyncio
 async def test_list_quarantined_rejects_bad_limit() -> None:
     adapter = _fresh_adapter()
+    # ADR-076 D6: limit=0 is now valid (count-only). Only negative and
+    # >100 remain rejected.
     with pytest.raises(ValueError):
-        await adapter.list_quarantined(limit=0)
+        await adapter.list_quarantined(limit=-1)
     with pytest.raises(ValueError):
         await adapter.list_quarantined(limit=101)
 
@@ -636,3 +638,114 @@ async def test_provenance_chain_bad_input_raises() -> None:
         await adapter.provenance_chain("")
     with pytest.raises(ValueError):
         await adapter.provenance_chain("x", max_depth=-1)
+
+
+# ── ADR-076 D6 — verdict counter + count-only limit=0 ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_limit_zero_returns_total_count_only() -> None:
+    """ADR-076 D6: limit=0 is valid; returns empty entries + total_count."""
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    # Write three events; all get quarantined.
+    for i in range(3):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    page = await adapter.list_quarantined(limit=0)
+    assert page.entries == []
+    assert page.next_cursor is None
+    assert page.total_count == 3
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_page_reports_total_count() -> None:
+    """ADR-076 D6: even paginated calls report the full total_count."""
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    for i in range(5):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    page = await adapter.list_quarantined(limit=2)
+    assert len(page.entries) == 2
+    assert page.total_count == 5
+    assert page.next_cursor is not None
+
+
+@pytest.mark.asyncio
+async def test_verdict_counter_increments_on_write() -> None:
+    """ADR-076 D6: write_event records verdict decisions in the counter."""
+    from adapters.memory.dozerdb.adapter import (
+        get_verdict_counts,
+        reset_verdict_counter,
+    )
+
+    reset_verdict_counter()
+    adapter = _fresh_adapter(amg=NoOpAmgPolicy())
+    for i in range(4):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    counts = get_verdict_counts()
+    assert counts["allow"] == 4
+    assert counts["quarantine"] == 0
+    assert counts["block"] == 0
+
+
+@pytest.mark.asyncio
+async def test_verdict_counter_records_quarantine_decisions() -> None:
+    """ADR-076 D6: quarantine verdicts increment the quarantine counter."""
+    from adapters.memory.dozerdb.adapter import (
+        get_verdict_counts,
+        reset_verdict_counter,
+    )
+
+    reset_verdict_counter()
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    for i in range(3):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    counts = get_verdict_counts()
+    assert counts["quarantine"] == 3
+    assert counts["allow"] == 0
+
+
+@pytest.mark.asyncio
+async def test_verdict_counter_records_block_and_raises() -> None:
+    """ADR-076 D6: block verdict still counts even when the write raises."""
+    from adapters.memory.dozerdb.adapter import (
+        get_verdict_counts,
+        reset_verdict_counter,
+    )
+
+    reset_verdict_counter()
+    adapter = _fresh_adapter(amg=AlwaysBlockAmgPolicy())
+    for i in range(2):
+        with pytest.raises(MemoryWriteBlocked):
+            await adapter.write_event(
+                f"subj-{i}",
+                "predicate",
+                f"obj-{i}",
+                provenance="test",
+                confidence=0.5,
+            )
+    counts = get_verdict_counts()
+    assert counts["block"] == 2
+    assert counts["allow"] == 0

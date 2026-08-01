@@ -3355,3 +3355,23 @@ Landed the informal ADR-076 D6.5 anomalies UI on /observe.
 - **Backend:** No changes. `GET /api/phrouros/anomalies` (kernel/app.py:2560) + `phrouros.anomaly.detected` on `/api/events/ws` (kernel/app.py:878) already live from Stage 2.4.
 - **UX:** Client subscribes to `/api/events/ws?types=phrouros.anomaly.detected`; each frame triggers a re-fetch of the canonical list and flashes the new row for 3s. Filter chip narrows by detector name. Refresh button forces manual reload.
 - **Stop condition:** D6.5 DoD — visible anomalies table on /observe with WS live-refresh + filter + degraded state for 503.
+
+## 2026-08-01 15:10 EDT — Stage 1.6 Phase 3 D6 (AMG status route + pill)
+
+Landed ADR-076 D6.
+
+- **Stage/plugin/port:** Stage 1.6 Phase 3, MemoryPort + kernel + UI
+- **Backend:**
+  - `ports/memory.py` — `QuarantinedPage.total_count: int = 0`; port doc: `limit=0` count-only mode
+  - `adapters/memory/dozerdb/adapter.py` — module-level `_verdict_counter: Counter[str]` + `get_verdict_counts()` + `reset_verdict_counter()`; `write_event` increments the counter for every verdict (allow/redact/quarantine/block); `list_quarantined` accepts `limit=0` and always populates `total_count`
+  - `adapters/memory/dozerdb/amg_policy.py` — public `policy_preset` property + `active_detectors()` method sourcing AMG's own registry (no hard-coded list)
+  - `kernel/app.py` — new `GET /api/memory/amg/status` returning `{version, policy_preset, active_detectors, verdict_counts, quarantined_count}`; 503 on AMG import failure or list_quarantined failure
+- **UI:**
+  - `ui/lib/kernel-client.ts` — `AmgStatus`/`AmgVerdictCounts` types + `getAmgStatus()`
+  - `ui/components/memory/AmgStatusPill.tsx` — new pill (green ok / yellow >0 quarantined / red 503) with expandable details card
+  - `ui/app/memory/page.tsx` — pill mounted in memory-nav header
+- **Tests:**
+  - `adapters/memory/dozerdb/test_contract.py` — 5 new D6 fast-tier tests (limit=0 count-only, total_count on paginated calls, counter increments allow/quarantine/block); updated D4 bad-limit test to accept limit=0
+  - `ui/tests/27-amg-status.spec.ts` — 3 Playwright smokes (mount, terminal-state resolution, expander toggle)
+  - `tests/integration/test_amg_status_live.py` — 2 live-tier tests (route in openapi, shape or 503)
+- **Stop condition:** D6 DoD — visible AMG status pill on /memory with color-coded state + expandable details, backed by real AMG registry.

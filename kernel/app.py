@@ -2565,6 +2565,71 @@ def phrouros_anomalies() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# ADR-076 D6 — AMG status
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/memory/amg/status")
+async def memory_amg_status() -> dict[str, Any]:
+    """AMG status snapshot (ADR-076 D6).
+
+    Returns package version, active policy preset, detector list, verdict
+    counter, and current quarantined-count. 503 when AMG import/boot
+    failed (never happens on Colossus; guard preserves boot-safety).
+    """
+    if registry.memory is None:
+        raise HTTPException(503, detail="memory subsystem is None")
+
+    # Late imports so we can degrade gracefully if AMG is missing.
+    try:
+        import agent_memory_guard as amg_pkg
+
+        version = str(getattr(amg_pkg, "__version__", "") or "unknown")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            503,
+            detail=f"agent_memory_guard unavailable: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    from adapters.memory.dozerdb.adapter import get_verdict_counts
+
+    amg_policy = getattr(registry.memory, "_amg", None)
+    policy_preset = "unknown"
+    active_detectors: list[str] = []
+    if amg_policy is not None:
+        policy_preset = str(
+            getattr(amg_policy, "policy_preset", None) or "unknown"
+        )
+        get_active = getattr(amg_policy, "active_detectors", None)
+        if callable(get_active):
+            try:
+                active_detectors = list(get_active())
+            except Exception:  # noqa: BLE001
+                active_detectors = []
+
+    verdict_counts = get_verdict_counts()
+
+    # Quarantined count via port surface (D4's list_quarantined + D6's
+    # count-only mode). Never fabricate on adapter error.
+    try:
+        page = await registry.memory.list_quarantined(limit=0)
+        quarantined_count = int(getattr(page, "total_count", 0))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            503,
+            detail=f"list_quarantined failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    return {
+        "version": version,
+        "policy_preset": policy_preset,
+        "active_detectors": active_detectors,
+        "verdict_counts": verdict_counts,
+        "quarantined_count": quarantined_count,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Zetesis research (SSE) — ADR-060
 # ---------------------------------------------------------------------------
 

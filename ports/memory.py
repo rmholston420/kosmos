@@ -88,10 +88,15 @@ class QuarantinedPage:
 
     ``next_cursor`` is opaque to callers — the adapter that produced it is
     the only component that can decode it. ``None`` means no more pages.
+
+    ``total_count`` (ADR-076 D6) is the total number of currently-quarantined
+    events after compensating-delete filtering, independent of ``limit`` and
+    ``cursor``. Always populated (adapters must count the full set).
     """
 
     entries: list[QuarantinedEntry]
     next_cursor: str | None
+    total_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,8 +274,11 @@ class MemoryPort(Protocol):
         """List :Quarantined lane entries awaiting review (ADR-076 D4).
 
         ``since`` filters entries with ``quarantined_at >= since`` (ISO-8601).
-        ``limit`` caps returned rows (1-100). ``cursor`` is an opaque token
-        returned by a previous call; pass it back to fetch the next page.
+        ``limit`` caps returned rows. Valid range is ``[0, 100]``; ``limit=0``
+        is a count-only mode used by the AMG status route (ADR-076 D6) — the
+        returned page has ``entries=[]`` and ``next_cursor=None`` but
+        ``total_count`` is populated. ``cursor`` is an opaque token returned
+        by a previous call; pass it back to fetch the next page.
 
         Entries already promoted via ``approve_quarantined`` MUST be filtered
         out even if the compensating delete has not landed yet — the adapter

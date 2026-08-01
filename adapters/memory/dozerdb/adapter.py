@@ -30,6 +30,7 @@ import base64
 import json
 import logging
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -47,6 +48,26 @@ from ports.memory import (
 from ports.vector import VectorPort
 
 from .semantic_memory_path import SemanticMemoryPath
+
+# ADR-076 D6 — process-lifetime verdict counter. Reset only on kernel restart.
+# Keys are AmgVerdict decision strings: "allow" | "redact" | "quarantine" |
+# "block". Read by the /api/memory/amg/status route.
+_verdict_counter: Counter[str] = Counter()
+
+
+def reset_verdict_counter() -> None:
+    """Reset the module-level verdict counter. Test-only."""
+    _verdict_counter.clear()
+
+
+def get_verdict_counts() -> dict[str, int]:
+    """Return a snapshot of verdict counts. Always includes all four keys."""
+    return {
+        "allow": int(_verdict_counter.get("allow", 0)),
+        "redact": int(_verdict_counter.get("redact", 0)),
+        "quarantine": int(_verdict_counter.get("quarantine", 0)),
+        "block": int(_verdict_counter.get("block", 0)),
+    }
 
 __all__ = [
     "AlwaysBlockAmgPolicy",
@@ -392,6 +413,9 @@ class DozerDbMemoryAdapter:
 
         # 2. Agent Memory Guard policy layer.
         verdict = self._amg.evaluate(payload)
+        # ADR-076 D6 — record the verdict for /api/memory/amg/status. Count
+        # every decision (allow/redact/quarantine/block).
+        _verdict_counter[verdict.decision] += 1
         if verdict.decision == "block":
             raise MemoryWriteBlocked(verdict.reason or "AMG blocked write")
         if verdict.decision == "redact" and verdict.redacted_payload is not None:
@@ -541,9 +565,11 @@ class DozerDbMemoryAdapter:
         limit: int = 100,
         cursor: str | None = None,
     ) -> QuarantinedPage:
-        if not isinstance(limit, int) or limit < 1 or limit > 100:
+        # ADR-076 D6: limit=0 is a valid "count-only" mode used by the AMG
+        # status route. Otherwise limit must be in [1, 100].
+        if not isinstance(limit, int) or limit < 0 or limit > 100:
             raise ValueError(
-                f"list_quarantined limit must be int in [1, 100], got {limit!r}"
+                f"list_quarantined limit must be int in [0, 100], got {limit!r}"
             )
 
         rows = await self._graph.query_cypher("label:Quarantined")
@@ -602,15 +628,17 @@ class DozerDbMemoryAdapter:
             cq, ci = self._decode_cursor(cursor)
             entries = [t for t in entries if (t[0], t[1]) < (cq, ci)]
 
-        page = entries[:limit]
+        total_count = len(entries)
+        page = entries[:limit] if limit > 0 else []
         next_cursor: str | None = None
-        if len(entries) > limit and page:
+        if limit > 0 and len(entries) > limit and page:
             last_q, last_i, _ = page[-1]
             next_cursor = self._encode_cursor(last_q, last_i)
 
         return QuarantinedPage(
             entries=[e for _, _, e in page],
             next_cursor=next_cursor,
+            total_count=total_count,
         )
 
     async def _load_quarantined_row(self, event_id: str) -> dict[str, Any]:

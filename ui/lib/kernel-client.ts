@@ -224,7 +224,25 @@ export const kernelClient = {
     getJSON<ProvenanceChain>(
       `/api/memory/provenance/${encodeURIComponent(eventId)}`,
     ),
+
+  // ADR-076 D6 Stage 1.6 Phase 3 — AMG status surface.
+  getAmgStatus: () => getJSON<AmgStatus>("/api/memory/amg/status"),
 };
+
+// --- ADR-076 D6: /api/memory/amg/status ---
+export interface AmgVerdictCounts {
+  allow: number;
+  redact: number;
+  quarantine: number;
+  block: number;
+}
+export interface AmgStatus {
+  version: string;
+  policy_preset: string;
+  active_detectors: string[];
+  verdict_counts: AmgVerdictCounts;
+  quarantined_count: number;
+}
 
 // --- ADR-076 D5: /api/memory/provenance/{event_id} ---
 export interface ProvenanceLink {
