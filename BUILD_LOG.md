@@ -3192,3 +3192,24 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (DozerDbGraphBackend + AmgGuardPolicy tiered + InMemoryTemporalIndex)
 - **PORTING_LEDGER / ADR updated:** — (DozerDB 5.26.27 already VENDORED at line 378; no change needed)
 - **Stop-condition status:** met — Stage 1.8 MemoryPort DozerDB backend is production-shape on Colossus (systemd-supervised kernel + Docker-supervised DozerDB + Zetesis writing through the shared kernel-owned adapter + writes surviving kernel restart)
+
+## 2026-08-01 14:00 EDT — Stage 1.6 Phase 3 · D1 live-tier semantic-search DoD + Kosmos-owned Qdrant
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · MemoryPort · DozerDbMemoryAdapter (semantic path) + VectorPort · Qdrant (ADR-074 · ADR-076)
+- **What changed:**
+  - Branch `stage-1-6-p3-code` cut off `main` @ `c455165`.
+  - Added `tests/integration/test_semantic_hits_live.py` — 3 async tests behind `KOSMOS_STAGE_16_LIVE=1` covering the ADR-074 D1 + D3 promise end-to-end (round-trip / limit + min_score bounds / cross-corpus isolation). Live tier builds a real DozerDbMemoryAdapter wired to live DozerDB + real Ollama embeddings + real QdrantVectorAdapter; TCP-precheck-skips when any service is unreachable. Fast tier: 3 skipped, 0 failed.
+  - Added `qdrant` service to `ops/compose/memory.yml` (image `qdrant/qdrant:v1.12.1`, container `kosmos-qdrant`, host ports **6339** REST / **6340** gRPC, healthcheck on `/readyz`, `qdrant_storage` volume). Kosmos-owned to stay clear of the UIA project's Qdrant on 6371/6372 on the same workstation. Restart on DozerDB unchanged.
+  - Wired kernel to Kosmos-owned Qdrant via `KOSMOS_QDRANT_URL=http://127.0.0.1:6339` in `ops/systemd/kosmos-kernel.env`.
+  - PORTING_LEDGER.md: added VENDORED entry for the Qdrant image (Apache-2.0, ADR-076).
+  - Live-test defaults updated so `KOSMOS_STAGE_16_LIVE=1` alone points at the Kosmos-owned instance (127.0.0.1:6339); no per-run env override needed.
+- **Files touched:**
+  - tests/integration/__init__.py (new)
+  - tests/integration/test_semantic_hits_live.py (new)
+  - ops/compose/memory.yml
+  - ops/systemd/kosmos-kernel.env
+  - PORTING_LEDGER.md
+  - BUILD_LOG.md
+- **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (semantic path via SemanticMemoryPath) · VectorPort · RealQdrantBackend
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER.md +1 entry (Qdrant image · Apache-2.0 · ADR-076); ADR-076 D1 scope satisfied
+- **Stop-condition status:** in-progress — D1 test committed on branch and skips clean on fast tier; live-tier run pending on Colossus after `docker compose -f ops/compose/memory.yml up -d qdrant`. Waves D2–D7 land on this rolling branch.

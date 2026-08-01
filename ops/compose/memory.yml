@@ -10,6 +10,10 @@
 # DozerDB 5.26.27 = community Neo4j 5.26 + enterprise features backported
 # under a permissive license via the DozerDB bootstrapping plugin. See
 # docs/PORTING_LEDGER.md for the SPDX + upstream commit reference.
+#
+# Qdrant 1.12.1 backs Stage 1.6 semantic memory (ADR-074). Bound to
+# Kosmos-owned host ports 6339 (REST) / 6340 (gRPC) to stay clear of the
+# UIA project's Qdrant on 6371/6372 on the same workstation.
 
 services:
   dozerdb:
@@ -45,6 +49,31 @@ services:
       retries: 12
       start_period: 30s
 
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    container_name: kosmos-qdrant
+    restart: unless-stopped
+    ports:
+      - "6339:6333"   # REST API — Kosmos-owned; UIA uses 6371
+      - "6340:6334"   # gRPC   — Kosmos-owned; UIA uses 6372
+    environment:
+      # Single-user local-first; Kosmos does not expose Qdrant off-box.
+      # Set QDRANT__SERVICE__API_KEY here if that ever changes.
+      QDRANT__SERVICE__HTTP_PORT: "6333"
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+      QDRANT__LOG_LEVEL: "INFO"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      # /readyz returns HTTP 200 only after storage is loaded and the
+      # HTTP listener is accepting requests (Qdrant 1.7+ contract).
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q '200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
 volumes:
   dozerdb_data:
   dozerdb_logs:
+  qdrant_storage:

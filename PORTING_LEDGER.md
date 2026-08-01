@@ -289,6 +289,22 @@ into Kosmos beyond the existing memory adapter usage.
 - **ADR:** ADR-074
 - **Logged:** 2026-08-01 11:05 EDT
 
+#### qdrant image — Kosmos-owned Qdrant service (VENDORED)
+- **Source:** https://hub.docker.com/r/qdrant/qdrant
+- **Commit / Version:** `qdrant/qdrant:v1.12.1` (pinned image tag)
+- **License:** Apache-2.0 (SPDX)
+- **Kosmos location:** `ops/compose/memory.yml` service `qdrant`
+  (container_name `kosmos-qdrant`); host ports **6339** REST /
+  **6340** gRPC. Kernel env `KOSMOS_QDRANT_URL=http://127.0.0.1:6339`
+  in `ops/systemd/kosmos-kernel.env`.
+- **Port(s):** backs `VectorPort` via `RealQdrantBackend`
+  (`adapters/vector/qdrant/real_backend.py`); no new port introduced.
+- **Modifications:** none — stock upstream image. Kosmos-owned host
+  ports 6339/6340 chosen to avoid the UIA project's Qdrant on
+  6371/6372 on the same workstation.
+- **ADR:** ADR-076 (Stage 1.6 Phase 3 live-tier target)
+- **Logged:** 2026-08-01 14:05 EDT
+
 #### react-force-graph-2d — DimensionalForceGraph 2D renderer
 - **Source:** https://github.com/vasturiano/react-force-graph
 - **Commit / Version:** ^1.29.1 (npm)

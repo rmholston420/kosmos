@@ -5,9 +5,13 @@ fast tier stay green without external services.
 
 Live-tier preconditions (all must be reachable on 127.0.0.1):
 
-  * Qdrant at 6333               (docker: ``ops/compose/memory.yml`` service ``qdrant``)
+  * Qdrant at 6339               (docker: ``ops/compose/memory.yml`` service ``qdrant``)
   * DozerDB at 7687              (docker: ``ops/compose/memory.yml`` service ``dozerdb``)
   * Ollama embeddings at 11434   (``ollama serve`` on Colossus)
+
+Kosmos-owned Qdrant host ports: 6339 (REST) / 6340 (gRPC). The UIA
+project binds Qdrant to 6371/6372 on the same workstation; do not
+share that instance — UIA restarts would wipe our fixture collections.
 
 The test builds a real ``DozerDbMemoryAdapter`` with:
 
@@ -48,14 +52,14 @@ pytestmark = pytest.mark.skipif(
     not LIVE_ENABLED,
     reason=(
         "Stage 1.6 Phase 3 live tier requires KOSMOS_STAGE_16_LIVE=1 plus "
-        "Qdrant (127.0.0.1:6333), DozerDB (127.0.0.1:7687), and Ollama "
+        "Qdrant (127.0.0.1:6339), DozerDB (127.0.0.1:7687), and Ollama "
         "(127.0.0.1:11434) reachable. See ADR-076 D1."
     ),
 )
 
 
 QDRANT_HOST = os.environ.get("KOSMOS_QDRANT_HOST", "127.0.0.1")
-QDRANT_PORT = int(os.environ.get("KOSMOS_QDRANT_PORT", "6333"))
+QDRANT_PORT = int(os.environ.get("KOSMOS_QDRANT_PORT", "6339"))
 DOZERDB_HOST = os.environ.get("KOSMOS_DOZERDB_HOST", "127.0.0.1")
 DOZERDB_PORT = int(os.environ.get("KOSMOS_DOZERDB_PORT", "7687"))
 OLLAMA_HOST = os.environ.get("KOSMOS_OLLAMA_HOST", "127.0.0.1")
