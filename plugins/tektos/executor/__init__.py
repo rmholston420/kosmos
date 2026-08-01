@@ -26,6 +26,12 @@ from plugins.tektos.executor.errors import (
     TektosPlanNotApproved,
     TektosExecutorPatchFailed,
 )
+from plugins.tektos.executor.loop import (
+    PlanExecutionResult,
+    TaskAttempt,
+    TaskExecution,
+    TektosExecutorLoop,
+)
 from plugins.tektos.executor.policy import (
     TEKTOS_EXECUTOR_APPLY_ARGS,
     TEKTOS_EXECUTOR_APPLY_CHECK_ARGS,
@@ -65,4 +71,9 @@ __all__ = [
     # enums
     "PlanResult",
     "TaskResult",
+    # loop
+    "PlanExecutionResult",
+    "TaskAttempt",
+    "TaskExecution",
+    "TektosExecutorLoop",
 ]
