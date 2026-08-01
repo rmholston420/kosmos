@@ -19,7 +19,8 @@ test.describe("Gnosis graph visualization (ADR-074 D5)", () => {
     await page.goto("/gnosis");
     const link = page.getByTestId("gnosis-graph-link");
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "/gnosis/graph");
+    // Next.js `trailingSlash: true` rewrites the emitted href.
+    await expect(link).toHaveAttribute("href", "/gnosis/graph/");
   });
 
   test("graph page renders scaffold + toggle + stats/empty", async ({ page }) => {
