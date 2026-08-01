@@ -11,6 +11,8 @@ const ALL_SLOTS = [
   "APPROVALS_QUEUE", "AGENT_TRACE",
 ] as const;
 
+type AnySlot = (typeof ALL_SLOTS)[number];
+
 function renderPanelBySlot(slot: string, panels: Panel[]) {
   const slotPanels = panels
     .filter((p) => p.slot === slot)
@@ -37,13 +39,27 @@ function renderPanelBySlot(slot: string, panels: Panel[]) {
   }
 }
 
-export default function PanelGrid({ panels }: { panels: Panel[] }) {
+export default function PanelGrid({
+  panels,
+  slots,
+}: {
+  panels: Panel[];
+  /**
+   * Optional slot allow-list. When provided, only these slots render (and
+   * they render in the given order). When omitted, all nine PanelSlots
+   * render in the canonical ALL_SLOTS order — the shell page at `/`
+   * preserves this behaviour so the existing Playwright shell contract
+   * (all nine slots visible) stays green.
+   */
+  slots?: readonly AnySlot[];
+}) {
+  const activeSlots = slots ?? ALL_SLOTS;
   return (
     <section data-testid="panel-grid">
       {panels.length === 0 && (
         <p data-testid="panel-grid-empty">No panels registered</p>
       )}
-      {ALL_SLOTS.map((slot) => renderPanelBySlot(slot, panels))}
+      {activeSlots.map((slot) => renderPanelBySlot(slot, panels))}
     </section>
   );
 }

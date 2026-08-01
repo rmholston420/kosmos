@@ -127,7 +127,41 @@ export const kernelClient = {
   getResourceBalances: () =>
     getJSON<Record<string, ResourceBalance | null>>("/api/resources/balances"),
   getResourceQueue: () => getJSON<QueuedRequest[]>("/api/resources/queue"),
+
+  // ADR-068 Stage 1.5 GUI-realization backend deltas.
+  getOllamaStatus: () => getJSON<OllamaStatus>("/api/ollama/status"),
+  getPraxisConstitution: () => getJSON<PraxisConstitution>("/api/praxis/constitution"),
+  getPraxisApexPolicies: () => getJSON<PraxisApexPolicy[]>("/api/praxis/apex/policies"),
 };
+
+// --- ADR-068 D1: /api/ollama/status ---
+export interface OllamaStatus {
+  /** Hot model name (Ollama /api/ps `models[0].name`) or null when idle. */
+  model: string | null;
+  /** Bytes currently resident in VRAM across all loaded models. */
+  size_vram: number;
+  /** Bytes currently resident in system RAM across all loaded models. */
+  size_ram: number;
+  /** Host VRAM capacity in bytes (constant 34_359_738_368 for RTX 5090). */
+  vram_capacity_bytes: number;
+}
+
+// --- ADR-068 D2: /api/praxis/constitution ---
+export interface PraxisConstitution {
+  version: number;
+  sha256: string;
+  ratified_at: string;
+  title: string;
+  article_count: number;
+}
+
+// --- ADR-068 D3: /api/praxis/apex/policies ---
+export interface PraxisApexPolicy {
+  policy_id: string;
+  name: string;
+  tier: ChangeApprovalTier;
+  active_since: string;
+}
 
 export type AlgedonicWSEvent = { type: "algedonic"; payload: AlgedonicReceipt };
 export function connectAlgedonicSocket(onEvent: (e: AlgedonicWSEvent) => void): WebSocket | null {

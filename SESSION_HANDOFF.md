@@ -1,39 +1,56 @@
-# Kosmos Session Handoff — 2026-08-01 05:45 EDT
+# Kosmos Session Handoff — 2026-08-01 06:20 EDT
 
 ## Current build-sequencing position
-
-- **Stage / phase:** Stage 1 GUI shell — **COMPLETE pending PR #11 merge**.
-- **Plugin / kernel component:** Next.js 16 static-export UI at `ui/` served same-origin from the FastAPI kernel at `/`, inside lifespan (ADR-067).
-- **Port(s) in progress:** none — Stage 1 does not introduce new ports.
+- **Stage / phase:** Stage 1.5 · GUI realization (ADR-068) · Wave A frontend landed
+- **Plugin / kernel component:** `ui/` (Next.js app) + kernel additive routes (ADR-068 D1/D2/D3, already landed)
+- **Port(s) in progress:** none — UI-only wave; consumes `FrontendContractPort` + the three ADR-068 routes
 
 ## Completed this session
-
-- Stage 1 GUI shell landed on `stage-1-gui-shell` (HEAD `1059ace`, PR #11):
-  - Fixup #3 — query-string routes replace dynamic segments (`/gnosis/detail?corpus=`, `/tektos/detail?id=`) with `<Suspense>`.
-  - Fixup #4 — Playwright `webServer` removed; `baseURL = 127.0.0.1:8000`; kernel serves UI + API same-origin.
-  - Fixup #5 — resource-balances dict alignment; agent-trace race gate.
-  - Fixup #6 — defensive `Array.isArray` coercion on list-fetch consumers.
-  - Fixup #7 — `PanelGrid` always renders real `AgentTracePanel` (Phrouros anomalies are unowned).
-  - Fixup #8 — UI mount moved into lifespan so `/tektos-ui/*` retains first-match priority (fixed `test_tektos_ui_healthz_reachable` 404 regression).
-- Kernel tests: pytest 671/671 green.
-- Playwright: 17/22 pass, 5 correctly skipped (Tektos plan seeded-plan requirement, algedonic deliver_algedonic fixture, Gnosis corpus-detail load).
-- `next build`: 8/8 static routes.
-- Project wiki updated (entities/rigpa-lms.md, projects/kosmos-lms.md, projects/kosmos-gui.md, index.md) to reflect Stage 1 GUI landing.
-- KNOWN_ISSUES.md entries added: Next.js 16.0.0 CVE-2025-66478 (deferred to Stage 2), `PhrourosEngine.list_all()` (ADR-034 amendment deferred), `ResourcePort.get_balance()` (ADR-029 amendment deferred).
+- Backend audit + clarifying questions
+- ADR-068 authored (Stage 1.5 GUI realization + gap ledger)
+- Wave A backend deltas landed on `stage-1-5-gui-realized`:
+  - `GET /api/ollama/status` (D1)
+  - `GET /api/praxis/constitution` (D2)
+  - `GET /api/praxis/apex/policies` (D3)
+- 10 kernel tests green on Colossus for the three routes
+- Tektos-UI ADR-066 D5 test-fixup + package re-export chain
+- **Wave A frontend landed on `stage-1-5-gui-realized`** — persistent shell (top bar, drawer, sidebar, banner) mounted globally in `layout.tsx`, job-segmented sidebar with 5 job pages (`/command`, `/operate`, `/govern`, `/observe`, `/memory`), live model-swap indicator (5s poll of `/api/ollama/status`), WS-driven algedonic pill, cmdk-backed Cmd+K palette, kill-switch two-step confirm stub, design-token hydration hook, 12 new Playwright tests in `09-persistent-shell.spec.ts`, PORTING_LEDGER updated with Wave A UI vendor block
 
 ## Remaining before current Definition of Done
+Colossus must confirm Wave A frontend is green before Waves B–D:
+```
+cd ~/dev/kosmos
+git checkout stage-1-5-gui-realized
+git pull --ff-only
+cd ui
+pnpm i                          # picks up cmdk ^1.0.0
+npx next build                  # emits ui/out
+cd ..
+pytest -q                       # kernel + plugin suites must stay green
+uvicorn kernel.app:app &        # or: python -m kernel.app
+cd ui && npx playwright test    # 17 previous + 12 new = 29 total
+```
 
-- Merge PR #11 (`stage-1-gui-shell` → `main`) via `gh pr merge 11 --squash --delete-branch`.
-- After merge: pull `main` on Colossus and confirm one last kernel restart still serves `ui/out/` at `/` correctly.
+Then continue:
+- **Wave B** — TanStack Query + Zustand real integration; live approvals panel over `/api/approvals`
+- **Wave C** — Govern page real content over `/api/praxis/constitution` + `/api/praxis/apex/policies`; Observe page real anomaly feed over `/api/phrouros/anomalies`
+- **Wave D** — Memory page Cytoscape node-link view over `/api/gnosis/query_temporal` (adds `cytoscape` MIT vendor to PORTING_LEDGER)
+- Merge PR into `main` after Waves B–D land; open ADR-069 for Praxis kill-switch semantics
 
 ## Open questions / awaiting user answer
-
-- None for Stage 1. Deferred ADR amendments (ADR-034 `PhrourosEngine.list_all()`, ADR-029 `ResourcePort.get_balance()`) are captured in KNOWN_ISSUES.md for Stage 2 triage.
+- Wave A frontend green-lit for landing? **YES** — user answered "proceed" 2026-08-01 06:12 EDT.
+- Kill-switch backend endpoint — deliberately unwired; ADR-069 required before wiring.
 
 ## Exact next action
-
-- Merge PR #11:
-  ```
-  gh pr merge 11 --squash --delete-branch --repo rmholston420/kosmos
-  ```
-- Then propose Stage 2 kickoff scope.
+On Colossus (as pasted above):
+```
+cd ~/dev/kosmos && git checkout stage-1-5-gui-realized && git pull --ff-only \
+  && cd ui && pnpm i && npx next build && cd .. \
+  && pytest -q && uvicorn kernel.app:app &
+sleep 3 && cd ui && npx playwright test --project=chromium
+```
+Paste back:
+- `pnpm i` last-lines (cmdk added?)
+- `next build` exit code + any warnings
+- `pytest -q` last line (X passed, Y skipped)
+- Playwright summary (29 passed expected)

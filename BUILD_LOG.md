@@ -2409,3 +2409,37 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** met — test collection expected to complete cleanly on next `pytest -q` run.
+
+## 2026-08-01 06:15 EDT — Stage 1.5 GUI Wave A frontend: persistent shell + job segmentation
+
+- **Stage / plugin / port:** Stage 1.5 · kernel-ui-glue · Next.js UI at `ui/` (no port change; consumes `FrontendContractPort` schema + ADR-068 D1/D2/D3 additive routes)
+- **What changed:** Landed the full persistent-shell realization locked by ADR-068 as a UI-only patch:
+  - **Persistent shell** — moved every top-bar/drawer/sidebar/banner chrome into `ui/components/PersistentShell.tsx`, mounted globally in `ui/app/layout.tsx` (now a Server Component with `metadata` export). Home page `ui/app/page.tsx` becomes a bare `<PanelGrid panels={schema.panels}>` — no shell duplication.
+  - **Job-segmented sidebar** — `ui/components/Sidebar.tsx` rewritten to render two sections: (1) five VSM-derived job links (`/command`, `/operate`, `/govern`, `/observe`, `/memory`) via `data-testid="job-link-<path>"`; (2) plugin routes from the live `KernelSchema` via `data-testid="route-<path>"` (contract preserved for existing 01-shell test). `usePathname()` marks the active link with `aria-current="page"`.
+  - **Five job pages** — `ui/app/{command,operate,govern,observe,memory}/page.tsx`, each a thin `<JobPage>` wrapper (`ui/components/JobPage.tsx`) that filters `schema.panels` to a slot allow-list. Panel-slot mapping matches UX Design Spec §"Information Architecture, Job-Segmented, Not Data-Segmented".
+  - **`PanelGrid` slot-filter extension** — added optional `slots?: readonly PanelSlot[]` prop; when omitted (home `/`) all nine slots render as before, so the existing 01-shell nine-panel test contract stays intact.
+  - **Top-bar wiring (live)** — `ui/components/CommandPalette.tsx` (cmdk, MIT; Cmd+K keybind + static navigate group); `ui/components/AlgedonicPill.tsx` (WS-driven, color+text, never color-only); `ui/components/ModelSwapIndicator.tsx` (5s poll of `/api/ollama/status`, formats VRAM as `N.N / 32GB VRAM`); `ui/components/KillSwitch.tsx` (two-step confirm-then-really-suspend stub, no backend endpoint yet — deliberately unwired pending ADR).
+  - **Design-token hydration** — `ui/components/DesignTokenHydrator.tsx` fetches `/api/kernel/design-tokens` once on mount and sets each as a CSS custom property on `document.documentElement`; `data-tokens-hydrated="true"` on success. Tibetan Five-Wisdom OKLCH palette in `ui/app/globals.css` remains the authoritative default.
+  - **`kernelClient` extension** — added three typed helpers matching ADR-068 D1/D2/D3 route shapes: `getOllamaStatus()`, `getPraxisConstitution()`, `getPraxisApexPolicies()`. Types: `OllamaStatus`, `PraxisConstitution`, `PraxisApexPolicy` (shape verified against `kernel/app.py` handlers).
+  - **Playwright smoke** — 12 new tests in `ui/tests/09-persistent-shell.spec.ts`: top-bar all-four-indicators, drawer open/close, kill-switch two-step, Cmd+K palette contents, sidebar Jobs+Plugins sections, each of the five job pages renders its expected `panel-<SLOT>` set only.
+  - **PORTING_LEDGER** — new "Stage 1.5 · Kosmos UI Persistent Shell (ADR-068)" section: next 16, react 19, tailwindcss v4, @radix-ui/react-dialog, cmdk, @tanstack/react-query, zustand. All MIT. `cmdk` is the only new install this wave.
+- **Files touched:**
+  - `ui/package.json` (added `cmdk ^1.0.0`)
+  - `ui/app/layout.tsx` (rewritten: Server Component + PersistentShell wrapper)
+  - `ui/app/page.tsx` (slimmed: PanelGrid only)
+  - `ui/app/{command,operate,govern,observe,memory}/page.tsx` (new)
+  - `ui/components/PersistentShell.tsx` (new)
+  - `ui/components/JobPage.tsx` (new)
+  - `ui/components/Sidebar.tsx` (rewritten: Jobs + Plugins sections)
+  - `ui/components/PanelGrid.tsx` (slot allow-list prop)
+  - `ui/components/AlgedonicPill.tsx` (new)
+  - `ui/components/ModelSwapIndicator.tsx` (new)
+  - `ui/components/CommandPalette.tsx` (new)
+  - `ui/components/KillSwitch.tsx` (new)
+  - `ui/components/DesignTokenHydrator.tsx` (new)
+  - `ui/lib/kernel-client.ts` (3 new methods + 3 new types)
+  - `ui/tests/09-persistent-shell.spec.ts` (new, 12 tests)
+  - `PORTING_LEDGER.md` (Stage 1.5 UI section)
+- **Ports / adapters affected:** none. UI-only; consumes existing `FrontendContractPort` schema + ADR-068 D1/D2/D3 additive routes. ADR-007 preserved (no cross-plugin imports; all cross-plugin references go through the kernel schema).
+- **PORTING_LEDGER / ADR updated:** `PORTING_LEDGER.md` (Stage 1.5 section). ADR-068 remains the authoritative decision record.
+- **Stop-condition status:** met for Wave A. Blocked pending Colossus `pnpm i && (cd ui && npx next build) && pytest -q && (cd ui && npx playwright test)` sign-off before Waves B–D.
