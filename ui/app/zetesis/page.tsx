@@ -1,12 +1,23 @@
 "use client";
 import { useState } from "react";
 
+type Report = {
+  query?: string;
+  answer?: string;
+  source_diversity?: number;
+  latency_seconds?: number;
+  citations?: string[];
+  evidences?: unknown[];
+  memory_event_id?: string;
+  error?: string;
+};
+
 export default function ZetesisResearch() {
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [report, setReport] = useState(null);
-  const [error, setError] = useState(null);
+  const [query, setQuery] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [elapsed, setElapsed] = useState<number>(0);
+  const [report, setReport] = useState<Report | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const runResearch = async () => {
     if (!query.trim()) return;
@@ -73,12 +84,12 @@ export default function ZetesisResearch() {
             Source diversity: {report.source_diversity}
           </p>
           <p data-testid="zetesis-report-latency">
-            Latency: {report.latency_seconds.toFixed(1)}s
+            Latency: {(report.latency_seconds ?? 0).toFixed(1)}s
           </p>
 
           {report.citations && report.citations.length > 0 && (
             <ul data-testid="zetesis-report-citations">
-              {report.citations.map((c, i) => (
+              {report.citations.map((c: string, i: number) => (
                 <li data-testid={"zetesis-citation-" + i} key={i}>
                   <a href={c} target="_blank" rel="noreferrer">
                     {c}
@@ -92,7 +103,7 @@ export default function ZetesisResearch() {
             <details data-testid="zetesis-report-evidence">
               <summary>Evidence ({report.evidences.length})</summary>
               <ul>
-                {report.evidences.map((ev, i) => (
+                {report.evidences.map((ev: unknown, i: number) => (
                   <li data-testid={"zetesis-evidence-" + i} key={i}>
                     {JSON.stringify(ev)}
                   </li>

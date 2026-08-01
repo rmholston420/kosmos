@@ -531,7 +531,10 @@ async def lifespan(app: FastAPI):
             )
             registry.tektos_ui = _tektos_ui_app
             registry.tektos_ui_executor = _tektos_ui_executor
-            app.mount("/tektos-ui", _tektos_ui_app)
+            # Guard against duplicate mounts when lifespan is re-entered
+            # (TestClient reuses the module-level `app` across many tests).
+            if not any(getattr(r, "path", "") == "/tektos-ui" for r in app.routes):
+                app.mount("/tektos-ui", _tektos_ui_app)
         except Exception as exc:  # noqa: BLE001
             registry.errors["tektos_ui"] = f"{type(exc).__name__}: {exc}"
 
@@ -1603,7 +1606,8 @@ try:
     )
     from adapters.memory.dozerdb.corpora import ALL_CORPORA as _KOSMOS_ALL_CORPORA
 
-    app.mount("/gnosis-gate", _kosmos_build_stage_46_gate_app(corpora=_KOSMOS_ALL_CORPORA))
+    if not any(getattr(r, "path", "") == "/gnosis-gate" for r in app.routes):
+        app.mount("/gnosis-gate", _kosmos_build_stage_46_gate_app(corpora=_KOSMOS_ALL_CORPORA))
 except Exception as _kosmos_gate_exc:  # noqa: BLE001
     import logging as _kosmos_logging
 

@@ -2,16 +2,23 @@
 import { useEffect, useState } from "react";
 import { gnosisGateClient } from "../../lib/kernel-client";
 
+type Corpus = {
+  name: string;
+  n_facts: number;
+  n_edges: number;
+  licenses: string[];
+};
+
 export default function GnosisIndex() {
-  const [corpora, setCorpora] = useState([]);
-  const [error, setError] = useState(null);
-  const [fallback, setFallback] = useState(false);
+  const [corpora, setCorpora] = useState<Corpus[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [fallback, setFallback] = useState<boolean>(false);
 
   useEffect(() => {
     gnosisGateClient
       .listCorpora()
-      .then(setCorpora)
-      .catch((e) => {
+      .then((c: unknown) => setCorpora(c as Corpus[]))
+      .catch((e: unknown) => {
         setError(String(e));
         setFallback(true);
       });

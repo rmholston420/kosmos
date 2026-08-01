@@ -2256,3 +2256,22 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
   policy; no runtime Python dependency).
 - **Stop-condition status:** in-progress — branch `stage-1-gui-shell` pushed, PR #11 to open; DoD
   requires `ui/` builds green via `next build` and all Playwright test tiers green on Colossus.
+
+## 2026-08-01 05:07 EDT — Stage 1 · GUI shell fixes (TS strict + idempotent mount)
+
+- **Stage / plugin / port:** Stage 1 · GUI shell (ADR-057 + ADR-067)
+- **What changed:**
+  - `ui/app/gnosis/page.tsx`, `ui/app/gnosis/[corpusName]/page.tsx`, `ui/app/zetesis/page.tsx`: added explicit generic types to `useState` calls; annotated `.catch`/`.then`/`.map` callbacks; typed `params.corpusName` (`string | string[]` in Next 16) with a resolver. Fixes `next build` TS2345 under `"strict": true`.
+  - `kernel/app.py`: made `/tektos-ui` and `/gnosis-gate` mounts idempotent (skip re-mount if a route with the same path already exists on `app.routes`). Fixes `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py::test_sub_app_mounted_under_tektos_ui` which counted mount routes and failed with 13 duplicate `/tektos-ui` entries when the module-level `app` had its lifespan re-entered across many `TestClient` instances during a full-tier `pytest tests/kernel/` run. Preserves original mount semantics on cold boot.
+  - `.gitignore`: added `ui/next-env.d.ts`.
+- **Files touched:**
+  - `ui/app/gnosis/page.tsx`
+  - `ui/app/gnosis/[corpusName]/page.tsx`
+  - `ui/app/zetesis/page.tsx`
+  - `kernel/app.py`
+  - `.gitignore`
+  - `BUILD_LOG.md` (this entry)
+  - `DEBUG_LOG.md` (three new entries)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run of `next build`, `pytest tests/kernel/`, and `npx playwright test`.

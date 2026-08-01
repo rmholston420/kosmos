@@ -61,3 +61,4 @@ ui/out
 ui/test-results
 ui/playwright-report
 ui/.playwright
+ui/next-env.d.ts

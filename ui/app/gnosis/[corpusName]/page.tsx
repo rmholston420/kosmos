@@ -3,34 +3,56 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { gnosisGateClient } from "../../../lib/kernel-client";
 
+type Claim = {
+  event_id: string;
+  subject: string;
+  predicate: string;
+  object_: string;
+  confidence: number;
+};
+
+type Provenance = {
+  claim: { event_id: string };
+  outbound: unknown[];
+  inbound: unknown[];
+};
+
+type Edge = { kind: string; dst_subject: string };
+
 export default function GnosisCorpusDetail() {
   const params = useParams();
-  const corpusName = params.corpusName;
+  const rawCorpus = params?.corpusName;
+  const corpusName = Array.isArray(rawCorpus) ? rawCorpus[0] : (rawCorpus ?? "");
 
-  const [detail, setDetail] = useState(null);
-  const [error, setError] = useState(null);
-  const [query, setQuery] = useState("");
-  const [queryResults, setQueryResults] = useState(null);
-  const [provenance, setProvenance] = useState(null);
-  const [edges, setEdges] = useState(null);
+  const [detail, setDetail] = useState<unknown | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState<string>("");
+  const [queryResults, setQueryResults] = useState<Claim[] | null>(null);
+  const [provenance, setProvenance] = useState<Provenance | null>(null);
+  const [edges, setEdges] = useState<Edge[] | null>(null);
 
   useEffect(() => {
+    if (!corpusName) return;
     gnosisGateClient
       .getCorpusDetail(corpusName)
-      .then(setDetail)
-      .catch((e) => setError(String(e)));
+      .then((d: unknown) => setDetail(d))
+      .catch((e: unknown) => setError(String(e)));
   }, [corpusName]);
 
   const runQuery = () => {
-    gnosisGateClient.query(corpusName, query).then(setQueryResults);
+    gnosisGateClient.query(corpusName, query).then((r: unknown) => setQueryResults(r as Claim[]));
   };
 
-  const showProvenance = (eventId) => {
-    gnosisGateClient.getProvenance(corpusName, eventId).then(setProvenance);
+  const showProvenance = (eventId: string) => {
+    gnosisGateClient
+      .getProvenance(corpusName, eventId)
+      .then((p: unknown) => setProvenance(p as Provenance));
   };
 
-  const showTraversal = (eventId) => {
-    gnosisGateClient.traverse(corpusName, eventId).then(setEdges);
+  const showTraversal = (eventId: string) => {
+    gnosisGateClient
+      .traverse(corpusName, eventId)
+      .then((e: unknown) => setEdges(e as Edge[]));
   };
 
   if (error) return <main data-testid="gnosis-detail-error">{error}</main>;

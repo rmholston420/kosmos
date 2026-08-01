@@ -501,3 +501,34 @@ Entry format per `kosmos-log-maintenance` skill:
   - `plugins/tektos/ui/templates.py`
   - `tests/kernel/test_stage_6_5_9_gui_enablement.py` (D5 test class)
 - **Related BUILD_LOG entry:** 2026-08-01 04:35 EDT
+
+## 2026-08-01 05:07 EDT — `next build` TS2345 on `useState(null)` in Stage 1 GUI
+
+- **Symptom:** `./app/gnosis/[corpusName]/page.tsx:21:30 Type error: Argument of type 'string' is not assignable to parameter of type 'SetStateAction<null>'.` — `next build` on Colossus after `git pull` of `stage-1-gui-shell`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell (`ui/app/gnosis/*`, `ui/app/zetesis/page.tsx`).
+- **Root cause:** `useState(null)` under `"strict": true` in `tsconfig.json` infers the state type as `null` (not `null | T`), so any subsequent setter call with a string/object fails TS2345. Multiple pages had this pattern.
+- **Fix applied:** Added explicit generic type parameters to every `useState` call in the affected pages (`useState<string | null>(null)`, `useState<Corpus[]>([])`, etc.). Annotated `.catch(e: unknown)`, `.then(x: unknown)`, and `.map((c: T, i: number)` callbacks. Typed `params.corpusName` (`string | string[]`) with a `Array.isArray()` resolver.
+- **Files changed:**
+  - `ui/app/gnosis/page.tsx`
+  - `ui/app/gnosis/[corpusName]/page.tsx`
+  - `ui/app/zetesis/page.tsx`
+- **Related BUILD_LOG entry:** 2026-08-01 05:07 EDT
+
+## 2026-08-01 05:07 EDT — `test_sub_app_mounted_under_tektos_ui` fails with 13 duplicate `/tektos-ui` routes
+
+- **Symptom:** `AssertionError: expected a Mount at /tektos-ui, got: [...]` with 13 duplicate `/tektos-ui` entries in `app.routes`. Test at `tests/kernel/test_stage_6_5_8_tektos_ui_mount.py:213` compares `mount_paths == ["/tektos-ui"]` and fails when the count exceeds 1.
+- **Affected stage / plugin / port:** Stage 6.5.8 (Tektos UI kernel mount, ADR-065) surfaced during Stage 1 full-tier retest.
+- **Root cause:** `kernel/app.py` mounts `/tektos-ui` inside the lifespan `@asynccontextmanager` at line 534. FastAPI/Starlette `TestClient` enters lifespan on every client construction, so a full `pytest tests/kernel/` run that constructs many `TestClient` instances re-runs the lifespan block and re-mounts `/tektos-ui` each time onto the shared module-level `app` object. Existing routes are never deduplicated. Bug shipped in ADR-065 (2026-07-30) but was masked because 6.5.8 test-tier runs collected fewer than 2 TestClient instances before the assertion. 6.5.9 tier expansion pushed the count past 1.
+- **Fix applied:** Added an idempotency guard around the mount call: `if not any(getattr(r, "path", "") == "/tektos-ui" for r in app.routes): app.mount(...)`. Same guard added preemptively to the new Stage 1 Gnosis-gate mount (module-scope, so belt-and-suspenders). Preserves cold-boot semantics.
+- **Files changed:**
+  - `kernel/app.py`
+- **Related BUILD_LOG entry:** 2026-08-01 05:07 EDT
+
+## 2026-08-01 05:07 EDT — Playwright web-server cannot find `.next` build
+
+- **Symptom:** `[WebServer] Error: Could not find a production build in the '.next' directory. Try building your app with 'next build' before starting the production server.` — Playwright refuses to start `next start`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell test tier.
+- **Root cause:** Cascade of the TS2345 build failure above. `next build` exits non-zero → no `.next` directory → `playwright.config.ts` `webServer.command` (`next start`) exits 1.
+- **Fix applied:** Fixed the underlying TS2345 errors (see entry above). No Playwright-config change needed.
+- **Files changed:** none in this entry
+- **Related BUILD_LOG entry:** 2026-08-01 05:07 EDT
