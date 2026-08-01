@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import sys
 import time
@@ -25,8 +26,27 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from ops.benchmarks.adr_010.metrics import TrialMetrics
-from . import (
+# Local-first Ollama env seeds for OpenAI SDK. ODR upstream (d337ae3) only
+# declares ``configurable_fields=("model", "max_tokens", "api_key")`` on
+# ``init_chat_model`` — ``base_url`` is *not* in that tuple, so LangChain's
+# ``with_config(model_config)`` silently drops any ``base_url`` we put on
+# ``research_model_config``/``summarization_model_config``/etc. The OpenAI
+# SDK therefore has to source both ``api_key`` and ``base_url`` from env:
+#   - ``get_api_key_for_model`` at ``vendor/adr_010/.../utils.py:892``
+#     reads ``OPENAI_API_KEY`` from ``os.getenv``.
+#   - ``openai.OpenAI.__init__`` reads ``OPENAI_BASE_URL`` from
+#     ``os.environ`` when no ``base_url`` kwarg is passed.
+#
+# Colossus is local-first with neither exported. Seed sentinels here at
+# module import so ``AsyncOpenAI`` (a) accepts client construction and
+# (b) targets Ollama at ``127.0.0.1:11434/v1`` instead of
+# ``https://api.openai.com/v1``. ``setdefault`` preserves any real value an
+# operator has set elsewhere in the process (mixed local + hosted setup).
+os.environ.setdefault("OPENAI_API_KEY", "ollama")
+os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")
+
+from ops.benchmarks.adr_010.metrics import TrialMetrics  # noqa: E402
+from . import (  # noqa: E402
     claim_support,
     cove,
     enterprise_license_grounding,
@@ -35,13 +55,13 @@ from . import (
     rubric_critique,
     structural_finalize,
 )
-from .prompts import (
+from .prompts import (  # noqa: E402
     KOSMOS_MCP_PROMPT,
     build_anchored_user_turn,
     build_fact_check_correction_directive,
 )
-from .search_backend import unique_domain_count
-from .url_verify import extract_urls, verify_urls
+from .search_backend import unique_domain_count  # noqa: E402
+from .url_verify import extract_urls, verify_urls  # noqa: E402
 
 
 class ThermalAbort(RuntimeError):
@@ -186,24 +206,32 @@ def build_odr_config(
             # harness/prompts.py for the full contract.
             "mcp_prompt": KOSMOS_MCP_PROMPT,
             # Model slots — all pointed at Ollama via openai-compat.
+            # ``api_key`` is sourced from the ``OPENAI_API_KEY`` env var
+            # by ODR's ``get_api_key_for_model`` (module-level sentinel
+            # seeded at the top of this file). ``base_url`` + sampling
+            # params are model-slot local and set here.
             "research_model": prefixed_model,
             "research_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.7,
             },
             "summarization_model": prefixed_model,
             "summarization_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.3,
             },
             "final_report_model": prefixed_model,
             "final_report_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.3,
             },
             "compression_model": prefixed_model,
             "compression_model_config": {
                 "base_url": ollama_base_url,
+                "api_key": "ollama",
                 "temperature": 0.3,
             },
             # Environment knobs commonly needed for local models.

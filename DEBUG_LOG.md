@@ -667,3 +667,30 @@ Entry format per `kosmos-log-maintenance` skill:
   - `plugins/zetesis/adapters/memory_stub.py::ZetesisMemoryStub` (real stub, kept in prod path but only used for wiring; degrades to `[]`, matches the "adapters MAY degrade" clause in the port docstring).
 - **Files changed:** `plugins/tektos/tests/test_openspec.py`; `plugins/tektos/tests/test_repomap.py`; `plugins/tektos/tests/test_tektos_agent.py`; `plugins/zetesis/adapters/memory_stub.py`
 - **Related BUILD_LOG entry:** 2026-08-01 11:52 EDT (Stage 1.6 Phase 2 D1–D5)
+
+## 2026-08-01 12:19 EDT — Zetesis research fails at start: `OpenAIError: Missing credentials`
+
+- **Symptom:** UI /zetesis Research button surfaces `Research failed: OpenAIError: Missing credentials. Please pass an api_key, workload_identity, admin_api_key, or set the OPENAI_API_KEY or OPENAI_ADMIN_KEY environment variable.` No inference ever reaches Ollama; no report emits; downstream `/gnosis/graph` stays empty because ADR-075 D3 fan-out has nothing to consume.
+- **Affected stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · `plugins/zetesis/research/odr.py` · downstream `/api/gnosis/graph/{nodes,edges}` (empty by cascade)
+- **Root cause:** `build_odr_config` in `plugins/zetesis/research/odr.py` populates four LangChain model slots (`research_model_config`, `summarization_model_config`, `final_report_model_config`, `compression_model_config`) with `base_url` + `temperature` but no `api_key`. Even though the endpoint targets Ollama's openai-compat surface (which ignores auth), the OpenAI SDK enforces a non-empty `api_key` at `AsyncOpenAI` client construction time. When no `OPENAI_API_KEY` env var is set (the local-first Colossus case), the client raises before any request leaves the process. ODR's `configurable_fields=("model", "max_tokens", "api_key")` explicitly documents `api_key` as a configurable field — Kosmos was never setting it.
+- **Fix applied:** Added `"api_key": "ollama"` sentinel to all four model_config dicts in `build_odr_config`. Added regression test `test_odr_config_supplies_api_key_on_every_model_slot` in `plugins/zetesis/research/tests/test_prompts.py` asserting every model slot carries a non-empty `api_key`.
+- **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
+- **Related BUILD_LOG entry:** —
+
+## 2026-08-01 12:26 EDT — Zetesis research still fails after configurable api_key fix: root cause is ODR reads os.getenv, not the config dict
+
+- **Symptom:** After hotfix commit 67b93e8 added ``"api_key": "ollama"`` to all four ``build_odr_config`` model_config dicts, Zetesis Research still surfaces ``OpenAIError: Missing credentials`` on Colossus.
+- **Affected stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · ``plugins/zetesis/research/odr.py`` + ``vendor/adr_010/open_deep_research/src/open_deep_research/utils.py``
+- **Root cause:** ODR's ``get_api_key_for_model`` at ``vendor/adr_010/open_deep_research/src/open_deep_research/utils.py:892`` reads ``OPENAI_API_KEY`` from ``os.getenv`` on the default path (``GET_API_KEYS_FROM_CONFIG != "true"``). It does **not** read ``configurable.<slot>_config.api_key``. Even with the model_config dict correctly populated, the SDK client is constructed with ``api_key=None`` because ``os.getenv("OPENAI_API_KEY")`` returns ``None`` on Colossus. Prior audit at 12:19 EDT missed this — the ``configurable_fields=("model", "max_tokens", "api_key")`` comment misled me; that tuple lists which top-level fields the *configurable model* accepts at bind time, not what ODR internally reads for auth.
+- **Fix applied:** Seed ``os.environ.setdefault("OPENAI_API_KEY", "ollama")`` at ``plugins/zetesis/research/odr.py`` module import. ``setdefault`` (not assignment) so a real key set elsewhere in the process is not clobbered. The four ``api_key`` model_config slots stay in place — they are correct-shape config and future-proof if ODR upstream ever reads them.
+- **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
+- **Supersedes:** 2026-08-01 12:19 EDT
+
+## 2026-08-01 12:31 EDT — Zetesis research 401 from api.openai.com after OPENAI_API_KEY seed: base_url dropped by LangChain configurable_fields
+
+- **Symptom:** After hotfix commit 86de862 seeded ``OPENAI_API_KEY=ollama``, Zetesis Research surfaces ``AuthenticationError: Error code: 401 - Incorrect API key provided: ollama. You can find your API key at https://platform.openai.com/account/api-keys``. Real HTTP round-trip to hosted OpenAI — no local Ollama traffic on 127.0.0.1:11434.
+- **Affected stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · ``plugins/zetesis/research/odr.py`` + ``vendor/adr_010/open_deep_research/src/open_deep_research/deep_researcher.py`` + LangChain ``init_chat_model`` bind path
+- **Root cause:** ODR upstream (vendor commit d337ae3) declares ``configurable_model = init_chat_model(configurable_fields=("model", "max_tokens", "api_key"))``. ``base_url`` is not in the whitelist tuple, so LangChain's ``configurable_model.with_config({"model": ..., "base_url": ...})`` silently drops the ``base_url`` field. The bound OpenAI client then falls back to reading ``OPENAI_BASE_URL`` from env; if unset, it hits the SDK default ``https://api.openai.com/v1``. Colossus had no ``OPENAI_BASE_URL`` exported, so Ollama's local endpoint was never reached — the sentinel ``api_key="ollama"`` was accepted by client construction but rejected by hosted OpenAI at auth.
+- **Fix applied:** ``os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")`` seed alongside the API key seed at ``plugins/zetesis/research/odr.py`` module import. Both use ``setdefault`` so an operator running a mixed local + hosted setup (with ``export OPENAI_BASE_URL=https://api.openai.com/v1``) is not overridden.
+- **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
+- **Supersedes:** 2026-08-01 12:26 EDT

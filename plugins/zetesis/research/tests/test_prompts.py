@@ -188,6 +188,70 @@ def test_odr_config_injects_kosmos_mcp_prompt() -> None:
     assert config["configurable"]["mcp_prompt"] is KOSMOS_MCP_PROMPT
 
 
+def test_odr_config_supplies_api_key_on_every_model_slot() -> None:
+    # Regression guard for `OpenAIError: Missing credentials` at
+    # Zetesis research start. The OpenAI SDK enforces a non-empty
+    # ``api_key`` at client construction time even when ``base_url``
+    # targets Ollama's openai-compat endpoint. Every ODR model slot
+    # must carry a sentinel key so ``init_chat_model`` does not raise
+    # when the operator has no ``OPENAI_API_KEY`` env var (the common
+    # local-first case on Colossus).
+    config = odr_module.build_odr_config(
+        ollama_base_url="http://127.0.0.1:11434/v1",
+        ollama_model="qwen2.5:32b-instruct-q4_K_M",
+        mcp_server_url="http://127.0.0.1:8000",
+    )
+    configurable = config["configurable"]
+    for slot in (
+        "research_model_config",
+        "summarization_model_config",
+        "final_report_model_config",
+        "compression_model_config",
+    ):
+        assert slot in configurable, f"missing slot {slot!r}"
+        assert (
+            configurable[slot].get("api_key")
+        ), f"{slot!r} missing non-empty api_key"
+
+
+def test_odr_module_seeds_openai_api_key_env_var() -> None:
+    # ODR's ``get_api_key_for_model`` in
+    # ``vendor/adr_010/open_deep_research/src/open_deep_research/utils.py``
+    # reads ``OPENAI_API_KEY`` from ``os.getenv`` (not from any
+    # ``configurable.*.api_key`` slot) for every ``openai:`` prefixed
+    # model tag. The odr module must seed a sentinel at import time so
+    # the OpenAI SDK does not raise ``OpenAIError: Missing credentials``
+    # on Colossus (local-first, no OPENAI_API_KEY exported).
+    import os as _os
+    assert _os.environ.get("OPENAI_API_KEY"), (
+        "OPENAI_API_KEY not seeded by plugins.zetesis.research.odr; "
+        "AsyncOpenAI would raise at client construction on Colossus"
+    )
+
+
+def test_odr_module_seeds_openai_base_url_env_var() -> None:
+    # ODR upstream declares ``configurable_fields=("model", "max_tokens",
+    # "api_key")`` on ``init_chat_model`` — ``base_url`` is *not* in the
+    # tuple, so LangChain silently drops any ``base_url`` we put on the
+    # per-slot ``*_model_config`` dicts. The OpenAI SDK therefore has to
+    # read ``OPENAI_BASE_URL`` from the environment or it hits
+    # ``https://api.openai.com/v1`` and 401s with ``AuthenticationError:
+    # Incorrect API key provided: ollama``. The odr module must seed a
+    # local Ollama endpoint at import time.
+    import os as _os
+    base_url = _os.environ.get("OPENAI_BASE_URL") or ""
+    assert base_url, (
+        "OPENAI_BASE_URL not seeded by plugins.zetesis.research.odr; "
+        "OpenAI SDK would default to api.openai.com and 401"
+    )
+    assert base_url.startswith("http://127.0.0.1:") or base_url.startswith(
+        "http://localhost:"
+    ), (
+        f"OPENAI_BASE_URL={base_url!r} is not a local Ollama endpoint; "
+        "Colossus is local-first and must not egress to hosted OpenAI"
+    )
+
+
 def test_odr_module_imports_anchoring_functions() -> None:
     # Guard against a future refactor that reintroduces the pre-6.3.1 inline
     # placeholder prompt in odr.py.
