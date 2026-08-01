@@ -23,7 +23,7 @@ test.describe("Memory provenance (ADR-076 D5)", () => {
   });
 
   test("provenance page renders scaffold with event id", async ({ page }) => {
-    await page.goto(`/memory/provenance/${FAKE_EVENT_ID}`);
+    await page.goto(`/memory/provenance?event=${FAKE_EVENT_ID}`);
     await expect(
       page.getByTestId("memory-provenance-page"),
     ).toBeVisible();
@@ -35,10 +35,19 @@ test.describe("Memory provenance (ADR-076 D5)", () => {
     ).toBeVisible();
   });
 
+  test("missing ?event= parameter surfaces missing_param state", async ({
+    page,
+  }) => {
+    await page.goto("/memory/provenance");
+    await expect(
+      page.getByTestId("memory-provenance-missing-param"),
+    ).toBeVisible();
+  });
+
   test("initial state resolves to one of the terminal states", async ({
     page,
   }) => {
-    await page.goto(`/memory/provenance/${FAKE_EVENT_ID}`);
+    await page.goto(`/memory/provenance?event=${FAKE_EVENT_ID}`);
     // At least one terminal state must appear (not loading forever).
     const terminals = [
       "memory-provenance-not-found",

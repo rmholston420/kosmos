@@ -408,7 +408,7 @@ export default function MemorySearchPage() {
                 >
                   <Link
                     data-testid="memory-search-hit-provenance-link"
-                    href={`/memory/provenance/${encodeURIComponent(h.id)}`}
+                    href={`/memory/provenance?event=${encodeURIComponent(h.id)}`}
                   >
                     <code
                       data-testid="memory-search-hit-id"

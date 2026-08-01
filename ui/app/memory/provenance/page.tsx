@@ -1,8 +1,12 @@
 // ADR-076 D5 — Provenance chain UI.
 //
-// Route: /memory/provenance/[event_id]
+// Route: /memory/provenance?event=<event_id>
 //
-// Renders the chain returned by GET /api/memory/provenance/{event_id}:
+// Query-parameter based to stay compatible with `output: 'export'` in
+// next.config.js (a dynamic segment `[event_id]` would require
+// generateStaticParams at build time, which does not fit runtime-
+// unknown ids). Renders the chain returned by
+// GET /api/memory/provenance/{event_id}:
 // - Root card at top (source + timestamp + confidence pill)
 // - Predecessors below in depth order (ProvenanceLink cards)
 // - Confidence pill palette matches Stage 4.6 gate template:
@@ -12,15 +16,23 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   kernelClient,
   type ProvenanceChain,
   type ProvenanceLink,
-} from "../../../../lib/kernel-client";
+} from "../../../lib/kernel-client";
 
-type LoadState = "idle" | "loading" | "ok" | "not_found" | "unavailable" | "error";
+type LoadState =
+  | "idle"
+  | "missing_param"
+  | "loading"
+  | "ok"
+  | "not_found"
+  | "unavailable"
+  | "error";
 
 function confidencePill(conf: number): { bg: string; label: string } {
   if (conf >= 0.9) return { bg: "#1b7f3a", label: conf.toFixed(3) };
@@ -28,26 +40,23 @@ function confidencePill(conf: number): { bg: string; label: string } {
   return { bg: "#7a1f1f", label: conf.toFixed(3) };
 }
 
-export default function ProvenancePage({
-  params,
-}: {
-  params: Promise<{ event_id: string }>;
-}) {
-  const [eventId, setEventId] = useState<string>("");
+function ProvenanceInner() {
+  const searchParams = useSearchParams();
+  const eventId = searchParams.get("event") ?? "";
   const [chain, setChain] = useState<ProvenanceChain | null>(null);
   const [state, setState] = useState<LoadState>("idle");
   const [errText, setErrText] = useState<string>("");
 
   useEffect(() => {
+    if (!eventId) {
+      setState("missing_param");
+      return;
+    }
     let cancelled = false;
+    setState("loading");
     (async () => {
-      const { event_id } = await params;
-      const decoded = decodeURIComponent(event_id);
-      if (cancelled) return;
-      setEventId(decoded);
-      setState("loading");
       try {
-        const c = await kernelClient.getProvenanceChain(decoded);
+        const c = await kernelClient.getProvenanceChain(eventId);
         if (cancelled) return;
         setChain(c);
         setState("ok");
@@ -67,7 +76,7 @@ export default function ProvenancePage({
     return () => {
       cancelled = true;
     };
-  }, [params]);
+  }, [eventId]);
 
   return (
     <main
@@ -87,10 +96,15 @@ export default function ProvenancePage({
           data-testid="memory-provenance-event-id"
           style={{ opacity: 0.85 }}
         >
-          {eventId}
+          {eventId || "(no event id)"}
         </code>
       </header>
 
+      {state === "missing_param" && (
+        <p data-testid="memory-provenance-missing-param">
+          Missing ?event= parameter.
+        </p>
+      )}
       {state === "loading" && (
         <p data-testid="memory-provenance-loading">Loading…</p>
       )}
@@ -140,6 +154,14 @@ export default function ProvenancePage({
         </section>
       )}
     </main>
+  );
+}
+
+export default function ProvenancePage() {
+  return (
+    <Suspense fallback={<p>Loading…</p>}>
+      <ProvenanceInner />
+    </Suspense>
   );
 }
 
@@ -215,7 +237,7 @@ function PredecessorCard({ link }: { link: ProvenanceLink }) {
       <div>
         <Link
           data-testid="memory-provenance-predecessor-link"
-          href={`/memory/provenance/${encodeURIComponent(link.event_id)}`}
+          href={`/memory/provenance?event=${encodeURIComponent(link.event_id)}`}
         >
           <code>{link.event_id}</code>
         </Link>
