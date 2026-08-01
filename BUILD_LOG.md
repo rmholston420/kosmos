@@ -3128,3 +3128,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort (search_semantic surface now covered by all fakes/stubs); EventBusPort (zetesis fan-out consumer)
 - **PORTING_LEDGER / ADR updated:** ADR-075 (Ratified · fully executed)
 - **Stop-condition status:** met — Stage 1.6 Phase 2 complete
+
+## 2026-08-01 12:35 EDT — Zetesis Research end-to-end (hotfix PR #29 merged)
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · `plugins/zetesis/research/odr.py` · downstream MemoryPort write via ADR-075 D3
+- **What changed:** Three-commit hotfix seeds `OPENAI_API_KEY=ollama` and `OPENAI_BASE_URL=http://127.0.0.1:11434/v1` via `os.environ.setdefault` at ODR module import. Both env vars use setdefault so operator overrides survive. Fixes cascade: OpenAIError → AuthenticationError → success. Colossus verify: query "what is yoga" completed in 96.6s, source_diversity=4, memory event 07cb502a-6b8b-4c53-a12a-53c1087bc5a9 persisted.
+- **Files touched:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py; DEBUG_LOG.md
+- **Ports / adapters affected:** none (behavior fix under existing LLMPort/EventBusPort/MemoryPort surfaces)
+- **PORTING_LEDGER / ADR updated:** — (behavior fix; no port/decision surface change)
+- **Stop-condition status:** met — Zetesis /research returns a structured report; MemoryPort receives the event with provenance="zetesis.event_bus" + confidence=1.0 per ADR-075 D3.
