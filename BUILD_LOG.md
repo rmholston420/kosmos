@@ -2110,3 +2110,15 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `MemoryPort` protocol untouched; `DozerDbMemoryAdapter` untouched; `ALL_CORPORA` tuple consumed as-is.
 - **PORTING_LEDGER / ADR updated:** ADR-064 new; PORTING_LEDGER unchanged.
 - **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
+
+## 2026-08-01 03:15 EDT — Stage 6.5.7 · Gnosis seeder NameError hotfix
+
+- **Stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · Gnosis boot seeder (ADR-064)
+- **What changed:** Hoisted `import os` to module-top imports in `kernel/app.py`. The Gnosis boot seeder block added earlier this session referenced `os.environ.get("KOSMOS_GNOSIS_SEED", ...)` at `create_app()` scope, but `os` was only imported inside the sibling `_boot_memory()` closure — so both the `TestClient` lifespan (18/21 Stage 6.5.7 tests erroring at setup with `NameError: name 'os' is not defined`) and the live `uvicorn` startup (`Application startup failed. Exiting.`) hit the same crash on Colossus. Single-line fix. No behavior change to any working path.
+- **Files touched:**
+  - `kernel/app.py` (added `import os` at module top, alphabetical position between `json` and `uuid`)
+  - `DEBUG_LOG.md` (new entry — first `NameError: name 'os' is not defined` symptom recorded)
+  - `SESSION_HANDOFF.md` (overwritten with retest posture)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest.

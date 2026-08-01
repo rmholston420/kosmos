@@ -54,6 +54,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import os
 import uuid
 from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation

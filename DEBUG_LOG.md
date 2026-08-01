@@ -458,3 +458,13 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Rewrote `_dataclass_to_dict` to check `dataclasses.is_dataclass(obj)` **first** and use `dataclasses.fields(obj)` + `getattr(obj, f.name)` for extraction. Added `Decimal` → `str` coercion (money/resource amounts) and tightened enum detection to require both `.value` and `.name` (avoiding false positives on `Decimal` and str-enum ambiguity).
 - **Files changed:** `kernel/app.py`
 - **Related BUILD_LOG entry:** 2026-08-01 01:24 EDT
+
+## 2026-08-01 03:15 EDT — NameError: name 'os' is not defined in Gnosis boot seeder
+
+- **Symptom:** `NameError: name 'os' is not defined. Did you forget to import 'os'` at `kernel/app.py:386` when either (a) `TestClient(app)` fires the lifespan on any Stage 6.5.7 test — 18 of 21 tests error at setup — or (b) `uvicorn kernel.app:app` starts with `KOSMOS_GNOSIS_SEED=1` set. Application startup fails; server exits with code 3. Live smoke `curl /api/gnosis/*` returns empty responses because the process never bound the port.
+- **Affected stage / plugin / port:** Stage 6.5.7 · Kernel HTTP surface · Gnosis boot seeder (ADR-064)
+- **Root cause:** `kernel/app.py` uses `os.environ.get(...)` at two scopes — inside the `_boot_memory()` closure (line 317, has a local `import os`) and inside the new Gnosis boot seeder block at `create_app()` scope (line 386, no `os` in scope). The seeder block references `os` from the enclosing `create_app` frame, but `os` was never imported at module top or in the `create_app` closure — it was only imported inside `_boot_memory()`. The seeder inherits nothing from that sibling function.
+- **Fix applied:** Hoisted `import os` to module-top imports (line 57, alphabetical position between `import json` and `import uuid`). Removed no code — the pre-existing `import os` inside `_boot_memory()` is now redundant but harmless. Left it in place to keep the hotfix diff to a single line and avoid touching an unrelated closure.
+- **Files changed:**
+  - `kernel/app.py` (added `import os` at module top)
+- **Related BUILD_LOG entry:** 2026-08-01 03:05 EDT
