@@ -41,7 +41,7 @@ def test_kernel_plugins_lists_zetesis(client) -> None:
     plugins = r.json()
     assert isinstance(plugins, list)
     names = [p.get("name") for p in plugins]
-    assert "kosmos.plugin.zetesis" in names, (
+    assert "zetesis" in names, (
         f"expected zetesis in plugin list, got {names}"
     )
 
