@@ -982,9 +982,12 @@ async def gnosis_query(
             )
 
     try:
-        # When ``corpus`` is set we widen the raw limit so post-filtering
-        # still returns a full page, then clip.
-        raw_limit = min(100, limit * 5) if provenance_filter else limit
+        # When ``corpus`` is set we widen the raw limit aggressively so
+        # post-filtering still returns a full page even when the query
+        # text ranks a different corpus higher, then clip.
+        raw_limit = (
+            min(100, max(limit * 10, 50)) if provenance_filter else limit
+        )
         hits = await registry.memory.query_temporal(
             q, as_of=parsed_as_of, limit=raw_limit
         )
@@ -1001,7 +1004,16 @@ async def gnosis_query(
         filtered = []
         for h in hits:
             payload = getattr(h, "payload", None) or {}
-            if payload.get("provenance") == provenance_filter:
+            # Graphiti dedupes entity edges across episodes, so a hit
+            # may span multiple source corpora. Match membership in the
+            # plural ``provenances`` set surfaced by the adapter; fall
+            # back to the singular ``provenance`` field for adapters
+            # that only expose one source.
+            provenances = payload.get("provenances") or []
+            if not isinstance(provenances, (list, tuple, set)):
+                provenances = []
+            singular = payload.get("provenance")
+            if provenance_filter in provenances or singular == provenance_filter:
                 filtered.append(h)
                 if len(filtered) >= limit:
                     break

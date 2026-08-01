@@ -478,3 +478,14 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:**
   - `tests/kernel/test_stage_6_5_7_gnosis_retrieval.py` (env preamble + noqa markers)
 - **Related BUILD_LOG entry:** 2026-08-01 03:32 EDT
+
+## 2026-08-01 03:55 EDT — Gnosis corpus filter always returns empty; provenance not surfaced by Graphiti adapter
+
+- **Symptom:** `GET /api/gnosis/query?q=Rigpa&corpus=rigpa-export&limit=5` returns `{"hits": []}` on real DozerDB even though the unfiltered `GET /api/gnosis/query?q=Rigpa&limit=5` returns 5 hits, some of which came from the `rigpa-export` corpus. All corpus-filtered variants (`rigpa-export`, `humanities-bilara`, etc.) return empty. Unknown-corpus rejection (`corpus=nonexistent`) correctly returns 400.
+- **Affected stage / plugin / port:** Stage 6.5.7 · Gnosis retrieval surrogate · `/api/gnosis/query` corpus filter (ADR-064) · `adapters/memory/dozerdb/graphiti_temporal_index.py`
+- **Root cause:** `GraphitiTemporalIndex.query_temporal` constructed `MemoryHit.payload` from raw `EntityEdge` fields only (`fact`, `valid_at`) and dropped every source-side attribute stored on the backing `EpisodicNode`. Graphiti's `EntityEdge.attributes` is empty by design — the adapter's `record_event` stores provenance as `source_description` on the `EpisodicNode` (line 88 of graphiti_temporal_index.py). The kernel's corpus filter compares `payload.get("provenance") == provenance_filter`, but that key was never populated, so every filtered query short-circuited to empty. Additionally, Graphiti dedupes entity edges across episodes: the same fact ("R.M. Holston founded the Rigpa-LMS project.") was seeded by both the `synthetic-lifeline` and `rigpa-export` corpora, so its edge's `episodes` list spans multiple source corpora — a scalar `provenance` cannot represent the union.
+- **Fix applied:** Reworked `GraphitiTemporalIndex.query_temporal` to batch-hydrate `EpisodicNode`s for all returned edges in one `EpisodicNode.get_by_uuids(driver, uuids)` call (no LLM, single Bolt round-trip), build an `episode_uuid → source_description` map, and inject **both** `payload["provenance"]` (singular, first source — preserves the pre-6.5.7 payload shape) and `payload["provenances"]` (plural, ordered union) on each `MemoryHit`. Hydration failures are best-effort (logged, filter falls back to no-match). Also widened the kernel's `raw_limit` when a corpus filter is set from `limit * 5` to `min(100, max(limit * 10, 50))` so semantically-weaker corpus hits still page through. Kernel filter now accepts membership in the plural set OR equality to the singular field.
+- **Files changed:**
+  - `adapters/memory/dozerdb/graphiti_temporal_index.py` (batch EpisodicNode hydration + payload provenance injection)
+  - `kernel/app.py` (filter uses `provenances` set membership; wider `raw_limit`)
+- **Related BUILD_LOG entry:** 2026-08-01 03:55 EDT

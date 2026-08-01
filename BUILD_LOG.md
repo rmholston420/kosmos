@@ -2134,3 +2134,19 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest.
+
+## 2026-08-01 03:55 EDT — Stage 6.5.7 · Corpus filter fix (provenance hydration in Graphiti adapter)
+
+- **Stage / plugin / port:** Stage 6.5.7 · Gnosis retrieval surrogate · `/api/gnosis/query` corpus filter (ADR-064) · `adapters/memory/dozerdb/graphiti_temporal_index.py`
+- **What changed:**
+  - `GraphitiTemporalIndex.query_temporal` now batch-hydrates the `EpisodicNode`s that back each returned `EntityEdge` (via `EpisodicNode.get_by_uuids(client.driver, uuids)`), and injects `provenance` (singular, first source) + `provenances` (plural, ordered union) into each `MemoryHit.payload`. Best-effort — hydration failure logs a warning and returns hits with no provenance rather than failing the query.
+  - `kernel/app.py:gnosis_query` filter accepts membership in `payload["provenances"]` OR equality to legacy `payload["provenance"]`, and widens `raw_limit` from `limit * 5` to `min(100, max(limit * 10, 50))` when a corpus filter is set.
+  - Colossus live smoke verified all four routes green with `KOSMOS_GNOSIS_SEED` unset (kernel booted in 15s against a graph already holding 214 seeded facts). `/api/gnosis/query?q=Rigpa&corpus=rigpa-export` bug isolated to the adapter payload, fixed here.
+- **Files touched:**
+  - `adapters/memory/dozerdb/graphiti_temporal_index.py` (query_temporal payload hydration)
+  - `kernel/app.py` (corpus filter membership + wider raw_limit)
+  - `DEBUG_LOG.md` (new entry for the corpus-filter symptom)
+  - `SESSION_HANDOFF.md` (overwritten with retest posture)
+- **Ports / adapters affected:** `TemporalIndex` (payload shape widened — additive, no breaking change).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress — hotfix pushed to PR #8 branch, awaiting Colossus retest of corpus filter.
