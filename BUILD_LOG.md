@@ -3538,3 +3538,14 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** ledger appended; ADR-080 unchanged
 - **Stop-condition status:** unchanged. Step 2 is next.
+
+## 2026-08-01 17:47 EDT — Stage 3.14b step 2a: ColossusResourceGuard
+
+- **Stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` · no port (executor-internal helper — ResourcePort migration deferred to Phase 4 per ADR-080)
+- **What changed:** Landed `plugins/tektos/executor/resource_guard.py` — the ADR-080-locked Colossus resource-envelope guard. `ColossusResourceGuard.check()` queries free VRAM via `nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits` (multi-GPU aware: takes the minimum) and available RAM by reading `/proc/meminfo`'s `MemAvailable` (converted kB → MiB via floor division so we never round up). Returns a frozen `GuardResult` dataclass with a three-way `GuardVerdict` (OK/BLOCKED/UNAVAILABLE). Fail-closed: any subprocess timeout, non-zero exit, missing binary, unparseable row, unreadable meminfo, or missing MemAvailable line yields UNAVAILABLE — the endpoint must refuse. Explicit escape hatch `KOSMOS_EXECUTOR_SKIP_RESOURCE_GUARD=1` short-circuits to OK with a WARNING log; only `"1"` activates it (a value of `"true"` or `"0"` still runs the real check). Systemd unit files must not set the skip env var. VRAM is checked before RAM so a blocked result names the first unmet floor.
+- **Files touched:**
+  - `plugins/tektos/executor/resource_guard.py` (new, 324 lines — one class + one enum + one dataclass)
+  - `plugins/tektos/executor/tests/test_resource_guard.py` (new, 356 lines — 18 tests covering skip env, happy paths, both blocked paths, VRAM-first ordering, six UNAVAILABLE branches, and kB→MiB floor division)
+- **Ports / adapters affected:** none. Consumes `TEKTOS_EXECUTOR_VRAM_FLOOR_MIB` + `TEKTOS_EXECUTOR_RAM_FLOOR_MIB` from `plugins.tektos.executor.policy`.
+- **PORTING_LEDGER / ADR updated:** —. ADR-080 already covers the guard shape.
+- **Stop-condition status:** 39/39 executor tests green (21 pre-existing + 18 new). ADR-007 AST guard now covers 4 source files (was 3). Step 2b next: `loop_guard.py` (Forge-OH vendor — flip PORTING_LEDGER entry PLANNED → VENDORED when it lands). Then 2c `patcher.py`, 2d `loop.py`, 2e flip the /execute and /diff stubs to 200.
