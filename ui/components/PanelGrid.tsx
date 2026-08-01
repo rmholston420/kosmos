@@ -5,6 +5,12 @@ import GovernancePanel from "./panels/GovernancePanel";
 import AgentTracePanel from "./panels/AgentTracePanel";
 import MemoryIntegrityPanel from "./panels/MemoryIntegrityPanel";
 import PlaceholderPanel from "./panels/PlaceholderPanel";
+// Wave F · F2 — realized Operate-page panels replacing PlaceholderPanel
+// on STUB_DEGRADATION / MODEL_SWAP_SLO / CONTEXT_PRESSURE / HARDWARE_RESILIENCE.
+import StubDegradationPanel from "./panels/StubDegradationPanel";
+import ModelSwapSLOPanel from "./panels/ModelSwapSLOPanel";
+import ContextPressurePanel from "./panels/ContextPressurePanel";
+import HardwareResiliencePanel from "./panels/HardwareResiliencePanel";
 
 const ALL_SLOTS = [
   "ALGEDONIC", "GOVERNANCE", "MEMORY_INTEGRITY", "MODEL_SWAP_SLO",
@@ -44,6 +50,21 @@ function renderPanelBySlot(slot: string, panels: Panel[], opts: PanelGridOptions
   // always render even when zero panels are registered.
   if (slot === "MEMORY_INTEGRITY") {
     return <MemoryIntegrityPanel key={slot} panels={slotPanels} />;
+  }
+
+  // Wave F · F2 — always-render telemetry panels backed by kernel routes.
+  // No plugin-registered panel is required; kernel data is authoritative.
+  if (slot === "STUB_DEGRADATION") {
+    return <StubDegradationPanel key={slot} />;
+  }
+  if (slot === "MODEL_SWAP_SLO") {
+    return <ModelSwapSLOPanel key={slot} />;
+  }
+  if (slot === "CONTEXT_PRESSURE") {
+    return <ContextPressurePanel key={slot} />;
+  }
+  if (slot === "HARDWARE_RESILIENCE") {
+    return <HardwareResiliencePanel key={slot} />;
   }
 
   if (slotPanels.length === 0) {
