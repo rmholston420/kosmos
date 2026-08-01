@@ -3682,3 +3682,12 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —.
 - **Stop-condition status:** met (specs unblocked; verify with next full spec run).
+
+## 2026-08-01 19:53 EDT — Raise ui spec 16 request + test timeouts above real ODR SSE p50
+
+- **Stage / plugin / port:** post-Stage-3.14b · UI test hygiene · zetesis spec 16
+- **What changed:** ui/tests/16-zetesis-completes.spec.ts — request timeout 90s→180s, test.setTimeout 120s→210s. Direct curl against the endpoint proves real p50 is ~88.5s; the old 90s ceiling was 1.5s away from the actual completion latency and flaked under any Ollama warmup jitter.
+- **Files touched:** ui/tests/16-zetesis-completes.spec.ts
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —.
+- **Stop-condition status:** met (raised timeouts unblock spec 16; separate ADR-056 §D3 no-op guard bug logged to KNOWN_ISSUES for backend follow-up).

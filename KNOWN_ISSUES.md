@@ -125,3 +125,11 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Attempted fixes:** none this session.
 - **Next investigation:** either the UI added a new state testid that isn't in the whitelist (e.g. loading spinner outlasting the test), or the fetch to the quarantine port failed silently (no `quarantine-error` rendered on 4xx/5xx). Check `ui/app/memory/quarantine/` state machine + `/api/memory/quarantine` handler; expand the test's testid list to include whatever the current in-flight state emits.
 - **Related DEBUG_LOG search terms:** "quarantine-review-list", "quarantine-empty", "quarantine-degraded", "quarantine-error", "ADR-076 D4"
+
+### 2026-08-01 — ADR-056 §D3 no-op guard not honoring empty query_vector
+
+- **Blocks:** no blockers (correctness, not availability)
+- **Symptom:** Direct `POST /api/zetesis/research` with `{"query":"smoke-test-adr-056-no-op"}` returns `event: completed` with `latency_seconds: 88.49` and a full 2350-word Jira-vs-Trello comparison report. ADR-056 §D3 documents this call path as a wiring proof that "ignores the result" of `search(query_vector=[], limit=1)`, but the ODR pipeline is running a real trial anyway. The Qdrant adapter loosening (which was the ADR-056 STATUS AMENDMENT 2026-08-01 fix) prevents the error frame but does not short-circuit the pipeline.
+- **Attempted fixes:** none — noted while diagnosing ui spec 16 flake (see DEBUG_LOG 2026-08-01 19:53 EDT).
+- **Next investigation:** grep for the ADR-056 §D3 wiring-proof path in `plugins/zetesis/`. Confirm whether the intent is "search returns []" or "entire trial short-circuits". If the latter, the pipeline needs a guard that observes `query_vector=[]` (or the sentinel query string) and returns a synthetic completed frame without invoking ODR/Ollama.
+- **Related DEBUG_LOG search terms:** "ADR-056 §D3", "no-op", "smoke-test-adr-056-no-op", "query_vector", "latency_seconds"

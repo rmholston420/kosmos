@@ -912,3 +912,14 @@ Entry format per `kosmos-log-maintenance` skill:
   - `16-zetesis-completes.spec.ts` — added `test.setTimeout(120_000)` (30s headroom above the 90s inner request timeout).
 - **Files changed:** ui/tests/08-zetesis-research.spec.ts, ui/tests/16-zetesis-completes.spec.ts
 - **Related BUILD_LOG entry:** 2026-08-01 19:45 EDT
+
+## 2026-08-01 19:53 EDT — ui spec 16 flakes because ODR "no-op" query actually runs ~88s
+
+- **Symptom:** After fixing the 30s Playwright cap in spec 16 (BUILD_LOG 2026-08-01 19:45 EDT), the test now fails with `TimeoutError: apiRequestContext.post: Timeout 90000ms exceeded`. Direct curl against `POST /api/zetesis/research` with query `"smoke-test-adr-056-no-op"` completes successfully but takes `latency_seconds: 88.49` — 1.5s under the 90s ceiling.
+- **Affected stage / plugin / port:** Stage 6.3 · zetesis · ADR-056 §D3 (test-only symptom; separate real backend concern noted below).
+- **Root cause (test):** The request timeout of 90s is exactly at the observed p50 latency for this SSE stream. Any Ollama warmup or embeddings jitter pushes the stream over 90s and the client teardown fires before `event: completed` arrives.
+- **Root cause (backend, deferred):** ADR-056 §D3 documents `search(collection=..., query_vector=[], limit=1)` as a spec-mandated no-op wiring proof that "ignores the result." In practice the ODR pipeline ignores the input query semantics and runs a full Jira-vs-Trello comparison for the `"smoke-test-adr-056-no-op"` query — the SSE body captures a 2350-word real comparison report and a real `latency_seconds` of ~88s. The no-op guard is not shorting the pipeline. Not a test bug; not fixed here.
+- **Fix applied (test only):** Raised request timeout 90s→180s and test budget 120s→210s. The 88s p50 is now well under the 180s ceiling; Ollama warmup up to ~3× normal latency will still pass.
+- **Files changed:** ui/tests/16-zetesis-completes.spec.ts
+- **Related BUILD_LOG entry:** 2026-08-01 19:53 EDT
+- **Follow-up (out of scope):** ADR-056 §D3 no-op guard not honoring `query_vector=[]` — file to KNOWN_ISSUES.md.
