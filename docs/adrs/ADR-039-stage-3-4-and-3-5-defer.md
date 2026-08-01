@@ -1,9 +1,29 @@
 # ADR-039 — Defer Stage 3.4 (Bernstein Janitor spike) to Phase 4 and Stage 3.5 (Reflexion + Voyager) to Phase 5
 
-**Status:** Ratified v25
+**Status:** Ratified v25 (amended by ADR-079 — narrow lift of `SandboxProvider` for Stage 3.14a)
 **Lock-in phase:** Phase 3 (Tektos)
 **Supersedes:** —
 **Amends:** ADR-004 (Bernstein Janitor spike-test — narrows spike-run timing), ADR-025 (Langfuse deferred — this ADR concretely locks the Reflexion-cycle-logged-in-Langfuse DoD as blocked on that Langfuse defer)
+
+## Amendment (2026-08-01) — ADR-079 narrow lift
+
+ADR-079 lifts the deferral for `SandboxProvider` only, and only in its
+Tektos-scoped surface for Stage 3.14a. The ADR-039 body below still
+governs the other Phase-4 prerequisites:
+
+- `WorktreeProvider` — remains deferred to Phase 4.
+- Postgres TaskState schema — remains deferred to Phase 4.
+- Bernstein Janitor spike (Stage 3.4 as originally scoped) — remains
+  deferred to Phase 4 per ADR-004 §Build-Order Placement.
+- Stage 3.5 (Reflexion + Voyager) — remains deferred to Phase 5
+  (unchanged).
+
+Rationale: Stage 3.14 (ADR-077 D3) has a concrete Tektos-only consumer
+for `SandboxProvider` and cannot proceed without it. The other three
+prerequisites are unrelated to Tektos's execution loop; forcing them
+into Phase 3 would over-commit scope. See ADR-079 for the port surface
+and boundary-enforcement decision (bubblewrap, not python-landlock).
+
 
 ## Context
 

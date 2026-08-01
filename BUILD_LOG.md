@@ -3472,3 +3472,15 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** `plugins.praxis.apex.protocol.Storage` — new concrete adapter `SqliteStorage` filling the previously stubbed methods. No new port.
 - **PORTING_LEDGER / ADR updated:** ADR-078 (new).
 - **Stop-condition status:** met on push — after systemd drop-in + restart, Tektos approvals survive `systemctl restart kosmos-kernel`; `/tektos/detail?id=<approval_id>` renders correctly across restarts.
+
+## 2026-08-01 17:16 EDT — Stage 3.14a step 1: SandboxProvider port + ADR-079 + ADR-039 amendment
+
+- **Stage / plugin / port:** Stage 3.14a · `ports.sandbox.SandboxProvider` (new port) · Tektos executor prerequisite
+- **What changed:** Landed `ports/sandbox.py` with `SandboxProvider` Protocol, frozen value objects (`SandboxSpec`, `SandboxHandle`, `SandboxExecResult`), errors (`SandboxError`, `SandboxBoundaryError`, `SandboxApprovalRequiredError`), locked constants (`SANDBOX_PROTOCOL_VERSION="2026-08-01"`, `PROTECTED_READONLY_PATHS`). Wrote ADR-079 documenting the port surface + boundary-enforcement decision (bubblewrap over python-landlock: bwrap gives mount-namespace read-only overlays, seccomp, network unshare, and pid-namespace in one binary; §156 subprocess boundary inheritance satisfied by construction; no new pip dep). Amended ADR-039 with a narrow lift — Tektos-scoped `SandboxProvider` deferral is lifted at Stage 3.14a, `WorktreeProvider` + Postgres TaskState + Bernstein Janitor spike remain deferred to Phase 4.
+- **Files touched:**
+  - `ports/sandbox.py` (new)
+  - `docs/adrs/ADR-079-stage-3-14a-sandbox-provider-port.md` (new)
+  - `docs/adrs/ADR-039-stage-3-4-and-3-5-defer.md` (amendment block added at top; body unchanged)
+- **Ports / adapters affected:** New port `SandboxProvider`. No adapter yet (lands step 2). Consumed by Tektos executor at Stage 3.14b.
+- **PORTING_LEDGER / ADR updated:** ADR-079 proposed, ADR-039 amended. PORTING_LEDGER unchanged this step (bubblewrap is a system binary; ledger entry lands with the adapter in step 2).
+- **Stop-condition status:** Stage 3.14a step 1 met (port surface + governing ADRs land as one reviewable slice). Step 2 (git-worktree adapter + bwrap boundary + systemd + contract tests) is next.
