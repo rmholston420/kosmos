@@ -1,26 +1,26 @@
-# Kosmos Session Handoff — 2026-08-01 11:34 EDT
+# Kosmos Session Handoff — 2026-08-01 11:40 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 1.6 Phase 2 (next — scope pending)
-- **Plugin / kernel component:** none in progress
-- **Port(s) in progress:** none
+- **Stage / phase:** Stage 1.6 Phase 2
+- **Plugin / kernel component:** ADR-075 authored (Proposed), code branch not yet cut
+- **Port(s) in progress:** MemoryPort (new `/api/memory/search-semantic` route pending); Gnosis graph pagination (client-only); Graphiti temporal-index (D1 delete pending)
 
-## Completed this session
-- Ratified ADR-074 via PR #24 → `7bafcac`
-- Stage 1.6 Phase 1 code via PR #25 → `47695f9` (D1–D5)
-- Hotfix: capped Gnosis graph client limits to backend ceiling (100) via PR #26 → `0d2f48b`
-- All Colossus verifies green: pytest 25 pass / 6 skip · Playwright 69 pass / 6 skip / 0 fail
-- Filed KNOWN_ISSUES entry: `GraphitiTemporalIndex init failed: ValidationError` on `KosmosGraphitiEmbedder` (deprecated Graphiti path per ADR-073; not blocking)
+## Completed this session (Phase 2 kickoff)
+- Authored ADR-075 as `stage-1-6-p2-adr-075` branch (Proposed) covering D1–D5 for Phase 2
+- Updated `docs/adrs/README.md` with the ADR-075 row
 
 ## Remaining before current Definition of Done
-- Phase 1 DoD complete.
+- Open PR for ADR-075 (Proposed → review → Ratified v25); then cut a code branch off main and land D1–D5 in order:
+  1. **D1** hard-delete `graphiti_temporal_index.py` + `kosmos_graphiti_embedder.py` + contract tests; strip graphiti wiring from `adapters/memory/dozerdb/adapter.py`; check `pyproject.toml` for now-orphan graphiti deps
+  2. **D2** `POST /api/memory/search-semantic` route + `ui/app/memory/search/page.tsx` + `ui/lib/kernelClient.ts` client method + `ui/tests/21-memory-search-semantic.spec.ts`
+  3. **D3** subscribe kernel drain to `zetesis.research.completed`, write to MemoryPort with provenance; `ui/tests/22-zetesis-fan-out-to-semantic.spec.ts`
+  4. **D4** paginate in `ui/app/gnosis/graph/page.tsx` (loop `next_cursor`, `MAX_PAGES=10`); extend `ui/tests/20-gnosis-graph-viz.spec.ts`
+  5. **D5** bump `kernel/app.py` version 6.11.0 → 6.12.0; update the 6.11.0 assertion in `13-community-collapse-and-annotate.spec.ts`
+- Colossus verify: pytest clean + full Playwright green
+- Ratify ADR-075 (Proposed → Ratified v25) in the same PR (Phase 1 shape)
 
 ## Open questions / awaiting user answer
-- Stage 1.6 Phase 2 scope + priority. Candidates:
-  - Expose `search_semantic` via `/api/memory/search-semantic` route + a UI surface
-  - Gnosis graph pagination (paginate `next_cursor` to break past 100-node cap)
-  - Zetesis embedding-hook wiring (research artifacts → semantic memory path)
-  - Hard-delete the deprecated GraphitiTemporalIndex path (would resolve the KNOWN_ISSUES entry cleanly)
+- None — user delegated "make optimal choice" on the three Phase 2 shape questions (ADR shape, UI surface, fan-out trigger).
 
 ## Exact next action
-- Await user direction for Phase 2 scope. On resume: `cd ~/dev/kosmos && git checkout main && git pull` then read this file.
+- Push branch `stage-1-6-p2-adr-075`, open PR titled "Stage 1.6 Phase 2: ADR-075 (Proposed)", wait for user review/approval before starting D1.
