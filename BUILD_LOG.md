@@ -3585,3 +3585,21 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** no new ports/adapters; loop consumes existing formal ports only. ADR-007 clean.
 - **PORTING_LEDGER / ADR updated:** —. ADR-080 governs the shape; deferred research-escalation via Gnosis/Zetesis to a future Stage 3.15 ADR (not designed here — user consulted 2026-08-01 18:14 EDT and agreed to defer pending real Colossus rejection-stderr data).
 - **Stop-condition status:** 93/93 executor tests green locally (76 pre-2d + 16 loop + 1 auto-picked-up ADR-007 AST slot for `loop.py`). Awaiting Colossus verify. Step 2e final: flip `/api/tektos/plan/{approval_id}/execute` + `/diff` from 501 to 200 in `kernel/app.py`.
+
+## 2026-08-01 18:44 EDT — Stage 3.14b step 2e: `/execute` + `/diff` endpoints wired to `TektosExecutorLoop` (ADR-080)
+
+- **Stage / plugin / port:** Stage 3.14b · Tektos executor · kernel HTTP endpoints
+- **What changed:**
+  - `kernel/app.py`: added `tektos_sandbox` and `tektos_diff_cache: dict[str, dict[str, Any]]` fields on `_BootRegistry`; added `_boot_tektos_sandbox` (constructs `GitWorktreeSandboxAdapter(repo_root=<kernel/../>)`); added module-level `_resolve_tektos_change_id(record)` helper for DRY change_id resolution across endpoints
+  - `kernel/app.py` `POST /api/tektos/plan/{approval_id}/execute`: replaced 501 stub with full composition — resolver → APPROVED check → llm/memory/sandbox 503 checks → change_id resolve → `build_plan(change_dir)` → `sandbox.create` → `TektosExecutorLoop(..., resource_guard=ColossusResourceGuard()).run_plan` in try/finally → `sandbox.diff` snapshot → cache in `registry.tektos_diff_cache[approval_id]` → `sandbox.destroy` in `finally` (best-effort, swallows exceptions). Returns `{execution_id, tasks_attempted, tasks_succeeded, tasks_failed, final_status, change_id, commit_shas}`. Counts derived from `PlanExecutionResult.task_executions` via `TaskResult` enum.
+  - `kernel/app.py` `GET /api/tektos/plan/{approval_id}/diff`: replaced 501 stub with thin cache lookup — 404 if no cached entry, 200 with `{diff, base_ref, task_count}` otherwise.
+  - `plugins/tektos/openspec/plan.py`: extracted pure `build_plan(change_dir) -> tuple[Plan, list[Artifact]]` from `produce_plan`; `produce_plan` now calls it then does the MemoryPort audit writes. Safe to call `build_plan` on every `/execute` without re-firing `tektos.openspec.plan.produced` events.
+  - `plugins/tektos/executor/tests/test_endpoint_stubs.py`: replaced 2 old 501 stub tests with 5 new endpoint tests — `test_execute_503_when_{llm,memory,sandbox}_missing`, `test_diff_404_when_no_cache_entry`, `test_diff_200_when_cache_populated`. Updated module docstring.
+- **Files touched:**
+  - `kernel/app.py`
+  - `plugins/tektos/openspec/plan.py`
+  - `plugins/tektos/executor/tests/test_endpoint_stubs.py`
+  - `KNOWN_ISSUES.md` (logged `files_changed` type contract mismatch)
+- **Ports / adapters affected:** `SandboxProvider` (via `GitWorktreeSandboxAdapter`), `LLMPort`, `MemoryPort`, `ApprovalResolverPort` — all composed in the endpoint layer per ADR-080.
+- **PORTING_LEDGER / ADR updated:** — (no new vendored code; ADR-080 endpoint composition contract honored)
+- **Stop-condition status:** met for endpoint wiring — 96/96 executor+openspec tests green (was 93+30, now +5 new endpoint tests replacing 2 stubs = +3 net). Happy-path 200 test deferred pending `files_changed` type contract fix (logged in KNOWN_ISSUES.md).

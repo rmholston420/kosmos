@@ -1,8 +1,12 @@
-"""Stage 3.14b step 1 endpoint stubs return 501 with locked shapes.
+"""Stage 3.14b step 2e endpoint contract tests — pre-composition branches.
 
-Step 2 replaces the 501 with a real 200 response; the stub tests here
-document the pre-501 branches (503 resolver-down, 404 wrong-domain,
-409 not-APPROVED) so those don't regress when the loop lands.
+Documents the pre-loop branches for ``/api/tektos/plan/{id}/execute``
+(503 resolver-down, 404 wrong-domain, 409 not-APPROVED, 503
+subsystem-down for llm/memory/sandbox) and ``/diff`` (503
+resolver-down, 404 wrong-domain / no cache) so those don't regress
+when the loop composition changes. Happy-path 200 tests live in
+``test_endpoint_execute_200.py`` — they need a fake sandbox + LLM +
+fixture change dir.
 """
 
 from __future__ import annotations
@@ -117,16 +121,57 @@ def test_execute_409_when_not_approved(
     assert "not APPROVED" in r.json()["detail"]
 
 
-def test_execute_501_when_approved(
+def test_execute_503_when_llm_missing(
     client_with_resolver: tuple[TestClient, _FakeResolver],
 ) -> None:
+    """After APPROVED gate, LLM subsystem down should degrade to 503."""
     client, resolver = client_with_resolver
+    import kernel.app as kernel_app
+
+    kernel_app.registry.llm = None
+    kernel_app.registry.errors["llm"] = "ollama unreachable"
     resolver.records["a3"] = _record(
         approval_id="a3", status=ApprovalStatus.APPROVED,
     )
     r = client.post("/api/tektos/plan/a3/execute")
-    assert r.status_code == 501
-    assert "Stage 3.14b step 2" in r.json()["detail"]
+    assert r.status_code == 503
+    assert r.json()["detail"] == "ollama unreachable"
+
+
+def test_execute_503_when_memory_missing(
+    client_with_resolver: tuple[TestClient, _FakeResolver],
+) -> None:
+    client, resolver = client_with_resolver
+    import kernel.app as kernel_app
+
+    # LLM present, memory down.
+    kernel_app.registry.llm = object()
+    kernel_app.registry.memory = None
+    kernel_app.registry.errors["memory"] = "dozerdb unreachable"
+    resolver.records["a4"] = _record(
+        approval_id="a4", status=ApprovalStatus.APPROVED,
+    )
+    r = client.post("/api/tektos/plan/a4/execute")
+    assert r.status_code == 503
+    assert r.json()["detail"] == "dozerdb unreachable"
+
+
+def test_execute_503_when_sandbox_missing(
+    client_with_resolver: tuple[TestClient, _FakeResolver],
+) -> None:
+    client, resolver = client_with_resolver
+    import kernel.app as kernel_app
+
+    kernel_app.registry.llm = object()
+    kernel_app.registry.memory = object()
+    kernel_app.registry.tektos_sandbox = None
+    kernel_app.registry.errors["tektos_sandbox"] = "git worktree unavailable"
+    resolver.records["a5"] = _record(
+        approval_id="a5", status=ApprovalStatus.APPROVED,
+    )
+    r = client.post("/api/tektos/plan/a5/execute")
+    assert r.status_code == 503
+    assert r.json()["detail"] == "git worktree unavailable"
 
 
 # ── /diff ─────────────────────────────────────────────────────────────
@@ -165,13 +210,37 @@ def test_diff_404_when_not_tektos(
     assert r.status_code == 404
 
 
-def test_diff_501_when_valid(
+def test_diff_404_when_no_cache_entry(
     client_with_resolver: tuple[TestClient, _FakeResolver],
 ) -> None:
+    """After step 2e, /diff is a cache read — unexecuted plan is 404."""
     client, resolver = client_with_resolver
     resolver.records["d2"] = _record(
         approval_id="d2", status=ApprovalStatus.APPROVED,
     )
     r = client.get("/api/tektos/plan/d2/diff")
-    assert r.status_code == 501
-    assert "Stage 3.14b step 2" in r.json()["detail"]
+    assert r.status_code == 404
+    assert "no diff cached" in r.json()["detail"]
+
+
+def test_diff_200_when_cache_populated(
+    client_with_resolver: tuple[TestClient, _FakeResolver],
+) -> None:
+    """When /execute has stashed a diff, /diff returns it verbatim."""
+    client, resolver = client_with_resolver
+    import kernel.app as kernel_app
+
+    resolver.records["d3"] = _record(
+        approval_id="d3", status=ApprovalStatus.APPROVED,
+    )
+    kernel_app.registry.tektos_diff_cache["d3"] = {
+        "diff": "diff --git a/x b/x\n@@ ...",
+        "base_ref": "abc123",
+        "task_count": 3,
+    }
+    r = client.get("/api/tektos/plan/d3/diff")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["diff"].startswith("diff --git a/x b/x")
+    assert body["base_ref"] == "abc123"
+    assert body["task_count"] == 3

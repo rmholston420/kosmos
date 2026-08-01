@@ -119,6 +119,22 @@ class _BootRegistry:
         self.tektos: Any = None
         self.tektos_agent: Any = None
         self.tektos_agent_lock: Any = None
+        # Stage 3.14b (ADR-080): SandboxProvider adapter for the Tektos
+        # executor loop. Booted lazily alongside ``llm`` + ``memory``
+        # because the ``/api/tektos/plan/{approval_id}/execute`` endpoint
+        # composes all three. Failure records ``registry.errors['tektos_sandbox']``
+        # and the endpoint degrades to HTTP 503.
+        self.tektos_sandbox: Any = None
+        # Stage 3.14b (ADR-080 option C): cached ``SandboxProvider.diff``
+        # outputs keyed by ``approval_id`` so ``GET /api/tektos/plan/
+        # {approval_id}/diff`` is a thin cache lookup. ``/execute`` computes
+        # the diff immediately after the loop finishes (inside the try/
+        # finally that also destroys the handle), stashes
+        # ``{diff, base_ref, task_count}`` here, then destroys. Bounded
+        # state: pure strings + ints, no file handles, no worktree leaks.
+        # A repeat ``/execute`` on the same ``approval_id`` overwrites
+        # the entry.
+        self.tektos_diff_cache: dict[str, dict[str, Any]] = {}
         # Stage 6.5.8 (ADR-065): Tektos UI sub-app + its executor. Mounted at
         # ``/tektos-ui`` independently of ``registry.tektos`` (Option B):
         # the UI only needs ``registry.approval`` + ``registry.memory``, so it
@@ -479,6 +495,26 @@ async def lifespan(app: FastAPI):
         )
 
     registry.memory = _boot_memory
+
+    # --- Tektos sandbox provider (ADR-079 + ADR-080) -------------------------
+    # Stage 3.14b: GitWorktreeSandboxAdapter over the kernel's own
+    # repo root (the directory containing ``kernel/`` — same convention
+    # as ``_kosmos_ui_out``). The adapter reads its policy env
+    # (``KOSMOS_TEKTOS_SANDBOX_ROOT``, ``KOSMOS_SANDBOX_ENFORCE_BOUNDARY``,
+    # ``KOSMOS_SANDBOX_ALLOW_UNSAFE``) itself; kernel passes only
+    # ``repo_root`` so tests can point at fixture repos.
+    @_try("tektos_sandbox")
+    def _boot_tektos_sandbox():
+        from pathlib import Path as _SandboxPath
+
+        from adapters.sandbox.gitworktree.adapter import (
+            GitWorktreeSandboxAdapter,
+        )
+
+        repo_root = _SandboxPath(__file__).resolve().parent.parent
+        return GitWorktreeSandboxAdapter(repo_root=repo_root)
+
+    registry.tektos_sandbox = _boot_tektos_sandbox
 
     # --- Gnosis boot seeder (ADR-064) ----------------------------------------
     # Env-gated by ``KOSMOS_GNOSIS_SEED=1``. Iterates ``ALL_CORPORA`` and
@@ -1422,22 +1458,47 @@ _TEKTOS_INTENTION_ID_PREFIX = "tektos.plan."
 _MAX_CHANGE_FILE_BYTES = 128 * 1024  # 128 KiB — scaffolded files are tiny
 
 
+def _resolve_tektos_change_id(record: Any) -> str | None:
+    """Extract the OpenSpec ``change_id`` from an APEX record.
+
+    Preferred source is ``record.intention_id`` (prefixed with
+    ``tektos.plan.``); falls back to ``record.delta['change_id']`` for
+    older records. Returns ``None`` when neither is present. Kept as a
+    module-level helper so ``/execute``, ``/diff``, and ``/plan/{id}``
+    stay in lock-step.
+    """
+    intention_id = record.intention_id or ""
+    if intention_id.startswith(_TEKTOS_INTENTION_ID_PREFIX):
+        tail = intention_id[len(_TEKTOS_INTENTION_ID_PREFIX):]
+        if tail:
+            return tail
+    delta = record.delta or {}
+    cand = delta.get("change_id")
+    if isinstance(cand, str) and cand:
+        return cand
+    return None
+
+
 @app.post("/api/tektos/plan/{approval_id}/execute")
 async def tektos_plan_execute(approval_id: str) -> dict[str, Any]:
     """Execute an APPROVED Tektos plan against a fresh sandbox worktree.
 
-    Stage 3.14b step 1 stub — returns HTTP 501 until the executor loop
-    lands in step 2 (ADR-080). Endpoint shape is locked so the UI can
-    wire against it now:
+    Stage 3.14b step 2e (ADR-080). Composes ``registry.tektos_sandbox``
+    (SandboxProvider) + ``registry.llm`` + ``registry.memory`` +
+    ``TektosExecutorLoop.run_plan``. Owns the sandbox lifecycle: creates
+    a fresh worktree, runs the loop, snapshots the diff, and destroys
+    the worktree in ``finally``.
 
-    * 501 (this step) — endpoint registered; loop not implemented.
-    * 503 — approval resolver unavailable (matches plan_detail).
-    * 404 — approval not found, or record is not a Tektos plan.
-    * 409 — approval status is not APPROVED
-           (raises :class:`plugins.tektos.executor.TektosPlanNotApproved`).
-    * 503 (post-step-1) — resource guard blocked.
-    * 200 — on success, `{execution_id, tasks_attempted, tasks_succeeded,
-            tasks_failed, final_status, change_id}`.
+    Response shapes:
+
+    * 503 — approval resolver, LLM, memory, or sandbox subsystem down.
+    * 404 — approval not found; record is not a Tektos plan; or change
+            directory cannot be resolved (missing intention id + delta).
+    * 409 — approval status is not APPROVED.
+    * 503 — resource guard blocked (VRAM/RAM floor unmet).
+    * 502 — sandbox create/exec failed.
+    * 200 — ``{execution_id, tasks_attempted, tasks_succeeded,
+            tasks_failed, final_status, change_id, commit_shas}``.
     """
     resolver = registry.approval
     if resolver is None:
@@ -1463,24 +1524,144 @@ async def tektos_plan_execute(approval_id: str) -> dict[str, Any]:
                 f"(status={record.status.value})"
             ),
         )
-    raise HTTPException(
-        501,
-        detail="Tektos executor loop not implemented yet (Stage 3.14b step 2).",
+
+    # Composition-root check: every subsystem the loop needs must be up.
+    if registry.llm is None:
+        raise HTTPException(503, detail=registry.errors.get("llm"))
+    if registry.memory is None:
+        raise HTTPException(503, detail=registry.errors.get("memory"))
+    if registry.tektos_sandbox is None:
+        raise HTTPException(503, detail=registry.errors.get("tektos_sandbox"))
+
+    change_id = _resolve_tektos_change_id(record)
+    if not change_id:
+        raise HTTPException(
+            404,
+            detail=(
+                f"approval {approval_id!r} has no change_id "
+                f"(intention_id={record.intention_id!r})"
+            ),
+        )
+
+    # Resolve the change directory and load the Plan (pure parse, no
+    # MemoryPort writes — that already happened at plan.produced time).
+    try:
+        from plugins.tektos.intention import resolve_intention_root
+        from plugins.tektos.openspec.plan import build_plan
+    except ImportError as exc:  # tektos not booted
+        raise HTTPException(
+            503, detail=f"tektos import failed: {exc}"
+        ) from exc
+    root = resolve_intention_root()
+    change_dir = (root / change_id).resolve()
+    try:
+        change_dir.relative_to(root)
+    except ValueError:
+        raise HTTPException(
+            400,
+            detail=(
+                f"resolved change dir {change_dir} escapes intention root {root}"
+            ),
+        ) from None
+    try:
+        plan, _artifacts = build_plan(change_dir)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            404,
+            detail=f"could not build plan from {change_dir}: {exc}",
+        ) from exc
+
+    # ---- Compose loop + drive it under sandbox try/finally ----
+    from plugins.tektos.executor import (
+        TektosExecutorLoop,
+        TektosResourceGuardBlocked,
     )
+    from plugins.tektos.executor.loop import TaskResult
+    from plugins.tektos.executor.resource_guard import ColossusResourceGuard
+    from ports.sandbox import (
+        SandboxError,
+        SandboxSpec,
+    )
+
+    sandbox = registry.tektos_sandbox
+    try:
+        handle = await sandbox.create(
+            spec=SandboxSpec(change_id=change_id, proposing_domain="tektos")
+        )
+    except SandboxError as exc:
+        raise HTTPException(502, detail=f"sandbox create failed: {exc}") from exc
+
+    loop_impl = TektosExecutorLoop(
+        llm=registry.llm,
+        memory=registry.memory,
+        sandbox=sandbox,
+        resource_guard=ColossusResourceGuard(),
+    )
+
+    try:
+        try:
+            result = await loop_impl.run_plan(
+                plan=plan,
+                approval_id=approval_id,
+                handle=handle,
+            )
+        except TektosResourceGuardBlocked as exc:
+            raise HTTPException(503, detail=str(exc)) from exc
+
+        # Snapshot the diff BEFORE destroying — handle must still exist.
+        try:
+            diff_text = await sandbox.diff(handle=handle)
+        except SandboxError as exc:
+            raise HTTPException(502, detail=f"sandbox diff failed: {exc}") from exc
+        registry.tektos_diff_cache[approval_id] = {
+            "diff": diff_text,
+            "base_ref": handle.base_ref,
+            "task_count": len(plan.tasks),
+        }
+    finally:
+        # Always destroy — leaks are unacceptable on Colossus's fixed disk.
+        try:
+            await sandbox.destroy(handle=handle)
+        except Exception:  # noqa: BLE001
+            # Destroy is best-effort; the adapter's destroy is idempotent.
+            # A destroy failure MUST NOT sink a successful execution.
+            pass
+
+    tasks_attempted = sum(
+        1 for t in result.task_executions if t.result is not TaskResult.SKIPPED
+    )
+    tasks_succeeded = sum(
+        1 for t in result.task_executions if t.result is TaskResult.SUCCEEDED
+    )
+    tasks_failed = sum(
+        1 for t in result.task_executions if t.result is TaskResult.FAILED
+    )
+    return {
+        "execution_id": f"{approval_id}::{change_id}",
+        "tasks_attempted": tasks_attempted,
+        "tasks_succeeded": tasks_succeeded,
+        "tasks_failed": tasks_failed,
+        "final_status": result.result.value,
+        "change_id": change_id,
+        "commit_shas": list(result.commit_shas),
+    }
 
 
 @app.get("/api/tektos/plan/{approval_id}/diff")
 async def tektos_plan_diff(approval_id: str) -> dict[str, Any]:
     """Return the accumulated worktree diff for an executed plan.
 
-    Stage 3.14b step 1 stub — returns HTTP 501 until the sandbox is
-    wired in step 2 (ADR-080). Endpoint shape is locked:
+    Stage 3.14b step 2e (ADR-080). Thin cache lookup: ``/execute``
+    already snapshotted ``SandboxProvider.diff(handle=...)`` before
+    destroying the worktree, so this endpoint returns that stored
+    output verbatim.
 
-    * 501 (this step) — endpoint registered; sandbox lookup not
-           implemented.
+    Response shapes:
+
     * 503 — approval resolver unavailable.
-    * 404 — approval not found, or not a Tektos plan.
-    * 200 — `{diff, base_ref, task_count}`.
+    * 404 — approval not found; record is not a Tektos plan; or the
+            plan has not been executed yet (no cache entry).
+    * 200 — ``{diff: str, base_ref: str, task_count: int}``.
     """
     resolver = registry.approval
     if resolver is None:
@@ -1497,10 +1678,20 @@ async def tektos_plan_diff(approval_id: str) -> dict[str, Any]:
                 f"(proposing_domain={record.proposing_domain!r})"
             ),
         )
-    raise HTTPException(
-        501,
-        detail="Tektos executor diff endpoint not implemented yet (Stage 3.14b step 2).",
-    )
+    cached = registry.tektos_diff_cache.get(approval_id)
+    if cached is None:
+        raise HTTPException(
+            404,
+            detail=(
+                f"no diff cached for approval {approval_id!r}; "
+                f"POST /api/tektos/plan/{approval_id}/execute first"
+            ),
+        )
+    return {
+        "diff": cached["diff"],
+        "base_ref": cached["base_ref"],
+        "task_count": cached["task_count"],
+    }
 
 
 @app.get("/api/tektos/plan/{approval_id}")

@@ -92,3 +92,11 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Attempted fixes:** none yet — surfaced by Stage 1.6 Phase 1 verify runs
 - **Next investigation:** `adapters/memory/dozerdb/kosmos_graphiti_embedder.py` (or wherever `KosmosGraphitiEmbedder` is defined) needs to subclass `graphiti_core.embedder.EmbedderClient` or the constructor wiring in `graphiti_temporal_index.py` should adapt to a duck-typed protocol. Also consider: ADR-073 marked GraphitiTemporalIndex path as deprecated — the correct fix may be to delete it entirely (hard-delete deferred per ADR-073 §Consequences).
 - **Related DEBUG_LOG search terms:** "GraphitiTemporalIndex", "EmbedderClient", "KosmosGraphitiEmbedder", "GraphitiClients validation"
+
+### 2026-08-01 — Executor loop `files_changed` type contract mismatch with real Patcher
+
+- **Blocks:** happy-path 200 test for `/api/tektos/plan/{approval_id}/execute` (Stage 3.14b step 2e)
+- **Symptom:** `TypeError: 'int' object is not iterable` at `plugins/tektos/executor/loop.py:467` (`attributes["files_changed"] = list(files_changed)`) when the real `Patcher` returns `PatchApplied(files_changed=<int>)` and the loop tries to serialize it into the MemoryPort event.
+- **Attempted fixes:** none yet — discovered while writing endpoint 200 test; test file was deleted (5 subsystem/cache endpoint tests still cover step 2e wiring)
+- **Next investigation:** decide contract: either `TaskAttempt.files_changed` should be `int` (matches `Patcher.PatchApplied.files_changed`), or `Patcher` should return the list of paths (matches loop's `tuple[str, ...]` declaration and the fake `_FakePatcher` in `test_loop.py`). The tests in `test_loop.py` currently use the tuple-of-paths shape — real code path is broken end-to-end for successful patches.
+- **Related DEBUG_LOG search terms:** "files_changed", "TypeError", "PatchApplied", "task_attempted event"

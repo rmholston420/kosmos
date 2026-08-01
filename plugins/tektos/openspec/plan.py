@@ -103,28 +103,23 @@ def _build_rendered_summary(
     )
 
 
-async def produce_plan(
-    change_dir: Path | str,
-    memory: MemoryPort,
-) -> PlanProductionResult:
-    """Parse an OpenSpec change directory and write a plan to MemoryPort.
+def build_plan(change_dir: Path | str) -> tuple[Plan, list[Artifact]]:
+    """Parse an OpenSpec change directory into a :class:`Plan`.
 
-    Fulfills the Stage 3.6 DoD literal ("Tektos accepts an OpenSpec doc
-    and produces a plan"). Every markdown artifact under ``change_dir``
-    is parsed, recorded as a per-artifact MemoryPort event, and a single
-    per-change plan event is written.
+    Pure function — no MemoryPort writes, no side effects. Used both by
+    :func:`produce_plan` (which wraps this with the audit writes) and
+    by the kernel executor endpoint (which needs a Plan without
+    re-firing the ``tektos.openspec.plan.produced`` event on every
+    ``/execute`` call).
 
     Args:
-        change_dir: Path to an OpenSpec change directory (e.g.
-            ``openspec/changes/add-dark-mode/``). Must contain
-            ``proposal.md``; other artifacts optional.
-        memory: A live :class:`MemoryPort`. The port's own zero-trust
-            guard (``validate_zero_trust_write``) enforces
-            provenance + confidence — this function never bypasses it.
+        change_dir: Path to an OpenSpec change directory containing at
+            least ``proposal.md``.
 
     Returns:
-        :class:`PlanProductionResult` with the plan + MemoryPort event
-        ids.
+        A ``(plan, all_artifacts)`` tuple. ``all_artifacts`` is the
+        ordered artifact list used for the per-artifact MemoryPort
+        writes in :func:`produce_plan`; kernel callers can ignore it.
 
     Raises:
         InvalidChangeDirectoryError: ``change_dir`` invalid or missing
@@ -194,6 +189,39 @@ async def produce_plan(
         mean_completeness=mean_completeness,
         rendered_summary=rendered_summary,
     )
+    return plan, all_artifacts
+
+
+async def produce_plan(
+    change_dir: Path | str,
+    memory: MemoryPort,
+) -> PlanProductionResult:
+    """Parse an OpenSpec change directory and write a plan to MemoryPort.
+
+    Fulfills the Stage 3.6 DoD literal ("Tektos accepts an OpenSpec doc
+    and produces a plan"). Every markdown artifact under ``change_dir``
+    is parsed, recorded as a per-artifact MemoryPort event, and a single
+    per-change plan event is written.
+
+    Args:
+        change_dir: Path to an OpenSpec change directory (e.g.
+            ``openspec/changes/add-dark-mode/``). Must contain
+            ``proposal.md``; other artifacts optional.
+        memory: A live :class:`MemoryPort`. The port's own zero-trust
+            guard (``validate_zero_trust_write``) enforces
+            provenance + confidence — this function never bypasses it.
+
+    Returns:
+        :class:`PlanProductionResult` with the plan + MemoryPort event
+        ids.
+
+    Raises:
+        InvalidChangeDirectoryError: ``change_dir`` invalid or missing
+            required artifacts (see :func:`parser.walk_change_directory`).
+    """
+    plan, all_artifacts = build_plan(change_dir)
+    change_id = plan.change_id
+    delta_specs_t = plan.delta_specs
 
     # ---- Per-artifact writes ---------------------------------------------
     per_artifact_event_ids: dict[str, MemoryEventId] = {}
