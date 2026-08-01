@@ -2818,3 +2818,19 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** ADR-072 §E amended in-place before ratification lands (still Proposed on remote)
 - **Stop-condition status:** in-progress — awaits Colossus `pnpm install` re-verify + version smoke on a clean kernel process + Playwright re-run.
+
+## 2026-08-01 10:07 EDT — Stage 1.5 Wave F ratification · Playwright workers: 1 (cross-worker kill-switch race fix)
+
+- **Stage / plugin / port:** Stage 1.5 · Wave F ratification · UI test harness
+- **What changed:**
+  - Colossus first re-verify (post 16.2.11 bump): version smoke `6.9.0` ✅, but Playwright showed **68/6/1** — `16-zetesis-completes F6` failed both attempts.
+  - Diagnosis (see DEBUG_LOG 2026-08-01 10:07 EDT): `fullyParallel: true` + no `workers` cap ran multiple workers against the single shared kernel; `11-kill-switch` in worker-A held `suspended=true` during worker-B's `POST /api/zetesis/research`, hitting the ADR-069 `/api/**` gate as 503. Not a warmup transient — retries were ineffective because both attempts landed inside the same kill-window.
+  - Fix: `ui/playwright.config.ts` set `fullyParallel: false` + `workers: 1` with in-file justification comment.
+  - Kept `retries: 1` on the two Zetesis SSE specs (independent absorber for real Ollama transients).
+  - ADR-072 §D expanded to record the real root cause + workers change.
+- **Files touched:**
+  - `ui/playwright.config.ts`
+  - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md`
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** ADR-072 §D amended in-place (still Proposed on remote)
+- **Stop-condition status:** in-progress — awaits second Colossus verify (single-worker Playwright).
