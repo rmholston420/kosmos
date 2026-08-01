@@ -3129,6 +3129,15 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **PORTING_LEDGER / ADR updated:** ADR-075 (Ratified · fully executed)
 - **Stop-condition status:** met — Stage 1.6 Phase 2 complete
 
+## 2026-08-01 12:14 EDT — ADR-076 authored (Proposed): Stage 1.6 Phase 3 scope
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · MemoryPort · kernel routes · `/memory/*` UI · AMG surface
+- **What changed:** Authored `docs/adrs/ADR-076-stage-1-6-phase-3.md` (Proposed) locking seven decisions for Stage 1.6 Phase 3: D1 env-gated live-tier pytest fixture for real-Qdrant semantic-hit DoD (matches ADR-049 pattern); D2 `/memory/search` polish (highlighting, all-corpora facet, empty-state, error surface); D3 Playwright live-tier Zetesis→semantic round-trip; D4 `MemoryPort.list_quarantined`/`approve_quarantined`/`reject_quarantined` port extension + three `/api/memory/quarantined` routes + `/memory/quarantine` UI (reads `/api/kernel/identity` for reviewer per ADR-069); D5 `/api/memory/provenance/{event_id}` route walking `:PROVENANCE_OF` edges with `MAX_DEPTH=10` + `/memory/provenance/[event_id]` UI deep-linked from search hits; D6 `/api/memory/amg/status` route surfacing real `agent-memory-guard==0.3.0` registry via `AmgGuardPolicy` accessors + verdict counters + AMG status pill on `/memory` header (satisfies spec §121 standing action); D7 kernel version `6.12.0 → 6.13.0` + `PORT_CONTRACTS.md` MemoryPort `ui_parity_status: partial → full`. Rigpa-LMS donor code inspected at `backend/src/rigpa/domains/memory/` — no quarantine/provenance/AMG donor exists there; Phase 3 code is greenfield behind formal MemoryPort protocol extensions. Rejected alternatives A–G include Docker Compose fixture (Stage 21 ops surface), skip D1 (leaves ADR-074 D3 unobserved), fold surfaces into `/gnosis` (memory-plugin ownership boundary), hard-coded AMG list (surfaces docs not operational truth), split D1 (D3 depends on it), skip D4 (leaves quarantine invisible), amend ADR-075 (mixes verify gates).
+- **Files touched:** docs/adrs/ADR-076-stage-1-6-phase-3.md (new); docs/adrs/README.md (new row); BUILD_LOG.md
+- **Ports / adapters affected:** none yet — Proposed. Once ratified, port extensions land in `ports/memory.py` + `adapters/memory/dozerdb/adapter.py` + `adapters/memory/dozerdb/amg_policy.py` accessors + kernel routes + `/memory/*` UI + six new Playwright specs + one new pytest live-tier integration file.
+- **PORTING_LEDGER / ADR updated:** ADR-076 (Proposed) authored
+- **Stop-condition status:** in-progress (ADR authoring landed; ratification + D1–D7 execution to follow)
+
 ## 2026-08-01 12:35 EDT — Zetesis Research end-to-end (hotfix PR #29 merged)
 
 - **Stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · `plugins/zetesis/research/odr.py` · downstream MemoryPort write via ADR-075 D3
@@ -3137,3 +3146,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (behavior fix under existing LLMPort/EventBusPort/MemoryPort surfaces)
 - **PORTING_LEDGER / ADR updated:** — (behavior fix; no port/decision surface change)
 - **Stop-condition status:** met — Zetesis /research returns a structured report; MemoryPort receives the event with provenance="zetesis.event_bus" + confidence=1.0 per ADR-075 D3.
+
+## 2026-08-01 12:38 EDT — ADR-076 ratified (v25): Stage 1.6 Phase 3 scope locked
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · MemoryPort · kernel routes · `/memory/*` UI · AMG surface
+- **What changed:** Flipped `docs/adrs/ADR-076-stage-1-6-phase-3.md` Status: Proposed → Ratified v25. Updated `docs/adrs/README.md` row 94 Proposed → Ratified v25. Seven decisions (D1–D7) now locked and code work unblocked.
+- **Files touched:** docs/adrs/ADR-076-stage-1-6-phase-3.md; docs/adrs/README.md; BUILD_LOG.md
+- **Ports / adapters affected:** none yet (ratification only; D1–D7 execution follows on `stage-1-6-p3-code`)
+- **PORTING_LEDGER / ADR updated:** ADR-076 Ratified v25
+- **Stop-condition status:** met for ratification; D1–D7 code execution begins next.
