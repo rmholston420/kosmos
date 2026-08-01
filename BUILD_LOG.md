@@ -3382,3 +3382,42 @@ Landed ADR-076 D6.
 - Stage 1.6 Phase 3 D4/D5/D6.5/D6 all closed. D7 (kernel version bump) deferred to naturally land with Tektos 3.14.
 - Pause point: session paused to write Tektos seed docs (`docs/seeds/tektos-3.12.md` versioned + `SESSION_HANDOFF_TEKTOS.md` transient) so the next session can begin building Tektos as a real coding-assistant loop via the frontend GUI.
 - Scope of the next session (locked): Tektos 3.12 (intentions endpoint + IntentionForm) → 3.13 (RealExecutor over LLMPort) → 3.14 (Apply diff to working tree). Every backend slice ships its frontend GUI in the same commit.
+
+## 2026-08-01 16:00 EDT — Stage 3.13 intention scaffolder + kernel endpoint + GUI (ADR-077)
+
+- **Stage / plugin / port:** Stage 3.13 · Tektos · IntentionScaffolder + kernel POST /api/tektos/intention (ADR-077 D2)
+- **What changed:**
+  - New `plugins/tektos/intention/` module: `policy.py` (locked constants — `INTENTION_ROOT_ENV`, `INTENTION_PROVENANCE`, `INTENTION_SCAFFOLD_PREDICATE`, `INTENTION_WRITE_CONFIDENCE`, `MIN_INTENTION_LENGTH=8`, `MAX_INTENTION_LENGTH=512`), `scaffolder.py` (`scaffold_intention()`, `intention_to_change_id()`, `resolve_intention_root()`, `ScaffoldResult`, `IntentionScaffoldError`), and `__init__.py` (public surface).
+  - New kernel endpoint `POST /api/tektos/intention` in `kernel/app.py`: validates request, scaffolds an OpenSpec change dir (XDG-standard root, never touches Kosmos tree), calls `produce_plan(change_dir, memory)` (Stage 3.6), calls `render_and_gate_plan_card(plan, panel_id=TEKTOS_PLAN_APPROVAL_PANEL_ID, approval=approval, memory=memory)` (Stage 3.7 · `HUMAN_REVIEW` gate), returns `{change_id, change_dir, intention, scaffolded_at, plan_card}`. 503 if memory/approval unavailable, 400 on validation failure.
+  - New `ui/components/IntentionForm.tsx` client component: length-gated submit (min 8 / max 512), character counter, surfaces FastAPI `detail` on error, renders returned `PlanCard` summary with link to `/tektos/detail?id=<approval_id>` on success.
+  - `ui/lib/kernel-client.ts`: new `PlanCard` + `TektosIntentionResult` types, new `submitTektosIntention(intention)` method, updated stub comment above the four still-404 Tektos plan routes to name ADR-077 + Stage 3.14 as the surface that lifts them.
+  - `ui/app/tektos/page.tsx`: mounts `<IntentionForm/>` above the existing pending-plans list.
+  - 31 pytest tests in `plugins/tektos/tests/test_intention_scaffolder.py` — 31/31 pass locally (locked-constant tests, slug tests including NFKD + empty-slug rejection, root-resolution env/XDG/home fallback, happy path + openspec walker round-trip, length guards, idempotency guard, ADR-007 no-cross-plugin-import AST test, Colossus safety invariant — root never inside repo).
+  - 5 Playwright smokes in `ui/tests/28-tektos-intention.spec.ts` (mount, disabled-below-min, enabled-at-min, charcount trimming, coexistence with pending-plans section).
+- **Files touched:**
+  - `plugins/tektos/intention/__init__.py` (new)
+  - `plugins/tektos/intention/policy.py` (new)
+  - `plugins/tektos/intention/scaffolder.py` (new)
+  - `plugins/tektos/tests/test_intention_scaffolder.py` (new)
+  - `kernel/app.py` (new endpoint)
+  - `ui/components/IntentionForm.tsx` (new)
+  - `ui/app/tektos/page.tsx`
+  - `ui/lib/kernel-client.ts`
+  - `ui/tests/28-tektos-intention.spec.ts` (new)
+  - `docs/adrs/ADR-077-stage-3-13-3-14-3-15-tektos-intention-and-sandboxed-executor.md` (new)
+- **Ports / adapters affected:** `MemoryPort` (via `render_and_gate_plan_card`) and `ApprovalGatewayPort` (via `render_and_gate_plan_card`). No new ports.
+- **PORTING_LEDGER / ADR updated:** ADR-077 (new). No PORTING_LEDGER changes (nothing vendored).
+- **Stop-condition status:** met — user pulls `stage-3-13-tektos-intention`, opens `/tektos`, types an intention, sees a gated PlanCard on `/tektos/detail?id=<approval_id>`. Zero code execution against the working tree. Stages 3.14 (sandbox executor) + 3.15 (diff-apply wiring) deferred per ADR-077 D3/D4.
+
+## 2026-08-01 15:44 EDT — Test-fake MemoryPort protocol fakes (Colossus-local reapplication)
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · Tektos · MemoryPort test fakes
+- **What changed:** Reapplied the 4 no-op fake methods (`approve_quarantined`, `list_quarantined`, `provenance_chain`, `reject_quarantined`) to `plugins/tektos/tests/test_openspec.py`, `test_repomap.py`, and `test_tektos_agent.py` to keep the fake MemoryPort conforming to the ADR-076 D4/D5-extended `@runtime_checkable MemoryPort` protocol. Ships in the same commit as Stage 3.13 so the review branch is self-contained.
+- **Files touched:**
+  - `plugins/tektos/tests/test_openspec.py`
+  - `plugins/tektos/tests/test_repomap.py`
+  - `plugins/tektos/tests/test_tektos_agent.py`
+  - `DEBUG_LOG.md` — see `2026-08-01 15:44 EDT` entry (supersedes `2026-08-01 11:59 EDT`)
+- **Ports / adapters affected:** MemoryPort test doubles only.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — `pytest plugins/tektos/tests/test_openspec.py::test_fake_memory_port_conforms_to_memoryport_protocol plugins/tektos/tests/test_tektos_agent.py::test_fake_memory_port_is_runtime_memoryport` passes 2/2.

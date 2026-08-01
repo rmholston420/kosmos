@@ -143,6 +143,18 @@ class _FakeMemoryPort:
         # ADR-074 D1 added search_semantic to MemoryPort; fake degrades to [].
         return []
 
+    async def approve_quarantined(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError
+
+    async def list_quarantined(self, *args: Any, **kwargs: Any):  # -> QuarantinedPage
+        raise NotImplementedError
+
+    async def provenance_chain(self, *args: Any, **kwargs: Any):  # -> ProvenanceChain
+        raise NotImplementedError
+
+    async def reject_quarantined(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError
+
     def is_healthy(self) -> bool:
         return True
 

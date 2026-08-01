@@ -795,3 +795,27 @@ Entry format per `kosmos-log-maintenance` skill:
   - tests/integration/test_zetesis_semantic_roundtrip_live.py
   - DEBUG_LOG.md
 - **Related BUILD_LOG entry:** 2026-08-01 14:35 EDT (D3 initial commit a98868c — this fix follows on the same stage-1-6-p3-code branch).
+
+## 2026-08-01 15:44 EDT — MemoryPort protocol conformance failures resurfaced (4 additional methods)
+
+- **Symptom:** `test_fake_memory_port_conforms_to_memoryport_protocol` in `plugins/tektos/tests/test_openspec.py`, `test_repomap.py`, and `test_tektos_agent.py` fail after Stage 1.6 Phase 3 (ADR-076) landed. Concrete failure:
+  ```
+  AssertionError: assert isinstance(_FakeMemoryPort(), MemoryPort)
+  ```
+  Preceded by attribute-error diagnostics naming `approve_quarantined`, `list_quarantined`, `provenance_chain`, `reject_quarantined`. Discovered on Colossus during a Stage 3.13 kickoff verify.
+- **Affected stage / plugin / port:** Stage 3.13 · Tektos · MemoryPort fakes in 3 test files.
+- **Root cause:** ADR-076 D4/D5 (Stage 1.6 Phase 3) added four new methods to `@runtime_checkable` `MemoryPort` — `list_quarantined`, `approve_quarantined`, `reject_quarantined` (D4 quarantine review), and `provenance_chain` (D5). The 2026-08-01 11:59 EDT fix only added `search_semantic` (ADR-074 D1); it predates the D4/D5 landing. Same `runtime_checkable` mechanism as the earlier fix — Protocol adds one more method, every unrelated fake in every unrelated test module silently fails isinstance until each is patched.
+- **Fix applied:** Added four no-op fakes to each of the three test files, immediately after the existing `search_semantic` stub:
+  ```python
+  async def approve_quarantined(self, *args: Any, **kwargs: Any) -> None: raise NotImplementedError
+  async def list_quarantined(self, *args: Any, **kwargs: Any): raise NotImplementedError
+  async def provenance_chain(self, *args: Any, **kwargs: Any): raise NotImplementedError
+  async def reject_quarantined(self, *args: Any, **kwargs: Any) -> None: raise NotImplementedError
+  ```
+  `raise NotImplementedError` bodies (not `[]` degrades) because Stage 3 tektos code paths never call these methods; a fake that returns silently would mask a real regression. Only the presence-of-method check on the isinstance path matters here.
+- **Files changed:**
+  - plugins/tektos/tests/test_openspec.py
+  - plugins/tektos/tests/test_repomap.py
+  - plugins/tektos/tests/test_tektos_agent.py
+  - DEBUG_LOG.md
+- **Supersedes:** 2026-08-01 11:59 EDT (same class of bug, extended fix surface; leave the prior entry intact — it correctly diagnosed the mechanism against `search_semantic` alone).

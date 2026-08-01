@@ -1,28 +1,44 @@
-# Session Handoff — Paused at end of Stage 1.6 Phase 3
+# Kosmos Session Handoff — 2026-08-01 16:00 EDT
 
-## Current stage
-Stage 1.6 Phase 3 **fully closed** (D4/D5/D6.5/D6 all green on Colossus at commit `470ef7f`). D7 (kernel version bump 6.12.0 → 6.13.0) deferred to land naturally with Tektos 3.14.
+## Current build-sequencing position
 
-## Session paused
-User asked to pause Kosmos-memory work and pivot to Tektos so the frontend GUI becomes usable as a coding assistant for Kosmos development itself.
+- **Stage / phase:** Stage 3.13 (ADR-077 D2) — **shipped on branch `stage-3-13-tektos-intention`**, awaiting user pull + observed on Colossus.
+- **Plugin / kernel component:** `plugins/tektos/intention/` + `kernel/app.py::tektos_intention` + `ui/components/IntentionForm.tsx`.
+- **Port(s) in progress:** MemoryPort + ApprovalGatewayPort (reused as-is via `render_and_gate_plan_card`). No new ports this stage.
 
-## Next session — start here
-1. Read `SESSION_HANDOFF_TEKTOS.md` (transient pointer).
-2. Read `docs/seeds/tektos-3.12.md` (full seed — scope, DoD, ports, tests, donor code, constraints).
-3. Start on Tektos 3.12.
+## Completed this session
 
-## Locked scope for next session
+- BUILD_LOG entry `2026-08-01 16:00 EDT` — Stage 3.13 intention scaffolder + kernel endpoint + GUI (ADR-077).
+- BUILD_LOG entry `2026-08-01 15:44 EDT` — test-fake MemoryPort protocol fakes reapplied.
+- DEBUG_LOG entry `2026-08-01 15:44 EDT` — MemoryPort protocol conformance failures resurfaced (supersedes `2026-08-01 11:59 EDT`).
+- ADR-077 written and ratified.
+- 31/31 pytest scaffolder tests pass locally in `/tmp/kosmos-work/`.
+- Branch `stage-3-13-tektos-intention` off `origin/stage-1-6-p3-code` pushed to GitHub.
 
-- **3.12** — `POST /api/tektos/intentions` + `<IntentionForm />` on `/tektos`.
-- **3.13** — `RealExecutor` (LLMPort + MemoryPort + repo_root) replaces `NopExecutor`.
-- **3.14** — `POST /api/tektos/apply/{approval_id}` + Apply button on `/tektos/detail`.
+## Remaining before current Definition of Done
 
-Every backend slice ships its frontend GUI in the same commit.
+- User pulls `stage-3-13-tektos-intention` on Colossus.
+- User restarts `kosmos-kernel`.
+- User runs `pytest plugins/tektos/tests/` (expect 31/31 new + previously-green tests still green).
+- User runs `npm run build && npx playwright test 28-tektos-intention` (expect 5/5 smokes green; existing 27 specs should also stay green).
+- User opens `/tektos`, types an intention (≥8 chars), submits, sees the gated PlanCard on `/tektos/detail?id=<approval_id>`.
 
-## Stop condition
-User opens `/tektos`, types a coding intention, watches a plan appear, approves it, clicks Execute, reviews the real diff, clicks Apply, files change on disk.
+## Open questions / awaiting user answer
 
-## Git state
-- Branch: `stage-1-6-p3-code`, PR #34 open
-- Latest commit: `470ef7f` (D6)
-- Seed docs pending commit: `docs/seeds/tektos-3.12.md`, `SESSION_HANDOFF_TEKTOS.md`, `SESSION_HANDOFF.md` (this file), `BUILD_LOG.md`
+- Whether to collapse Stage 3.14 (sandbox executor) into the next
+  session or split it into 3.14a (SandboxProvider + adapter) + 3.14b
+  (execution loop + `git apply`). Recommend split — smaller commits,
+  cleaner rollback.
+- The 5 stale `stage-1-5-*` branches on GitHub. Housekeeping deferred
+  to a separate session (all confirmed squash-merged into
+  `stage-1-6-p3-code`; safe to delete when the user chooses).
+
+## Exact next action
+
+- User: pull and observe.
+  ```
+  cd ~/dev/kosmos && git fetch origin && git checkout stage-3-13-tektos-intention && sudo systemctl restart kosmos-kernel && sleep 3 && pytest plugins/tektos/tests/ -q && (cd ui && npm run build && npx playwright test 28-tektos-intention)
+  ```
+- Agent (next session): begin Stage 3.14 — write `SandboxProvider`
+  port + `git worktree` adapter under `adapters/sandbox/gitworktree/`
+  + contract test.
