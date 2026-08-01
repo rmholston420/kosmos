@@ -1,6 +1,6 @@
 # ADR-072 — Stage 1.5 Wave F: Tibetan Theme Realization, Live Events WebSocket, and Operate Panel Completion
 
-> **STATUS RATIFICATION (2026-08-01 09:58 EDT):** Stage 1.5 Wave F Definition of Done met on Colossus (`714f7a6` post-merge of ADR-056 §D3 amendment). Full Playwright suite **68 passed / 7 skipped / 0 failed** in 17.6 s across two full runs. Zetesis fast tier **78/78 GREEN** in 0.07 s. This PR ratifies ADR-072, bumps kernel `6.8.0 → 6.9.0`, applies the Next.js CVE-2025-66478 mitigation (`next 16.0.0 → 16.0.7`, `react/react-dom 19.0.0 → 19.0.1`), and folds in §D test hardening (kill-switch file-level `afterAll` resume, single-retry on the two Zetesis SSE specs to absorb Ollama warmup transients).
+> **STATUS RATIFICATION (2026-08-01 09:58 EDT):** Stage 1.5 Wave F Definition of Done met on Colossus (`714f7a6` post-merge of ADR-056 §D3 amendment). Full Playwright suite **68 passed / 7 skipped / 0 failed** in 17.6 s across two full runs. Zetesis fast tier **78/78 GREEN** in 0.07 s. This PR ratifies ADR-072, bumps kernel `6.8.0 → 6.9.0`, escalates the Next.js chain to the current Active LTS 16.2.11 + React 19.2.4 (see §E — covers CVE-2025-66478 plus every subsequent 16.x-line CVE through July 2026), and folds in §D test hardening (kill-switch file-level `afterAll` resume, single-retry on the two Zetesis SSE specs to absorb Ollama warmup transients).
 
 **Status:** Ratified v25 — kernel 6.9.0 · Ratified 2026-08-01
 **Lock-in phase:** Stage 1.5 · Wave F (PRs #18 + #19 + ratification PR)
@@ -107,9 +107,16 @@ Two defensive changes added at ratification time — no behavior change, no new 
 1. **Kill-switch file-level `afterAll` resume** (`ui/tests/11-kill-switch.spec.ts`). Extra safety net on top of the existing per-describe `afterEach` so a hard fixture crash (worker teardown mid-test, page-load error before hooks fire) cannot leave the kernel in `suspended=true` and cascade to every subsequent spec.
 2. **Single-retry on the two Zetesis SSE specs** (`ui/tests/08-zetesis-research.spec.ts`, `ui/tests/16-zetesis-completes.spec.ts`). Real ODR trials go through Ollama and can transient-503 once during warmup or embeddings timeout. `test.describe.configure({ retries: 1 })` absorbs one transient without masking a real regression — a hard second failure still surfaces.
 
-### §E · Next.js CVE-2025-66478 mitigation (folded into ratification PR)
+### §E · Next.js chain-CVE mitigation → Active LTS 16.2.11 (folded into ratification PR)
 
-CVE-2025-66478 (rejected as duplicate of CVE-2025-55182 — React Server Components Flight-protocol RCE, CVSS 10.0, disclosed 2025-12-03) affects every Next.js 15.x and 16.x App Router application. Kosmos was on `next@16.0.0 + react@19.0.0 + react-dom@19.0.0` — fully exposed. Ratification PR bumps to the vendor's fix for the 16.0.x line: `next@16.0.7 + react@19.0.1 + react-dom@19.0.1`. No config workaround exists; upgrade is the only mitigation.
+Initial plan targeted only CVE-2025-66478 (RSC Flight-protocol RCE, CVSS 10.0, disclosed 2025-12-03; fixed on the 16.0.x line at 16.0.7). On the first Colossus install pass, `pnpm` flagged `next@16.0.7` as still deprecated for a subsequent 2025-12-11 advisory (CVE-2025-55184 DoS + CVE-2025-55183 source-code exposure + CVE-2025-67779), and the record since then shows a continuous CVE cascade on the 16.0.x line (16.0.10 → 16.0.11 → 16.1.5) that was subsumed by the July 2026 security release into the Active LTS 16.2.11.
+
+**Optimal choice:** skip the 16.0.x pin entirely and jump to the current Active LTS. Ratification PR pins:
+
+- `next 16.0.0 → 16.2.11` (Active LTS, July 2026 security release) — covers CVE-2025-66478, CVE-2025-55184, CVE-2025-55183, CVE-2025-67779, CVE-2026-23864, CVE-2025-59471, CVE-2025-59472, CVE-2026-23869, CVE-2026-23870, CVE-2026-44573, CVE-2026-44575, CVE-2026-44577, and CVE-2026-64641 through CVE-2026-64649.
+- `react 19.0.0 → 19.2.4`, `react-dom 19.0.0 → 19.2.4` — RSC RCE + subsequent RSC DoS both patched.
+
+No config workaround exists for the underlying RCE; only version upgrade closes the exposure.
 
 ## References
 

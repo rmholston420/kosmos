@@ -2801,3 +2801,20 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — paper amendment + version bumps + test hardening
 - **PORTING_LEDGER / ADR updated:** ADR-072 Ratified v25
 - **Stop-condition status:** met on branch; awaits `pnpm install` on Colossus (to update `pnpm-lock.yaml` for next 16.0.7 / react 19.0.1) + full Playwright re-verify target 68/68 GREEN + `kernel/app.py.version == "6.9.0"` assertion.
+
+## 2026-08-01 10:03 EDT — Stage 1.5 Wave F ratification · Next.js CVE target escalated 16.0.7 → 16.2.11
+
+- **Stage / plugin / port:** Stage 1.5 · Wave F ratification · UI security dependency escalation
+- **What changed:**
+  - First Colossus install pass revealed `next@16.0.7` is now deprecated (`pnpm` warned: 2025-12-11 advisory — CVE-2025-55184 DoS + CVE-2025-55183 source-code exposure + CVE-2025-67779).
+  - Verified against the Next.js changelog: 16.0.x line CVEs cascade continuously (16.0.7 → 16.0.10 → 16.0.11 → 16.1.5) all subsumed by July 2026 security release into Active LTS 16.2.11.
+  - **Escalation:** skip 16.0.x pin entirely, jump to `next 16.2.11 + react 19.2.4 + react-dom 19.2.4`. Single bump covers CVE-2025-66478 through CVE-2026-64649 (nine July 2026 CVEs).
+  - ADR-072 §E rewritten to reflect the escalation with full CVE list.
+  - ADR index README.md row §E note updated.
+- **Files touched:**
+  - `ui/package.json` (next 16.0.7 → 16.2.11, react/react-dom 19.0.1 → 19.2.4)
+  - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md` (§E rewrite + STATUS RATIFICATION block updated)
+  - `docs/adrs/README.md` (index row §E note updated)
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** ADR-072 §E amended in-place before ratification lands (still Proposed on remote)
+- **Stop-condition status:** in-progress — awaits Colossus `pnpm install` re-verify + version smoke on a clean kernel process + Playwright re-run.
