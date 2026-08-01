@@ -55,7 +55,7 @@ from ports.memory import MemoryEventId
 def _make_record(
     approval_id: str = "apr-1",
     intention_id: str = "int-1",
-    status: ApprovalStatus = ApprovalStatus.HUMAN_REVIEW,
+    status: ApprovalStatus = ApprovalStatus.PENDING,
 ) -> ApprovalRecord:
     return ApprovalRecord(
         approval_id=approval_id,
@@ -79,7 +79,7 @@ class _FakeApprovalResolverPort:
         return tuple(
             r
             for r in self.records.values()
-            if r.status == ApprovalStatus.HUMAN_REVIEW
+            if r.status == ApprovalStatus.PENDING
             and (proposing_domain is None or r.proposing_domain == proposing_domain)
         )
 
