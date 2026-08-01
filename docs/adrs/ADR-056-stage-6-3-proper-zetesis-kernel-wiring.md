@@ -1,8 +1,22 @@
 # ADR-056 — Stage 6.3 (proper) Zetesis Kernel Wiring
 
-**Status:** Ratified v25 — Completed 2026-07-30 — Amended 2026-08-01
+**Status:** Ratified v25 — Completed 2026-07-30 — Amended 2026-08-01 (twice)
 **Lock-in phase:** Stage 6.3 (proper) — Kosmos-Build-Sequence-v25.md §6.3
 **Supersedes:** —
+
+> **STATUS AMENDMENT (2026-08-01, failure-semantics clarification):** The original §D3 failure-semantics rule ("on inner-loop failure, the started event is published … the completed event is **not** published … `research()` re-raises verbatim") is refined to distinguish **two classes** of inner-loop failure:
+>
+> 1. **Fatal failures** — exceptions the inner loop cannot handle (import errors, port-contract violations, unrecoverable adapter failures, cancellation, `RuntimeError`). These propagate out of `run_zetesis_research` and up through `ZetesisPlugin.research`. `research()` re-raises verbatim. The router (kernel/app.py:2239 `/api/zetesis/research` SSE endpoint) emits `event: error` and terminates the stream. **No `event: completed` is published; no memory / data writes occur.** This is the original §D3 rule and remains authoritative for fatal cases.
+>
+> 2. **Recoverable failures** — exceptions the inner loop catches, records into `TrialMetrics.error`, and continues past. Examples: individual sub-call failures inside a multi-step research plan (a single search-provider timeout, one LLM sub-call that missed credentials), where the loop can still return a partial `TrialMetrics` with the diagnostic. In this class, `research()` returns a `ResearchReport` whose `error` field is populated but whose `answer`/`citations`/`evidences` reflect whatever the loop did complete. The completed event **is** published, memory and data writes **do** occur, and the router emits `event: completed` with the `error` field preserved on the payload.
+>
+> **Rationale for two-class distinction:** the original rule was written when the inner loop's failure model was assumed to be all-or-nothing. Live Stage 6.5 observations (2026-08-01 during Wave F Part 2 verification) confirmed the ODR inner loop already implements graceful sub-call error capture: individual failures populate `TrialMetrics.error` without aborting the trial. Enforcing the strict all-or-nothing rule would either (a) require re-raising every caught sub-call error (destroying the partial-result UX), or (b) require the loop to swallow the error entirely (destroying the diagnostic signal). The two-class distinction preserves both: fatal errors still surface as `event: error` (loud, terminal); recoverable errors surface as `event: completed` with a populated `error` field (partial results + diagnostic).
+>
+> **GUI contract impact:** the frontend already renders both shapes gracefully. `event: error` shows the terminal red-flag state; `event: completed` with `report.error != null` shows the partial-report state with an inline diagnostic banner. No frontend change required.
+>
+> **Contract test (added by this amendment):** `plugins/zetesis/tests/test_failure_semantics.py` asserts both classes: (1) a plugin whose `run_zetesis_research` raises must cause `research()` to raise and must **not** publish the completed event; (2) a plugin whose `run_zetesis_research` returns `TrialMetrics(error="...", answer="partial")` must cause `research()` to return `ResearchReport(error="...", answer="partial")` and **must** publish the completed event.
+>
+> **Files touched:** `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (this amendment block) · `plugins/zetesis/tests/test_failure_semantics.py` (new, two contract tests). **No plugin or router code changes** — this amendment documents already-shipped behavior.
 
 > **STATUS AMENDMENT (2026-08-01, adapter compliance):** The Stage 6.5 mount (Kosmos-Build-Sequence-v25.md §1.5 Wave F) binds Zetesis to the real `QdrantVectorAdapter(backend=InMemoryQdrantBackend())` per `plugins/zetesis/adapters/real/factory.py:build_stage_6_5_zetesis_plugin`. Sub-slice 3's no-op wiring proof (`VectorPort.search(collection=ZETESIS_STATE_NAMESPACE, query_vector=[], limit=1)`) then hit the real adapter, which raised `ValueError("query_vector must be a non-empty list of floats")` and terminated `research()` before the `event: completed` publish (see failure semantics §D3).
 >

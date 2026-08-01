@@ -2736,3 +2736,20 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met on branch; awaits Colossus full-suite re-verify (target 68/68 GREEN).
+
+## 2026-08-01 09:50 EDT — ADR-056 §D3 failure-semantics clarification (option C)
+
+- **Stage / plugin / port:** Stage 6.3 / 6.5 · Zetesis / SSE router / EventBus contract
+- **What changed:**
+  - Amended `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` with a second 2026-08-01 STATUS AMENDMENT block ("failure-semantics clarification"), prepended above the earlier "adapter compliance" block. Status line updated to `Ratified v25 — Completed 2026-07-30 — Amended 2026-08-01 (twice)`.
+  - Amendment refines the original §D3 rule ("on inner-loop failure, the started event is published … completed event is not published … research() re-raises verbatim") into two failure classes:
+    1. **Fatal failures** — inner loop raises. research() re-raises. Started event fires; completed does NOT. Router emits `event: error`.
+    2. **Recoverable failures** — inner loop catches sub-call error into `TrialMetrics.error` and returns a partial `TrialMetrics`. research() returns `ResearchReport(error=..., answer=partial)`. Completed event IS published. Router emits `event: completed` with `report.error` preserved.
+  - Rationale: live Stage 6.5 Wave F verification confirmed the ODR inner loop already implements graceful sub-call error capture (observed 2026-08-01 during F6 verification via missing `OPENAI_API_KEY` on one sub-call). Enforcing strict all-or-nothing would destroy either partial-result UX or diagnostic signal.
+  - No plugin or router code change — amendment documents already-shipped behavior.
+- **Files touched:**
+  - `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (STATUS AMENDMENT block added; status-line "twice")
+  - `plugins/zetesis/tests/test_failure_semantics.py` (new, 137 lines, 2 async tests: fatal path re-raises + suppresses completed; recoverable path returns ResearchReport(error, partial-answer) + publishes completed). Uses `make_zetesis_plugin` fixture from `conftest.py` plus a local `_RecordingEventBus` satisfying the full `EventBusPort` runtime-checkable Protocol.
+- **Ports / adapters affected:** none (contract-level clarification only)
+- **PORTING_LEDGER / ADR updated:** ADR-056 (Ratified v25 — Amended 2026-08-01 twice)
+- **Stop-condition status:** amendment complete on branch. Awaits Colossus fast-tier run of the two new contract tests.
