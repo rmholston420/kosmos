@@ -1,7 +1,9 @@
 # ADR-072 — Stage 1.5 Wave F: Tibetan Theme Realization, Live Events WebSocket, and Operate Panel Completion
 
-**Status:** Proposed
-**Lock-in phase:** Stage 1.5 · Wave F (PRs #18 + #19)
+> **STATUS RATIFICATION (2026-08-01 09:58 EDT):** Stage 1.5 Wave F Definition of Done met on Colossus (`714f7a6` post-merge of ADR-056 §D3 amendment). Full Playwright suite **68 passed / 7 skipped / 0 failed** in 17.6 s across two full runs. Zetesis fast tier **78/78 GREEN** in 0.07 s. This PR ratifies ADR-072, bumps kernel `6.8.0 → 6.9.0`, applies the Next.js CVE-2025-66478 mitigation (`next 16.0.0 → 16.0.7`, `react/react-dom 19.0.0 → 19.0.1`), and folds in §D test hardening (kill-switch file-level `afterAll` resume, single-retry on the two Zetesis SSE specs to absorb Ollama warmup transients).
+
+**Status:** Ratified v25 — kernel 6.9.0 · Ratified 2026-08-01
+**Lock-in phase:** Stage 1.5 · Wave F (PRs #18 + #19 + ratification PR)
 **Supersedes:** —
 
 ## Context
@@ -96,7 +98,18 @@ Testing consequences: all 17/22 previously-green Playwright specs remain untouch
 
 ## Lock-in phase
 
-Stage 1.5 · Wave F. Ratified v25 status flips after Colossus full-suite closes DoD following PR #19 merge.
+Stage 1.5 · Wave F. **Ratified v25** on 2026-08-01 after Colossus full-suite closed DoD following PR #19 merge (Playwright 68/68 across two consecutive runs; Zetesis fast tier 78/78). Kernel bumped `6.8.0 → 6.9.0` in the ratification PR.
+
+### §D · Test hardening (folded into ratification PR)
+
+Two defensive changes added at ratification time — no behavior change, no new tests:
+
+1. **Kill-switch file-level `afterAll` resume** (`ui/tests/11-kill-switch.spec.ts`). Extra safety net on top of the existing per-describe `afterEach` so a hard fixture crash (worker teardown mid-test, page-load error before hooks fire) cannot leave the kernel in `suspended=true` and cascade to every subsequent spec.
+2. **Single-retry on the two Zetesis SSE specs** (`ui/tests/08-zetesis-research.spec.ts`, `ui/tests/16-zetesis-completes.spec.ts`). Real ODR trials go through Ollama and can transient-503 once during warmup or embeddings timeout. `test.describe.configure({ retries: 1 })` absorbs one transient without masking a real regression — a hard second failure still surfaces.
+
+### §E · Next.js CVE-2025-66478 mitigation (folded into ratification PR)
+
+CVE-2025-66478 (rejected as duplicate of CVE-2025-55182 — React Server Components Flight-protocol RCE, CVSS 10.0, disclosed 2025-12-03) affects every Next.js 15.x and 16.x App Router application. Kosmos was on `next@16.0.0 + react@19.0.0 + react-dom@19.0.0` — fully exposed. Ratification PR bumps to the vendor's fix for the 16.0.x line: `next@16.0.7 + react@19.0.1 + react-dom@19.0.1`. No config workaround exists; upgrade is the only mitigation.
 
 ## References
 
@@ -104,4 +117,5 @@ Stage 1.5 · Wave F. Ratified v25 status flips after Colossus full-suite closes 
 - UX Design Spec §"Tibetan-Inspired Visual Theme", §"Persistent Shell", §"Information Architecture: Job-Segmented, Not Data-Segmented"
 - ADR-068 (Stage 1.5 GUI realization + gap ledger — Wave F closes gaps G1, G3, G6, G8)
 - ADR-069 (kill switch), ADR-070 (memory integrity), ADR-071 (Wave E polish)
-- PR #18 (F0 + F1 + F2), PR #19 (F3 + F4 + F5 — pending)
+- PR #18 (F0 + F1 + F2 — merged 2026-07-31), PR #19 (F3 + F4 + F5 + F6 — merged 2026-08-01 as `56a7fe6`), PR #20 (ADR-056 §D3 amendment — merged 2026-08-01 as `714f7a6`)
+- Next.js CVE-2025-66478 advisory: https://nextjs.org/blog/CVE-2025-66478 (fixed 16.0.7 / React 19.0.1)

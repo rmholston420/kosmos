@@ -69,11 +69,11 @@ test.describe("Memory Integrity — Wave E polish", () => {
     ).toHaveCount(0);
   });
 
-  test("kernel version endpoint reports 6.8.0", async ({ request }) => {
+  test("kernel version endpoint reports 6.9.0", async ({ request }) => {
     // Sanity check the Wave E backend is what the UI sees.
     const r = await request.get("/openapi.json");
     expect(r.ok()).toBeTruthy();
     const spec = await r.json();
-    expect(spec.info?.version).toBe("6.8.0");
+    expect(spec.info?.version).toBe("6.9.0");
   });
 });

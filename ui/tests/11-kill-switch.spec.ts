@@ -10,6 +10,18 @@ async function ensureRunning(request: import("@playwright/test").APIRequestConte
   await request.post("/api/kernel/resume", { data: {} });
 }
 
+// File-level safety net (ADR-072 §D · test hardening).
+//
+// The per-describe `afterEach` below already restores kernel state after
+// every completed test. This `afterAll` is an extra defensive layer: if
+// a test crashes hard (fixture setup fails before hooks fire, page-load
+// error inside `beforeEach`, worker teardown mid-test) the kernel could
+// otherwise stay in `suspended=true` and cascade failures into 11-N and
+// every subsequent spec. This guarantees resume even in that case.
+test.afterAll(async ({ request }) => {
+  await ensureRunning(request);
+});
+
 test.describe("Kill-switch — soft suspend/resume", () => {
   // Serialize only the tests that toggle global suspension state — keeps
   // the cmdk plugin-actions describe (below) parallelizable and prevents

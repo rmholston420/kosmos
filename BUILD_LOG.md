@@ -2777,3 +2777,27 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Fix applied:** conftest fake now implements the full protocol.
 - **Files changed:** `plugins/zetesis/tests/conftest.py`.
 - **Related BUILD_LOG entry:** 2026-08-01 09:54 EDT (this session).
+
+## 2026-08-01 09:58 EDT — Stage 1.5 Wave F · ADR-072 Ratified v25 · kernel 6.9.0 · Next.js CVE mitigation
+
+- **Stage / plugin / port:** Stage 1.5 · Wave F ratification · kernel version + UI security bump + test hardening
+- **What changed:**
+  - **ADR-072 status:** Proposed → **Ratified v25** (2026-08-01). Added STATUS RATIFICATION block, §D test-hardening subsection, §E Next.js CVE-2025-66478 mitigation subsection.
+  - **Kernel version:** `6.8.0 → 6.9.0` (`kernel/app.py` line 706 + Playwright `13-community-collapse-and-annotate.spec.ts` version-pin test).
+  - **Next.js CVE-2025-66478 (CVSS 10.0 RCE):** `next 16.0.0 → 16.0.7`, `react 19.0.0 → 19.0.1`, `react-dom 19.0.0 → 19.0.1`.
+  - **§D test hardening (folded in):**
+    - `ui/tests/11-kill-switch.spec.ts` — file-level `test.afterAll` calling `ensureRunning(request)` — safety net on top of the existing per-describe `afterEach`. Guards against hard fixture crashes leaving `suspended=true`.
+    - `ui/tests/08-zetesis-research.spec.ts` + `ui/tests/16-zetesis-completes.spec.ts` — `test.describe.configure({ retries: 1 })` to absorb transient Ollama 503/embeddings timeouts without masking real regressions.
+  - **ADR index (`docs/adrs/README.md`):** ADR-072 row updated Proposed → Ratified v25 with §D/§E note and DoD snapshot.
+- **Files touched:**
+  - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md`
+  - `docs/adrs/README.md`
+  - `kernel/app.py`
+  - `ui/package.json`
+  - `ui/tests/08-zetesis-research.spec.ts`
+  - `ui/tests/11-kill-switch.spec.ts`
+  - `ui/tests/13-community-collapse-and-annotate.spec.ts`
+  - `ui/tests/16-zetesis-completes.spec.ts`
+- **Ports / adapters affected:** none — paper amendment + version bumps + test hardening
+- **PORTING_LEDGER / ADR updated:** ADR-072 Ratified v25
+- **Stop-condition status:** met on branch; awaits `pnpm install` on Colossus (to update `pnpm-lock.yaml` for next 16.0.7 / react 19.0.1) + full Playwright re-verify target 68/68 GREEN + `kernel/app.py.version == "6.9.0"` assertion.

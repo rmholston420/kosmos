@@ -703,7 +703,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.8.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.9.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
