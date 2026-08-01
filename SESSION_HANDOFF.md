@@ -1,32 +1,40 @@
-# Kosmos Session Handoff — 2026-08-01 12:07 EDT
+# Kosmos Session Handoff — 2026-08-01 14:12 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 1.6 Phase 2 — **COMPLETE**. Next: Stage 1.6 Phase 3 (ADR-076, not yet authored) or Stage 1.7.
-- **Plugin / kernel component:** —
-- **Port(s) in progress:** —
+- **Stage / phase:** Stage 1.6 Phase 3 (ADR-076)
+- **Plugin / kernel component:** MemoryPort · Zetesis fan-out · UI memory surfaces
+- **Branch:** `stage-1-6-p3-code` (rolling, PR #34 OPEN)
+- **Latest commit:** `a98868c` (D3)
 
 ## Completed this session
-- Ratified ADR-075 (Stage 1.6 Phase 2), merged PR #27 at `821c8f5`
-- Executed ADR-075 D1 (Graphiti hard-delete + `graphiti-core` dep removal + `InMemoryTemporalIndex` boot)
-- Executed ADR-075 D2 (`POST /api/memory/search-semantic` route + `/memory/search` UI + `kernelClient.memorySearchSemantic` + 200-degraded graceful path)
-- Executed ADR-075 D3 (`_drain_zetesis_reports` → `MemoryPort.write_event` fan-out with provenance/confidence, errors in `registry.errors["zetesis_fanout"]`)
-- Executed ADR-075 D4 (`/gnosis/graph` client-side `next_cursor` pagination, `MAX_PAGES=10`, `graph-truncated` testid, footer format `NNN nodes · MMM edges · pages X/10`)
-- Executed ADR-075 D5 (kernel version 6.11.0 → 6.12.0)
-- Fixed 2 stale Python version pins (6.8.0/6.10.0 → 6.12.0) + TS `Promise.all` inference regression on `nodePage`
-- Fixed pre-existing MemoryPort protocol conformance failures from ADR-074 D1 (added no-op `search_semantic` to 3 Tektos `_FakeMemoryPort` fakes + `ZetesisMemoryStub` adapter)
-- Verified on Colossus: pytest 1264 passed / 14 skipped; Playwright 10/10 passed after kernel restart
-- Merged PR #28 into main at `a105af5`; branch `stage-1-6-p2-code` deleted
+- **D1** — `tests/integration/test_semantic_hits_live.py` (3 tests, live tier). Green on Colossus.
+- **Qdrant deployment** — Kosmos-owned Qdrant on 127.0.0.1:6339 / 6340 via `ops/compose/memory.yml`. Kernel env `KOSMOS_QDRANT_URL=http://127.0.0.1:6339` in `ops/systemd/kosmos-kernel.env`. Logged in PORTING_LEDGER.md.
+- **D2** — UI memory search polish (`ui/app/memory/search/page.tsx`): highlighting, corpus `<select>` from `/api/gnosis/corpora`, empty state, error state, facet counts. 13/13 Playwright green.
+- **D3** — Kernel fan-out amendment at `kernel/app.py:604` stamps `attributes["corpus_name"]="zetesis-reports"`. New `tests/integration/test_zetesis_semantic_roundtrip_live.py` (2 async pytest tests behind `KOSMOS_STAGE_16_LIVE=1`) locks the round-trip and corpus-lane isolation. ADR-076 §D3 amended in place (2026-08-01 STATUS AMENDMENT).
 
 ## Remaining before current Definition of Done
-- none — Stage 1.6 Phase 2 DoD met
+- **D3 live verification pending on Colossus:**
+  ```bash
+  cd ~/dev/kosmos && git fetch origin && git checkout stage-1-6-p3-code && \
+    git reset --hard origin/stage-1-6-p3-code && \
+    sudo systemctl restart kosmos-kernel && sleep 3 && \
+    KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_zetesis_semantic_roundtrip_live.py -v --tb=short
+  ```
+- **D4** — Quarantine port + routes + UI (ADR-076 lines 140+)
+- **D5** — Provenance route + UI
+- **D6** — AMG status route + pill
+- **D6.5 (proposed, awaiting user)** — Phrouros anomalies table on /observe (replace GovernancePanel placeholder). See "Phrouros surface" note below.
+- **D7** — Kernel version bump + Qdrant image 1.12 → 1.15+ + PORT_CONTRACTS audit
 
 ## Open questions / awaiting user answer
-- Author ADR-076 for Stage 1.6 Phase 3 next, or move to Stage 1.7? (Not blocking; ask before starting.)
-- Task-exception noise (`WebSocketDisconnect(1001)` in `events_ws._drain_client` during page-nav) is expected Playwright behavior — worth a DEBUG_LOG note next session for future search-first savings; not a bug.
+- **Fork the session?** Recommended — session is heavily compacted. Fork point is clean (post-D3, pre-D4).
+- **Add D6.5 (Phrouros anomalies UI) to Phase 3?** Options in agent's 2026-08-01 14:12 EDT message. Default recommendation: Option A (add as D6.5, minimal anomalies table + WS live-invalidate on `phrouros.anomaly.detected`).
+
+## Phrouros surface note (context for next session)
+- **Backend built + live** on Colossus. `GET /api/phrouros/anomalies` returns AnomalyRecord list. `phrouros.anomaly.detected` event topic published on WS.
+- **Frontend is placeholder-only** (`ui/components/panels/GovernancePanel.tsx:108-109`). AgentTracePanel listens for the event but only invalidates trace queries, doesn't render anomalies. No table, no live toast, no filter, no kind badges.
+- 5 detectors registered: `loop`, `unauthorized_tool` real; `model_swap_slo`, `stub_degradation`, `bus_factor_1` skeleton for Stage 3+.
 
 ## Exact next action
-Push BUILD_LOG + SESSION_HANDOFF updates directly to main:
-```
-cd ~/dev/kosmos && git pull --ff-only origin main
-```
-Then decide Stage 1.6 Phase 3 vs. Stage 1.7 scope.
+1. User decides: fork now (recommended) + Option A for D6.5.
+2. On resume (this or next session), start **D4 — Quarantine port + routes + UI**. Read `docs/adrs/ADR-076-stage-1-6-phase-3.md` §D4 first, then inspect `ports/memory.py` for the closest existing quarantine analog before writing the new port.
