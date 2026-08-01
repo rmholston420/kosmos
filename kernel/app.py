@@ -1,6 +1,6 @@
-"""Kosmos kernel FastAPI app (Stage 6.5.1+6.5.2 — Phrouros wire + resource seed).
+"""Kosmos kernel FastAPI app (Stage 6.5.3 — Zetesis /research SSE).
 
-Boot sequence (Stage 6.5.1+6.5.2):
+Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
 
 1. Seven kernel subsystems boot behind per-subsystem try/except:
    ``notification``, ``frontend_contract``, ``resource``, ``event_bus``,
@@ -14,19 +14,25 @@ Boot sequence (Stage 6.5.1+6.5.2):
    ``ports/observability`` detectors + the shared kernel adapters
    (ADR-059 §D1). Failure surfaces under ``registry.errors["phrouros"]``.
 
-Kernel HTTP endpoints unchanged from Stage 6.5 except
-``/api/phrouros/anomalies`` now returns 200 with real (usually empty)
-records instead of 503.
+Kernel HTTP endpoints (6.5.3):
+
+- ``/api/phrouros/anomalies`` — 200 with real (usually empty) records.
+- ``POST /api/zetesis/research`` — new SSE endpoint (ADR-060) emitting
+  ``started`` + ``completed`` events on the happy path; ``started`` +
+  ``error`` on failure.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import json
+import uuid
 from contextlib import asynccontextmanager
-from decimal import Decimal
-from typing import Any
+from decimal import Decimal, InvalidOperation
+from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 # ---------------------------------------------------------------------------
 # Boot helpers
@@ -281,7 +287,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.2", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.3", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +418,138 @@ def phrouros_anomalies() -> list[dict[str, Any]]:
     if registry.phrouros is None:
         raise HTTPException(503, detail=registry.errors.get("phrouros"))
     return [_dataclass_to_dict(r) for r in registry.phrouros.list_records()]
+
+
+# ---------------------------------------------------------------------------
+# Zetesis research (SSE) — ADR-060
+# ---------------------------------------------------------------------------
+
+
+_SSE_HEADERS: dict[str, str] = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "Connection": "keep-alive",
+}
+
+
+def _sse_event(event: str, data: Any) -> bytes:
+    """Format one SSE frame.
+
+    SSE spec: `event: <name>\n` optional; `data: <payload>\n` required;
+    frame terminated by a blank line.
+    """
+    payload = json.dumps(_dataclass_to_dict(data), ensure_ascii=False)
+    return f"event: {event}\ndata: {payload}\n\n".encode("utf-8")
+
+
+def _build_research_config(raw: Any) -> Any:
+    """Coerce a client-supplied dict into a ``ZetesisResearchConfig``.
+
+    Applied over the plugin's defaults via ``dataclasses.replace``.
+    Unknown keys ignored (forward-compat). Invalid coercion raises
+    ``ValueError`` — caller maps to 400.
+    """
+    from plugins.zetesis.plugin import ZetesisResearchConfig
+    from ports.resource import PriorityClass
+
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("'config' must be a JSON object or omitted")
+
+    valid_fields = {f.name for f in dataclasses.fields(ZetesisResearchConfig)}
+    overrides: dict[str, Any] = {}
+    for k, v in raw.items():
+        if k not in valid_fields:
+            continue
+        if k == "priority_class" and isinstance(v, str):
+            try:
+                overrides[k] = PriorityClass[v.upper()]
+            except KeyError as exc:
+                raise ValueError(
+                    f"unknown priority_class {v!r}; "
+                    f"valid: {[m.name for m in PriorityClass]}"
+                ) from exc
+            continue
+        if k == "compute_budget":
+            try:
+                overrides[k] = Decimal(str(v))
+            except (InvalidOperation, TypeError) as exc:
+                raise ValueError(
+                    f"compute_budget must be a number, got {v!r}"
+                ) from exc
+            continue
+        if k in ("fact_anchor_urls", "rubric_lines") and v is not None:
+            if not isinstance(v, (list, tuple)):
+                raise ValueError(f"{k} must be a list of strings")
+            overrides[k] = tuple(str(x) for x in v)
+            continue
+        overrides[k] = v
+
+    return dataclasses.replace(ZetesisResearchConfig(), **overrides)
+
+
+@app.post("/api/zetesis/research")
+async def zetesis_research(request: Request) -> StreamingResponse:
+    if registry.zetesis is None:
+        raise HTTPException(503, detail=registry.errors.get("zetesis"))
+
+    # Parse + validate synchronously so validation errors are 400, not
+    # mid-stream error events.
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, detail=f"invalid JSON body: {exc}") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail="request body must be a JSON object")
+    query = body.get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise HTTPException(400, detail="'query' must be a non-empty string")
+    try:
+        config = _build_research_config(body.get("config"))
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    trial_id = (
+        getattr(config, "trial_id", "") or ""
+    ).strip() or uuid.uuid4().hex
+    # Always ensure the config carries the server-issued trial_id so the
+    # plugin echoes it back on `ResearchReport.trial_id`.
+    if config is None:
+        from plugins.zetesis.plugin import ZetesisResearchConfig
+        config = ZetesisResearchConfig(trial_id=trial_id)
+    elif getattr(config, "trial_id", "") != trial_id:
+        config = dataclasses.replace(config, trial_id=trial_id)
+
+    plugin = registry.zetesis
+
+    async def _stream() -> AsyncIterator[bytes]:
+        yield _sse_event(
+            "started",
+            {
+                "query": query,
+                "trial_id": trial_id,
+            },
+        )
+        try:
+            report = await plugin.research(query, config=config)
+        except Exception as exc:  # noqa: BLE001
+            yield _sse_event(
+                "error",
+                {
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "trial_id": trial_id,
+                },
+            )
+            return
+        yield _sse_event("completed", report)
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 # ---------------------------------------------------------------------------
