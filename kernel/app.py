@@ -277,7 +277,7 @@ async def lifespan(app: FastAPI):
         )
         from plugins.praxis.apex.engine import KernelChangeApprovalAdapter
         from plugins.praxis.apex.scheduler import InProcessScheduler
-        from plugins.praxis.apex.storage import InMemoryStorage as PraxisStorage
+        from plugins.praxis.apex.storage import InMemoryStorage, SqliteStorage
 
         if registry.event_bus is None or registry.notification is None:
             raise RuntimeError(
@@ -285,8 +285,14 @@ async def lifespan(app: FastAPI):
                 "one of them failed to boot"
             )
 
+        # ADR-078 (Stage 3.13.2): opt in to durable approval storage via
+        # ``KOSMOS_APEX_DB_PATH``. Empty / unset keeps ``InMemoryStorage``
+        # so the test suite and short-lived boots stay side-effect-free.
+        _apex_db = os.environ.get("KOSMOS_APEX_DB_PATH", "").strip()
+        storage = SqliteStorage(_apex_db) if _apex_db else InMemoryStorage()
+
         engine = KernelChangeApprovalAdapter(
-            storage=PraxisStorage(),
+            storage=storage,
             scheduler=InProcessScheduler(),
             event_bus=registry.event_bus,
             notification=registry.notification,

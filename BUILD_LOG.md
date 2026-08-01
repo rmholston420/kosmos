@@ -3453,3 +3453,22 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** ApprovalResolverPort read (get_by_id) — no new port. Existing `resolve_intention_root()` reused.
 - **PORTING_LEDGER / ADR updated:** ADR-077 D2a + D2b.
 - **Stop-condition status:** met on push — user pulls, restarts kernel, opens `/tektos/detail?id=<approval_id>` from the pending plan link, sees the record + PlanCard + proposal.md + tasks.md; approve/reject work; execute/diff visible but disabled.
+
+## 2026-08-01 17:12 EDT — Stage 3.13.2 · APEX SqliteStorage early landing (ADR-078)
+
+- **Stage / plugin / port:** Stage 3.13.2 · plugins/praxis/apex · `Storage` protocol seam
+- **What changed:**
+  - `plugins/praxis/apex/storage.py`: `SqliteStorage` bodies filled (aiosqlite; idempotent schema with WAL + foreign_keys; JSON columns via `_json_dump`/`_json_load`; iso8601 timestamps via `_iso`/`_parse_iso`; UPSERT for `save_intention` and `save_record`; `update_status` layered on `save_record` for consistency). `SCHEMA_VERSION = "v1"`.
+  - `kernel/app.py` `_boot_approval`: opt-in switch — `KOSMOS_APEX_DB_PATH` non-empty → `SqliteStorage(path)`; empty/unset → `InMemoryStorage` (tests unaffected). No engine refactor.
+  - `deploy/systemd/kosmos-kernel.service.d/20-apex-db-path.conf`: `KOSMOS_APEX_DB_PATH=/var/lib/kosmos/apex/approvals.sqlite` + `StateDirectory=kosmos/apex` (0750).
+  - `plugins/praxis/apex/tests/test_storage_contract.py`: parametrized `["memory","sqlite"]` contract suite (10 cases) + a sqlite-only durability test that creates a second instance on the same path to prove cross-process persistence.
+  - `docs/adrs/ADR-078-apex-sqlite-storage-early-landing.md`: records the early landing, opt-in wiring, systemd deploy, and Stage 5 M1/M2 (keep sqlite vs migrate to DozerDB) deferral.
+- **Files touched:**
+  - plugins/praxis/apex/storage.py
+  - kernel/app.py
+  - deploy/systemd/kosmos-kernel.service.d/20-apex-db-path.conf
+  - plugins/praxis/apex/tests/test_storage_contract.py
+  - docs/adrs/ADR-078-apex-sqlite-storage-early-landing.md
+- **Ports / adapters affected:** `plugins.praxis.apex.protocol.Storage` — new concrete adapter `SqliteStorage` filling the previously stubbed methods. No new port.
+- **PORTING_LEDGER / ADR updated:** ADR-078 (new).
+- **Stop-condition status:** met on push — after systemd drop-in + restart, Tektos approvals survive `systemctl restart kosmos-kernel`; `/tektos/detail?id=<approval_id>` renders correctly across restarts.
