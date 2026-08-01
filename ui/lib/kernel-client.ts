@@ -123,7 +123,9 @@ export const kernelClient = {
       subscriber_id: subscriberId,
     }),
 
-  getResourceBalances: () => getJSON<ResourceBalance[]>("/api/resources/balances"),
+  // /api/resources/balances returns {kind: ResourceBalance | null} per ADR-066 D2.
+  getResourceBalances: () =>
+    getJSON<Record<string, ResourceBalance | null>>("/api/resources/balances"),
   getResourceQueue: () => getJSON<QueuedRequest[]>("/api/resources/queue"),
 };
 

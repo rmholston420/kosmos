@@ -2312,3 +2312,15 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** ADR-067 stays as-is (kernel is the same-origin host; this is the runtime consequence of "UI targets `/api/*` directly").
 - **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run against running kernel.
+
+## 2026-08-01 05:33 EDT — Stage 1 · GUI shell fixup #5 — align resource-balances test/client with dict shape; fix agent-trace race
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · test alignment.
+- **What changed:**
+  - `ui/tests/06-resources-and-slo.spec.ts` — `/api/resources/balances` returns a dict `{kind: balance|null}` per ADR-066 D2. Test was calling `balances.map(...)`. Rewrote to `Object.keys(balances)` so it validates all six ResourceKinds keys are present regardless of storage state.
+  - `ui/lib/kernel-client.ts` — corrected `getResourceBalances` return type from `ResourceBalance[]` to `Record<string, ResourceBalance | null>` to match the endpoint contract. No UI consumers exist yet, so this is a pure typing fix.
+  - `ui/tests/04-agent-trace.spec.ts` — race with the on-mount fetch. Added an explicit wait for `agent-trace-list` OR `agent-trace-empty` before branching on `list.count()`, so the assertion no longer fires while the fetch is still in flight.
+- **Files touched:** `ui/tests/06-resources-and-slo.spec.ts`, `ui/tests/04-agent-trace.spec.ts`, `ui/lib/kernel-client.ts`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run.

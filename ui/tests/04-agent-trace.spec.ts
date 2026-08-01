@@ -8,7 +8,13 @@ test.describe("Agent Trace panel", () => {
     const panel = page.getByTestId("panel-AGENT_TRACE");
     await expect(panel).toBeVisible();
 
+    // The panel fetches /api/phrouros/anomalies on mount; wait for either
+    // the populated list or the empty-state paragraph to appear before
+    // branching, so the assertion is not racing the fetch.
     const list = page.getByTestId("agent-trace-list");
+    const empty = page.getByTestId("agent-trace-empty");
+    await expect(list.or(empty)).toBeVisible();
+
     if (await list.count()) {
       const rows = page.locator('[data-testid^="anomaly-kind-"]');
       const n = await rows.count();
@@ -19,7 +25,7 @@ test.describe("Agent Trace panel", () => {
         );
       }
     } else {
-      await expect(page.getByTestId("agent-trace-empty")).toBeVisible();
+      await expect(empty).toBeVisible();
     }
   });
 });

@@ -8,8 +8,10 @@ test.describe("Resources panel + Notification SLO drawer (unowned ports)", () =>
   test("resource balances cover all six ResourceKinds", async ({ request, baseURL }) => {
     const res = await request.get(`${baseURL}/api/resources/balances`);
     if (res.ok()) {
-      const balances = await res.json();
-      const kinds = balances.map((b: { kind: string }) => b.kind);
+      // /api/resources/balances returns a dict {kind: balance_obj_or_null}
+      // covering every ResourceKind (ADR-066 D2). See kernel/app.py.
+      const balances = (await res.json()) as Record<string, unknown>;
+      const kinds = Object.keys(balances);
       for (const k of ["time", "money", "attention", "compute", "knowledge", "energy"]) {
         expect(kinds).toContain(k);
       }

@@ -559,3 +559,21 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Mounted `ui/out/` on the FastAPI kernel at root path `/` via `StaticFiles(html=True)`, so UI and API share origin `http://127.0.0.1:8000`. Removed the Playwright `webServer` block; `baseURL` now points at the kernel port. Build order: `next build` → uvicorn (already running) picks up `ui/out/` via idempotent module-scope mount check → `playwright test`.
 - **Files changed:** `ui/next.config.js`, `ui/playwright.config.ts`, `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/components/Sidebar.tsx`, `kernel/app.py`.
 - **Related BUILD_LOG entry:** 2026-08-01 05:16 EDT.
+
+## 2026-08-01 05:33 EDT — Playwright test asserts wrong shape for `/api/resources/balances`
+
+- **Symptom:** `TypeError: balances.map is not a function at tests/06-resources-and-slo.spec.ts:12:30`.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell tests.
+- **Root cause:** Endpoint returns a dict keyed by ResourceKind (per ADR-066 D2, kernel/app.py:676-695). Test assumed a list.
+- **Fix applied:** Test now reads keys via `Object.keys(balances)` and asserts each ResourceKind name is present. Client `getResourceBalances` type also corrected to `Record<string, ResourceBalance | null>`.
+- **Files changed:** `ui/tests/06-resources-and-slo.spec.ts`, `ui/lib/kernel-client.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:33 EDT.
+
+## 2026-08-01 05:33 EDT — Agent Trace panel test races the on-mount fetch
+
+- **Symptom:** `expect(locator).toBeVisible() failed. Locator: getByTestId('agent-trace-empty'). Timeout: 5000ms. Error: element(s) not found.`
+- **Affected stage / plugin / port:** Stage 1 · GUI shell tests.
+- **Root cause:** Panel renders `agent-trace-list` OR `agent-trace-empty` after `kernelClient.listAnomalies()` resolves. Test branched on `list.count()` before either testid was in the DOM, so the else-branch assertion timed out.
+- **Fix applied:** Added `await expect(list.or(empty)).toBeVisible()` before the branch, gating the entire assertion on the fetch completing.
+- **Files changed:** `ui/tests/04-agent-trace.spec.ts`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:33 EDT.
