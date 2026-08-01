@@ -656,6 +656,14 @@ async def _kill_switch_middleware(request: Request, call_next):
         return await call_next(request)
 
     path = request.url.path
+
+    # Static UI + non-API paths are ALWAYS served — the suspended banner
+    # UI must remain reachable so the operator can resume from the browser.
+    # We only gate mutating `/api/**` traffic (with kernel introspection
+    # + WS handshakes explicitly allow-listed below).
+    if not path.startswith("/api/"):
+        return await call_next(request)
+
     if path in _KILL_SWITCH_ALWAYS_ALLOW_PATHS:
         return await call_next(request)
     if any(path.startswith(p) for p in _KILL_SWITCH_ALLOW_PREFIXES):

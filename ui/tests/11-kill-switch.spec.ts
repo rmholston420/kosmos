@@ -5,6 +5,11 @@ import { test, expect } from "@playwright/test";
 // These tests mutate real kernel state via `/api/kernel/kill` and
 // `/api/kernel/resume`; each test restores the kernel to running state at
 // the end so subsequent tests aren't blocked by lingering suspension.
+//
+// Runs serially (single-file worker) because parallel workers would race
+// on the global suspension bit.
+
+test.describe.configure({ mode: "serial" });
 
 async function ensureRunning(request: import("@playwright/test").APIRequestContext) {
   await request.post("/api/kernel/resume", { data: {} });
@@ -97,6 +102,10 @@ test.describe("Kill-switch — soft suspend/resume", () => {
 });
 
 test.describe("Cmd+K palette — plugin actions", () => {
+  test.beforeEach(async ({ request }) => {
+    await ensureRunning(request);
+  });
+
   test("plugin routes appear in Plugins group when kernel schema has any", async ({
     page,
     request,

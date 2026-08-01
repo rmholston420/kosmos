@@ -194,8 +194,20 @@ def test_d4_non_kernel_get_returns_503_while_suspended() -> None:
 
 
 def test_d4_non_api_paths_untouched_by_gate() -> None:
-    """Routes outside /api/** (e.g. UI static files) are not gated."""
+    """Routes outside /api/** (e.g. UI static files) must stay reachable.
+
+    The suspended banner UI must remain visible so the operator can resume
+    from the browser. Only `/api/**` mutations are gated.
+    """
     client.post("/api/kernel/kill")
-    # /health is /api-adjacent but explicitly allow-listed above; test a raw path.
-    r = client.get("/health")
-    assert r.status_code == 200
+    # /health explicit allow-list.
+    assert client.get("/health").status_code == 200
+    # Root path serves the static UI (Next.js export) in production. Even
+    # if the mount is not configured in the test client, the middleware
+    # must not return the kill-switch 503 for it — anything other than
+    # "kernel suspended" detail is acceptable (200, 404, etc.).
+    r = client.get("/")
+    if r.status_code == 503:
+        assert r.json().get("detail") != "kernel suspended", (
+            "middleware must not gate non-/api paths"
+        )
