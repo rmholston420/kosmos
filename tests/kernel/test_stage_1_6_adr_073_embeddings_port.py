@@ -28,7 +28,8 @@ from ports.embeddings import EmbeddingsPort
 
 
 def test_kernel_version_bumped_to_6_10_0() -> None:
-    assert app.version == "6.10.0"
+    # ADR-073 D5 bumped to 6.10.0; ADR-074 -> 6.11.0; ADR-075 D5 -> 6.12.0.
+    assert app.version == "6.12.0"
 
 
 def test_boot_registry_has_embeddings_field() -> None:

@@ -24,7 +24,9 @@ import GraphDimensionToggle from "@/components/graph/GraphDimensionToggle";
 import {
   kernelClient,
   type GraphEdge,
+  type GraphEdgePage,
   type GraphNode,
+  type GraphNodePage,
 } from "@/lib/kernel-client";
 
 // SSR-off wrapper — DOM-only libs cannot run during Next build/export.
@@ -95,23 +97,29 @@ export default function GnosisGraphPage() {
 
       // ADR-075 D4: page both node + edge streams in lock-step until
       // either both cursors are null or the MAX_PAGES ceiling is hit.
+      const emptyNodePage: GraphNodePage = { nodes: [], next_cursor: null };
+      const emptyEdgePage: GraphEdgePage = { edges: [], next_cursor: null };
       for (let page = 0; page < MAX_PAGES; page += 1) {
         if (cancelled) return;
-        const [nodePage, edgePage] = await Promise.all([
+        const nodesPromise: Promise<GraphNodePage> =
           nodeCursor === null
-            ? Promise.resolve({ nodes: [], next_cursor: null })
+            ? Promise.resolve(emptyNodePage)
             : kernelClient.fetchGraphNodes({
                 corpus: corpus || undefined,
                 limit: NODE_LIMIT,
                 cursor: nodeCursor,
-              }),
+              });
+        const edgesPromise: Promise<GraphEdgePage> =
           edgeCursor === null
-            ? Promise.resolve({ edges: [], next_cursor: null })
+            ? Promise.resolve(emptyEdgePage)
             : kernelClient.fetchGraphEdges({
                 corpus: corpus || undefined,
                 limit: EDGE_LIMIT,
                 cursor: edgeCursor,
-              }),
+              });
+        const [nodePage, edgePage] = await Promise.all([
+          nodesPromise,
+          edgesPromise,
         ]);
         nodes.push(
           ...nodePage.nodes.map((n) => ({
