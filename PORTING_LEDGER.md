@@ -386,15 +386,15 @@ into Kosmos beyond the existing memory adapter usage.
 
 ## Stage 3.14b · Tektos Executor (ADR-080)
 
-#### loop_guard — PLANNED (Forge-OH donor)
+#### loop_guard — VENDORED (Forge-OH donor)
 - **Source:** [rmholston420/Forge-OH `bff/services/loop_guard.py`](https://github.com/rmholston420/Forge-OH/blob/9e7209d/bff/services/loop_guard.py)
 - **Commit / Version:** `9e7209d` (Forge-OH `main`, LICENSE added 2026-08-01)
 - **License:** MIT (SPDX: MIT)
-- **Kosmos location:** `plugins/tektos/executor/loop_guard.py` (planned — lands with Stage 3.14b step 2)
+- **Kosmos location:** `plugins/tektos/executor/loop_guard.py`
 - **Port(s):** none (executor-internal helper)
-- **Modifications:** planned — renamed to executor-namespaced, keep the `ActionFingerprint`/`LoopGuard` API (window+threshold sliding-window detector), drop nothing. Consumed by `TektosExecutorLoop.run_plan` between attempts to detect the LLM emitting the same failing diff shape twice; when `is_looping` fires, the loop escalates via `suggest_escalation` and skips attempt 2.
+- **Modifications:** module-level docstring rewrite documenting Kosmos usage + provenance block; `Deque[str]` typing modernized to `deque[str]`; `ActionFingerprint` hardened with `frozen=True, slots=True` (upstream was a plain mutable `@dataclass` — upstream never mutates instances so this is a strengthening, not a semantic change, but callers that mutated fields would now raise `FrozenInstanceError`). `LoopGuard` public API (`fingerprint`, `is_looping`, `suggest_escalation`, `reset`) and window+threshold semantics unchanged. Consumed by `TektosExecutorLoop.run_plan` between attempts to detect the LLM emitting the same failing diff shape twice; when `is_looping` fires, the loop escalates via `suggest_escalation` and skips attempt 2. Under ADR-080's `TEKTOS_EXECUTOR_MAX_ATTEMPTS = 2` retry budget the default `threshold=3` never fires within a single plan — the vendored code is kept intact so 3.15+ can widen retries without a re-port.
 - **ADR:** ADR-080
-- **Logged:** 2026-08-01 17:43 EDT
+- **Logged:** 2026-08-01 17:43 EDT (PLANNED); 2026-08-01 17:54 EDT (VENDORED, kosmos commit forthcoming this session)
 
 ## Historical entries
 

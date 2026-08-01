@@ -3549,3 +3549,15 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none. Consumes `TEKTOS_EXECUTOR_VRAM_FLOOR_MIB` + `TEKTOS_EXECUTOR_RAM_FLOOR_MIB` from `plugins.tektos.executor.policy`.
 - **PORTING_LEDGER / ADR updated:** —. ADR-080 already covers the guard shape.
 - **Stop-condition status:** 39/39 executor tests green (21 pre-existing + 18 new). ADR-007 AST guard now covers 4 source files (was 3). Step 2b next: `loop_guard.py` (Forge-OH vendor — flip PORTING_LEDGER entry PLANNED → VENDORED when it lands). Then 2c `patcher.py`, 2d `loop.py`, 2e flip the /execute and /diff stubs to 200.
+
+## 2026-08-01 17:54 EDT — Stage 3.14b step 2b: vendor Forge-OH loop_guard.py
+
+- **Stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` · no port (executor-internal helper)
+- **What changed:** Vendored Forge-OH `bff/services/loop_guard.py`@`9e7209d` (MIT) into `plugins/tektos/executor/loop_guard.py`. Public API preserved: `ActionFingerprint` (three-tuple: operation_class, target, approach), `LoopGuard(window=5, threshold=3)`, `fingerprint`, `is_looping` (append-first-then-count semantics — triggers on the threshold-th occurrence, not threshold+1), `suggest_escalation` (syntax→structural→rewrite→delegate_to_human), `reset`. Modifications: module docstring rewritten with Kosmos usage + provenance block; `Deque[str]` typing modernized to `deque[str]`; `ActionFingerprint` hardened with `frozen=True, slots=True` (upstream was mutable, but upstream never mutates instances so this is a strengthening rather than a semantic change). 14 tests exercise fingerprint determinism + colon-join format, threshold-th trigger, distinct-fingerprint independence, window eviction under `window=2, threshold=2`, `threshold=1` immediate-trigger, `reset` behavior, parametrized escalation map + fallback, and `frozen=True` enforcement. Under ADR-080's `MAX_ATTEMPTS = 2` retry budget the default `threshold=3` never fires within a single plan — vendored code kept intact so 3.15+ can widen retries without a re-port.
+- **Files touched:**
+  - `plugins/tektos/executor/loop_guard.py` (new, 119 lines including provenance block)
+  - `plugins/tektos/executor/tests/test_loop_guard.py` (new, 124 lines, 14 tests)
+  - `PORTING_LEDGER.md` (Stage 3.14b `loop_guard` entry flipped PLANNED → VENDORED, modifications note updated)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER Stage 3.14b `loop_guard` PLANNED→VENDORED. ADR-080 unchanged.
+- **Stop-condition status:** 54/54 executor tests green (39 pre-2b + 14 loop_guard + 1 extra ADR-007 AST slot for `loop_guard.py`). Step 2c next: `patcher.py` (`git apply --check` + `git apply` + two-identity commit via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` env). Then 2d `loop.py`. Then 2e flip 501 stubs to 200.
