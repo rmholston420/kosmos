@@ -2913,3 +2913,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** `EmbeddingsPort` (new), `LLMPort.embed()` (deprecated), Graphiti wiring (migrated).
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER Stage 1.6 Phase 0 section; ADR-073 already Ratified v25 in PR #22.
 - **Stop-condition status:** in-progress — sandbox pytest imports + agent-side test runs green (25 pass, 1 skipped live-tier). Colossus verify + PR review outstanding before merge.
+
+## 2026-08-01 10:52 EDT — ADR-074 authored (Proposed): Stage 1.6 Phase 1 scope
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1 · MemoryPort (semantic) + Zetesis (embedder swap) + UI (graph viz)
+- **What changed:**
+  - Authored `docs/adrs/ADR-074-semantic-memory-and-graph-visualization.md` (Proposed).
+  - Locks five load-bearing decisions (D1–D5): MemoryPort.search_semantic + MemoryHit.score; registry.vector boot; SemanticMemoryPath adapter helper; Zetesis embedder swap to EmbeddingsPort; Rigpa-LMS DimensionalForceGraph port + react-force-graph-2d/3d + three vendored via npm.
+  - Rejects: semantic memory as separate plugin; hand-built d3-force+Three.js; deferring Zetesis embed swap; tightening min_score default.
+- **Files touched:**
+  - `docs/adrs/ADR-074-semantic-memory-and-graph-visualization.md` (new)
+  - `docs/adrs/README.md` (ADR-074 row)
+- **Ports / adapters affected:** MemoryPort (planned extension); VectorPort (planned kernel wiring); EmbeddingsPort (Zetesis consumer added); new UI viz surface (no port).
+- **PORTING_LEDGER / ADR updated:** ADR-074 authored; PORTING_LEDGER entries deferred to code PR.
+- **Stop-condition status:** in-progress — awaiting ratification + code PR.
+
+## 2026-08-01 10:52 EDT — ADR-074 ratified (Proposed → Ratified v25)
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 1
+- **What changed:** ADR-074 body + `docs/adrs/README.md` row flipped Proposed → Ratified v25.
+- **Files touched:** `docs/adrs/ADR-074-semantic-memory-and-graph-visualization.md`, `docs/adrs/README.md`
+- **Ports / adapters affected:** none (docs-only).
+- **PORTING_LEDGER / ADR updated:** ADR-074 status.
+- **Stop-condition status:** met — code PR next.
