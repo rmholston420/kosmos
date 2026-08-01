@@ -3038,3 +3038,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Round 2 fixes applied on branch before merge:** `03d4178` (bumped version assertion 6.9.0→6.11.0 in 13-* spec), `ea80f58` (React 19: `JSX.Element`→`ReactElement`), `55efe35` (trailing-slash assertion in 20-* spec)
 - **Verify:** pytest 25 pass / 6 skip live-tier · Playwright 69 pass / 6 skip / 0 fail on Colossus
 - **Stop-condition status:** met — Stage 1.6 Phase 1 DoD complete
+
+## 2026-08-01 11:32 EDT — Hotfix: cap gnosis graph limits to backend ceiling (100)
+
+- **Stage / plugin / port:** Stage 1.6 Phase 1 · Gnosis graph UI · UI-only
+- **What changed:** `ui/app/gnosis/graph/page.tsx` — `NODE_LIMIT` 250→100, `EDGE_LIMIT` 500→100. Backend `_graph_validate_limit` in `kernel/app.py` rejects any value >100 with HTTP 400; Colossus Playwright logs showed both requests returning 400 (tests still passed because the page renders an empty state on error). Larger graphs deferred to Phase 2 (paginate via `next_cursor`).
+- **Files touched:** ui/app/gnosis/graph/page.tsx
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — hotfix only
