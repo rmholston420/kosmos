@@ -2021,3 +2021,18 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** TraceFeedPort now bound to `InMemoryTraceFeedAdapter` at kernel level; ResourcePort seeded via `replenish()`; no new adapter files.
 - **PORTING_LEDGER / ADR updated:** ADR-059 (new); PORTING_LEDGER unchanged (all adapters already listed).
 - **Stop-condition status:** in-progress — DoD conditions asserted by the new test tier; Colossus smoke pending post-pull. `/api/phrouros/anomalies` transitions from 503 → 200; `/api/resources/balances` transitions from null-fields → real balances.
+
+## 2026-08-01 01:56 EDT — Stage 6.5.1+6.5.2 · fixup (asyncio.run in test; knowledge seed 0→1)
+
+- **Stage / plugin / port:** Stage 6.5.1+6.5.2 fixup · Kernel tests + ResourcePort seed
+- **What changed:**
+  - `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py::test_phrouros_loop_anomaly_fires` was using `anyio.from_thread.run()` which requires an AnyIO worker-thread token TestClient does not provide. Rewrote the anomaly-firing sequence as a nested async function driven by `asyncio.run()` — `InMemoryTraceFeedAdapter` and `PhrourosEngine` hold no loop-affine primitives, so a fresh loop drives `publish→_on_event→_escalate` cleanly.
+  - `SqliteResourceAdapter.replenish(kind, amount)` raises `ValueError` when `amount <= 0`. Original seed had `knowledge=0` which silently failed and left `/api/resources/balances["knowledge"] == None`. Changed to `Decimal("1")` — nominal starting unit, accrues from Zetesis / research output. ADR-059 §D2 table + `docs/adrs/README.md` row + `KERNEL_RESOURCE_SEED` module constant all updated in lockstep.
+- **Files touched:**
+  - `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py` (import `asyncio`; `test_phrouros_loop_anomaly_fires` uses `asyncio.run` instead of `anyio.from_thread.run`)
+  - `kernel/app.py` (`KERNEL_RESOURCE_SEED["knowledge"] = Decimal("1")`)
+  - `docs/adrs/ADR-059-stage-6-5-1-2-phrouros-wire-and-resource-seed.md` (D2 seed table row updated)
+  - `docs/adrs/README.md` (ADR-059 row updated)
+- **Ports / adapters affected:** none — port surfaces unchanged.
+- **PORTING_LEDGER / ADR updated:** ADR-059 amended in place (row still Ratified; table value change only).
+- **Stop-condition status:** in-progress — Colossus reruns pending; expect 5 / 5 green on PR #3.

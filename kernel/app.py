@@ -81,7 +81,7 @@ KERNEL_RESOURCE_SEED: dict[str, Decimal] = {
     "money": Decimal("100.00"),     # $100 discretionary budget
     "attention": Decimal("100"),    # normalized 0-100 pool
     "compute": Decimal("100"),      # normalized capacity pool
-    "knowledge": Decimal("0"),      # accrues from Zetesis / research output
+    "knowledge": Decimal("1"),      # nominal starting unit; accrues via Zetesis / research (replenish() rejects 0)
     "energy": Decimal("100"),       # normalized human-energy pool
 }
 

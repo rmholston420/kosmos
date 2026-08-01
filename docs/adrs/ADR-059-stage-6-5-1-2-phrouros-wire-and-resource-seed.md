@@ -55,7 +55,7 @@ Immediately after `SqliteResourceAdapter` boots, the lifespan calls
 | `money`     | 100.00     | $100 discretionary daily budget            |
 | `attention` | 100        | Normalized 0-100 pool                      |
 | `compute`   | 100        | Normalized capacity pool                   |
-| `knowledge` | 0          | Accrues from Zetesis / research output     |
+| `knowledge` | 1          | Nominal start; `replenish()` rejects amount ≤ 0 |
 | `energy`    | 100        | Normalized human-energy pool               |
 
 These are **presentation defaults**, not commitments about real physical

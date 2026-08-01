@@ -14,6 +14,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -44,27 +45,35 @@ def test_phrouros_anomalies_empty_on_boot(client) -> None:
 
 
 def test_phrouros_loop_anomaly_fires(client) -> None:
-    """Publish 5 identical events into the trace feed → LoopDetector fires."""
+    """Publish 6 identical events into the trace feed → LoopDetector fires.
+
+    ``InMemoryTraceFeedAdapter`` and ``PhrourosEngine`` hold no
+    loop-affine primitives (plain dicts + awaited callbacks), so a
+    fresh ``asyncio.run(...)`` from the test thread drives
+    ``publish→_on_event→_escalate`` cleanly. The escalation writes into
+    ``engine._records`` which the ``/api/phrouros/anomalies`` endpoint
+    then reads from a subsequent TestClient GET.
+    """
     assert registry.trace_feed is not None
     assert registry.phrouros is not None
 
     trace_id = "test-trace-loop-6-5-1"
     now = datetime.now(timezone.utc)
-    for i in range(6):
-        ev = TraceEvent(
-            event_id=f"evt-{i}",
-            occurred_at=now,
-            plugin="tektos",
-            tool_name="write_file",
-            trace_id=trace_id,
-            span_id=f"span-{i}",
-            attributes={},
-        )
-        # publish is async but TestClient runs the app in a background
-        # thread with its own loop; use the engine's loop via anyio.
-        import anyio
 
-        anyio.from_thread.run(registry.trace_feed.publish, ev)
+    async def _drive() -> None:
+        for i in range(6):
+            ev = TraceEvent(
+                event_id=f"evt-{i}",
+                occurred_at=now,
+                plugin="tektos",
+                tool_name="write_file",
+                trace_id=trace_id,
+                span_id=f"span-{i}",
+                attributes={},
+            )
+            await registry.trace_feed.publish(ev)
+
+    asyncio.run(_drive())
 
     r = client.get("/api/phrouros/anomalies")
     assert r.status_code == 200, r.text
