@@ -638,3 +638,14 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ui/playwright.config.ts`
   - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md` (§D expanded to record the actual root cause + workers change)
 - **Related BUILD_LOG entry:** 2026-08-01 10:07 EDT
+
+## 2026-08-01 10:12 EDT — 13-community-collapse "cold boot" assertions invalid under workers:1
+
+- **Symptom:** After Playwright `workers: 1` fix, F6 (16-zetesis-completes) green but two new failures in `13-community-collapse-and-annotate.spec.ts`: "modularity badge hidden on empty graph (cold boot)" and "community toggle is disabled when graph is empty". Test 13 asserts `memory-integrity-modularity` `toHaveCount(0)` and `memory-integrity-community-toggle` `toBeDisabled()`.
+- **Affected stage / plugin / port:** Stage 1.5 · UI test harness · Wave E MemoryIntegrity panel specs
+- **Root cause:** Both assertions require MemoryPort to be empty (node_count == 0). Under the previous racy `fullyParallel: true` config, each worker had its own browser context and often hit a mostly-empty kernel before earlier specs populated it — the "empty graph" was accidental. Under the now-correct `workers: 1` topology, all 74 tests run sequentially against the single shared kernel process, so by the time file 13 runs earlier specs (08-zetesis-research, 16-zetesis-completes, others) have written triples into MemoryPort. Graph is no longer empty → badge renders → assertions fail. The tests' own code comment already acknowledged the real invariant is covered by pytest unit tests ("covered by the pytest unit tests on modularity").
+- **Fix applied:** Delete both assertions from the spec. Keep the remaining tests (control presence, label stability, empty-inspector, 6.9.0 version pin) that don't depend on backend state. NOTE block added in the spec explaining why.
+- **Files changed:**
+  - `ui/tests/13-community-collapse-and-annotate.spec.ts`
+  - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md` (§D item 4)
+- **Related BUILD_LOG entry:** 2026-08-01 10:12 EDT

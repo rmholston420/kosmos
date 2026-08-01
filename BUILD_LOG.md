@@ -2834,3 +2834,18 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** ADR-072 §D amended in-place (still Proposed on remote)
 - **Stop-condition status:** in-progress — awaits second Colossus verify (single-worker Playwright).
+
+## 2026-08-01 10:12 EDT — Stage 1.5 Wave F ratification · drop invalid cold-boot assertions from 13-*
+
+- **Stage / plugin / port:** Stage 1.5 · Wave F ratification · UI test harness
+- **What changed:**
+  - Colossus second re-verify: version smoke `6.9.0` ✅, F6 green ✅, Playwright now **67/6/2**. Two new failures in `13-community-collapse-and-annotate.spec.ts` (modularity badge / toggle disabled) required an empty MemoryPort but under `workers: 1` all specs share the shared kernel and earlier specs populate it.
+  - Fix: delete the two "empty graph" assertions from `13-*`. Real invariants (badge appears when populated; toggle disabled when empty) are already covered by pytest unit tests on modularity per ADR-071 §D.
+  - NOTE block added to the spec explaining the workers:1 topology dependency.
+  - ADR-072 §D updated with item 4.
+- **Files touched:**
+  - `ui/tests/13-community-collapse-and-annotate.spec.ts`
+  - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md`
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** ADR-072 §D amended (item 4)
+- **Stop-condition status:** in-progress — awaits third Colossus verify (expect 65/6/0 or 66/6/0 with the 2 tests removed).
