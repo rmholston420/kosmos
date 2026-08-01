@@ -1695,9 +1695,15 @@ async def gnosis_graph_nodes(
     limit: int = 20,
     cursor: str | None = None,
 ) -> dict[str, Any]:
-    """Paginated node list. See ADR-070 D1."""
+    """Paginated node list. See ADR-070 D1.
+
+    When the MemoryPort adapter is not yet booted, degrade gracefully to an
+    empty page. This matches the AgentTrace/Governance pattern: a panel that
+    always renders on the shell must not 5xx on cold-boot before its
+    dependencies are up, or the browser logs a console error.
+    """
     if registry.memory is None:
-        raise HTTPException(503, detail=registry.errors.get("memory"))
+        return {"nodes": [], "next_cursor": None}
     _graph_validate_limit(limit)
     offset = _graph_decode_cursor(cursor)
     facts = await _graph_fetch_memory_facts(corpus, cap=500)
@@ -1719,9 +1725,12 @@ async def gnosis_graph_edges(
 ) -> dict[str, Any]:
     """Paginated edge list, optionally filtered to edges incident on a
     specific ``node_id``. See ADR-070 D1.
+
+    Degrades to an empty page when MemoryPort is not booted (see
+    ``gnosis_graph_nodes``).
     """
     if registry.memory is None:
-        raise HTTPException(503, detail=registry.errors.get("memory"))
+        return {"edges": [], "next_cursor": None}
     _graph_validate_limit(limit)
     if node_id is not None and not _GRAPH_ID_RE.match(node_id.split(":", 1)[-1]):
         raise HTTPException(400, detail="malformed 'node_id'")

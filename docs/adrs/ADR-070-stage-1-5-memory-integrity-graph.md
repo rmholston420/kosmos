@@ -60,6 +60,11 @@ Six locks:
 - `_BootRegistry` gains `zetesis_reports: deque` (default `deque(maxlen=100)`) and best-effort subscribe on Zetesis mount.
 - `WS_DEFAULT_EVENT_TYPES` unchanged (no new WS event types in Wave D).
 
+**D7. Cold-boot degradation on the two list endpoints returns an empty page (200), not 503.**
+- `/api/gnosis/graph/nodes` and `/api/gnosis/graph/edges` return `{nodes: [], next_cursor: null}` / `{edges: [], next_cursor: null}` when `registry.memory is None`.
+- `/api/gnosis/graph/node/{node_id}` remains 503 in that state — a specific lookup on an unavailable adapter is a genuine error, not an empty result.
+- Rationale: `MEMORY_INTEGRITY` is an always-mounted shell panel on `/` and `/memory`. A 503 during cold-boot before MemoryPort is up surfaces as a browser-level "Failed to load resource" console error and breaks the `00-empty-state` "no console errors on cold load" regression guard. Returning an empty page preserves zero-trust discipline (we do not fabricate rows; empty means empty) and matches the AgentTrace/Governance pattern.
+
 ## Rationale
 
 **Why not extend `/api/gnosis/query` instead of new routes?** `/api/gnosis/query` returns opaque hits ranked by relevance — its contract is retrieval, not graph traversal. Node/edge enumeration needs deterministic pagination by node identity, not by relevance score. Overloading `query` would break ADR-064's semantic clarity.

@@ -2548,3 +2548,24 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Zero new ports; consumes existing `MemoryPort.query_temporal` + reads `registry.zetesis_reports` deque populated best-effort by future event-bus subscriber (Wave D+ optional).
 - **PORTING_LEDGER / ADR updated:** ADR-070 authored (Proposed); PORTING_LEDGER gains cytoscape + react-cytoscapejs entries.
 - **Stop-condition status:** met pending Colossus green pytest + green Playwright.
+
+## 2026-08-01 07:35 EDT — Wave D fixup: TS types + testid + cold-boot degradation
+
+- **Stage / plugin / port:** Stage 1.5 · Wave D · `/api/gnosis/graph/*` + `MemoryIntegrityPanel`
+- **What changed:**
+  - Removed deprecated `@types/cytoscape` stub (cytoscape ships own types since 3.20).
+  - Import corrected: `Stylesheet` (retired) → `StylesheetStyle` (has `style:` field). `StylesheetCSS` uses `css:`.
+  - `MemoryIntegrityPanel` outer wrapper: `<div data-testid="memory-integrity-panel">` → `<article data-testid="panel-MEMORY_INTEGRITY" data-populated="true">`. Aligns with AgentTrace/Governance shell convention.
+  - Kernel list endpoints degrade to empty page (200) when `registry.memory is None` instead of 503. Node-detail lookup still 503. ADR-070 amended with D7 documenting the decision.
+  - Wave D pytest updated: `test_d1_nodes_memory_down_503` → `test_d1_nodes_memory_down_returns_empty_page`; asserts empty page on both list endpoints.
+  - Wave D Playwright spec updated to query `panel-MEMORY_INTEGRITY`.
+- **Files touched:**
+  - `ui/components/panels/MemoryIntegrityPanel.tsx`
+  - `ui/tests/12-memory-integrity-graph.spec.ts`
+  - `ui/package.json`, `ui/pnpm-lock.yaml`
+  - `kernel/app.py`
+  - `tests/kernel/test_stage_1_5_adr_070_gnosis_graph.py`
+  - `docs/adrs/ADR-070-stage-1-5-memory-integrity-graph.md`
+- **Ports / adapters affected:** MemoryPort read-only (contract unchanged; degradation now surfaces as empty page not 5xx)
+- **PORTING_LEDGER / ADR updated:** ADR-070 amended (D7 added)
+- **Stop-condition status:** in-progress; awaiting Colossus full-suite validation

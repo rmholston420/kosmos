@@ -10,7 +10,7 @@ test.describe("Memory Integrity — provenance graph panel", () => {
   });
 
   test("panel renders with title and corpus selector", async ({ page }) => {
-    await expect(page.getByTestId("memory-integrity-panel")).toBeVisible({
+    await expect(page.getByTestId("panel-MEMORY_INTEGRITY")).toBeVisible({
       timeout: 8000,
     });
     await expect(page.getByTestId("memory-integrity-title")).toContainText(
@@ -43,7 +43,7 @@ test.describe("Memory Integrity — provenance graph panel", () => {
   }) => {
     // Loading should clear within a reasonable window; then we must land
     // in exactly one of the three terminal states.
-    await expect(page.getByTestId("memory-integrity-panel")).toBeVisible();
+    await expect(page.getByTestId("panel-MEMORY_INTEGRITY")).toBeVisible();
     await expect(page.getByTestId("memory-integrity-loading")).toHaveCount(0, {
       timeout: 10000,
     });
@@ -67,7 +67,7 @@ test.describe("Memory Integrity — provenance graph panel", () => {
     });
     // No JS runtime error should have surfaced as an unhandled exception
     // banner (the panel handles fetch errors via its own error state).
-    await expect(page.getByTestId("memory-integrity-panel")).toBeVisible();
+    await expect(page.getByTestId("panel-MEMORY_INTEGRITY")).toBeVisible();
   });
 
   test("error state uses class name and never leaks a raw exception", async ({

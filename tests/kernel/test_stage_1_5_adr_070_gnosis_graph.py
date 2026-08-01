@@ -131,12 +131,22 @@ def test_d1_nodes_limit_above_bound_400() -> None:
     assert r.status_code == 400
 
 
-def test_d1_nodes_memory_down_503() -> None:
+def test_d1_nodes_memory_down_returns_empty_page() -> None:
+    """Cold-boot degradation: when MemoryPort is not up yet, the list
+    endpoints must return an empty page (200) rather than 5xx, or the
+    always-mounted MEMORY_INTEGRITY panel will surface console errors on the
+    shell's cold-load empty-state test.
+    """
     original = registry.memory
     registry.memory = None
     try:
         r = client.get("/api/gnosis/graph/nodes")
-        assert r.status_code == 503
+        assert r.status_code == 200
+        body = r.json()
+        assert body == {"nodes": [], "next_cursor": None}
+        r2 = client.get("/api/gnosis/graph/edges")
+        assert r2.status_code == 200
+        assert r2.json() == {"edges": [], "next_cursor": None}
     finally:
         registry.memory = original
 

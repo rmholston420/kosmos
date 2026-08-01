@@ -179,8 +179,9 @@ export default function MemoryIntegrityPanel({ panels }: { panels: Panel[] }) {
   const closeInspector = useCallback(() => setInspectorOpen(false), []);
 
   return (
-    <div
-      data-testid="memory-integrity-panel"
+    <article
+      data-testid="panel-MEMORY_INTEGRITY"
+      data-populated="true"
       data-panel-count={panels.length}
       style={{
         border: "1px solid var(--rgpa-border, #333)",
@@ -342,6 +343,6 @@ export default function MemoryIntegrityPanel({ panels }: { panels: Panel[] }) {
           )}
         </aside>
       )}
-    </div>
+    </article>
   );
 }
