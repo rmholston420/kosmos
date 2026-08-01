@@ -6,16 +6,16 @@ import { test, expect } from "@playwright/test";
 // `/api/kernel/resume`; each test restores the kernel to running state at
 // the end so subsequent tests aren't blocked by lingering suspension.
 //
-// Runs serially (single-file worker) because parallel workers would race
-// on the global suspension bit.
-
-test.describe.configure({ mode: "serial" });
-
 async function ensureRunning(request: import("@playwright/test").APIRequestContext) {
   await request.post("/api/kernel/resume", { data: {} });
 }
 
 test.describe("Kill-switch — soft suspend/resume", () => {
+  // Serialize only the tests that toggle global suspension state — keeps
+  // the cmdk plugin-actions describe (below) parallelizable and prevents
+  // one banner-render failure from cascading to skip the API tests.
+  test.describe.configure({ mode: "serial" });
+
   test.beforeEach(async ({ request }) => {
     await ensureRunning(request);
   });
