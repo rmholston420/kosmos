@@ -104,7 +104,9 @@ def _stub_memory():
 
 
 def test_d6_kernel_version_6_7_0() -> None:
-    assert app.version == "6.7.0"
+    # Wave D locked version >= 6.7.0; Wave E and later bump forward.
+    from packaging.version import Version
+    assert Version(app.version) >= Version("6.7.0")
 
 
 # ---------------------------------------------------------------------------

@@ -160,6 +160,16 @@ export const kernelClient = {
   },
   fetchGraphNode: (nodeId: string) =>
     getJSON<GraphNodeDetail>(`/api/gnosis/graph/node/${encodeURIComponent(nodeId)}`),
+
+  // ADR-071 Stage 1.5 Wave E — Louvain communities + annotation write.
+  fetchGraphCommunities: (opts?: { corpus?: string }) => {
+    const qs = new URLSearchParams();
+    if (opts?.corpus) qs.set("corpus", opts.corpus);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return getJSON<GraphCommunities>(`/api/gnosis/graph/communities${suffix}`);
+  },
+  annotateGraphNode: (body: GnosisAnnotationBody) =>
+    postJSON<GnosisAnnotationResult>("/api/gnosis/graph/annotate", body),
 };
 
 // --- ADR-070 D1: /api/gnosis/graph/* ---
@@ -193,6 +203,31 @@ export interface GraphNodeDetail {
   node: GraphNode;
   neighbor_count: number;
   neighbors: GraphNeighborSummary[];
+}
+
+// --- ADR-071 D1: /api/gnosis/graph/communities ---
+export interface GraphCommunities {
+  algorithm: "louvain";
+  communities: Record<string, number>;
+  modularity: number;
+  corpus: string | null;
+  computed_at: string;
+  node_count: number;
+  edge_count: number;
+  degraded: boolean;
+}
+
+// --- ADR-071 D2: /api/gnosis/graph/annotate ---
+export interface GnosisAnnotationBody {
+  node_id: string;
+  provenance: string;
+  confidence: number;
+  note: string;
+  reason: string;
+}
+export interface GnosisAnnotationResult {
+  memory_event_id: string;
+  written_at: string;
 }
 
 // --- ADR-068 D1: /api/ollama/status ---

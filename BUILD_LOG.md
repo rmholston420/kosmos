@@ -2583,3 +2583,26 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (ratification only)
 - **PORTING_LEDGER / ADR updated:** ADR-070 ratified
 - **Stop-condition status:** met — Wave D DoD closed (pytest 17/17, Wave D Playwright 5/5, full 43/6/0 GREEN on Colossus)
+
+## 2026-08-01 08:06 EDT — Wave E polish: communities endpoint + annotation write path + UI
+
+- **Stage / plugin / port:** Stage 1.5 · Wave E · `/api/gnosis/graph/{communities,annotate}` + `MemoryIntegrityPanel` community coloring + inspector annotate form
+- **What changed:**
+  - ADR-071 authored (Proposed) locking 7 decisions: server-side Louvain (`seed=42`), `write_event(predicate="annotation")` wrapper, event-bus subscriber for `zetesis.research.completed` with background drain task, payload-dict shape for Zetesis reports, community coloring toggle + modularity badge, inspector annotate form, kernel 6.7.0 → 6.8.0.
+  - Kernel: added `_compute_louvain_communities()` (networkx Louvain, deterministic), `GET /api/gnosis/graph/communities` (200-empty degrade), `_GnosisAnnotationBody` Pydantic model, `POST /api/gnosis/graph/annotate` (400 on ValueError, 409 on adapter failure/AMG-block, 503 on memory-None). `_BootRegistry` gains `zetesis_report_queue` + `_zetesis_drain_task`; lifespan subscribes/unsubscribes, drain task cancelled on shutdown.
+  - Client: `kernelClient.fetchGraphCommunities({corpus?})`, `kernelClient.annotateGraphNode(body)`, three new interfaces.
+  - Panel: golden-ratio-hue community coloring (`hsl(cid * 137.508 % 360, 60%, 50%)`), toggle (disabled when empty), modularity badge (`Q = <n>`), annotate form (note/provenance/confidence/reason; hidden on `zetesis_report` nodes; toast on success; inline error on 4xx/5xx).
+  - Version-pin tests in Wave C+D relaxed from `==` to `>=` via `packaging.version.Version`.
+- **Files touched:**
+  - `docs/adrs/ADR-071-stage-1-5-wave-e-polish.md` (new)
+  - `docs/adrs/README.md` (index row appended)
+  - `kernel/app.py` (version 6.8.0; Pydantic import; boot registry; lifespan subscriber+drain; communities helper+route; annotate model+route)
+  - `ui/lib/kernel-client.ts` (2 methods + 3 interfaces)
+  - `ui/components/panels/MemoryIntegrityPanel.tsx` (community coloring, toggle, modularity badge, annotate form + submit logic)
+  - `tests/kernel/test_stage_1_5_adr_071_wave_e.py` (new, 23 tests)
+  - `tests/kernel/test_stage_1_5_adr_069_kill_switch.py` (version pin relaxed)
+  - `tests/kernel/test_stage_1_5_adr_070_gnosis_graph.py` (version pin relaxed)
+  - `ui/tests/13-community-collapse-and-annotate.spec.ts` (new, 6 tests)
+- **Ports / adapters affected:** MemoryPort write path (via `write_event`, zero-trust guard exercised); EventBusPort (kernel subscribes as consumer)
+- **PORTING_LEDGER / ADR updated:** ADR-071 authored (Proposed); no new vendor ports
+- **Stop-condition status:** local Wave E pytest 23/23 GREEN + Wave C/D version-pin tests 2/2 GREEN. Awaiting Colossus full-suite (target ≥48/6/0).

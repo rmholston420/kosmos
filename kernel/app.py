@@ -76,6 +76,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Boot helpers
@@ -131,6 +132,15 @@ class _BootRegistry:
         # Handle to the Zetesis plugin itself, when mounted. Kept as ``Any``
         # to preserve ADR-007 (no cross-plugin type import in the kernel).
         self.zetesis_plugin: Any = None
+        # Stage 1.5 Wave E (ADR-071): Event-bus subscriber wiring for
+        # ``zetesis.research.completed``. ``_zetesis_report_queue`` holds
+        # the pull-model queue returned by ``EventBusPort.subscribe``;
+        # ``_zetesis_drain_task`` is the background asyncio task that
+        # forwards drained envelopes into ``self.zetesis_reports``. Both
+        # remain ``None`` when subscription failed (best-effort per
+        # ADR-058 pattern) and are cleaned up on lifespan shutdown.
+        self.zetesis_report_queue: Any = None
+        self._zetesis_drain_task: Any = None
 
 
 registry = _BootRegistry()
@@ -481,8 +491,43 @@ async def lifespan(app: FastAPI):
             )
             await plugin.start()
             registry.zetesis = plugin
+            registry.zetesis_plugin = plugin
         except Exception as exc:  # noqa: BLE001
             registry.errors["zetesis"] = f"{type(exc).__name__}: {exc}"
+
+        # Stage 1.5 Wave E (ADR-071 D3): subscribe to
+        # ``zetesis.research.completed`` on the event bus and spawn a
+        # background task that appends drained payloads into
+        # ``registry.zetesis_reports``. Best-effort per ADR-058: any
+        # failure lands in ``registry.errors['zetesis_subscriber']`` and
+        # keeps the kernel 200 elsewhere. The task is cancelled on
+        # lifespan shutdown below.
+        if registry.zetesis is not None and registry.event_bus is not None:
+            try:
+                import asyncio as _asyncio_wave_e
+
+                q = registry.event_bus.subscribe(
+                    "zetesis.research.completed", maxsize=100
+                )
+                registry.zetesis_report_queue = q
+
+                async def _drain_zetesis_reports() -> None:
+                    while True:
+                        env = await q.get()
+                        # Store the payload dict (ADR-071 D4). The event
+                        # payload is the authoritative wire format; we do
+                        # not reconstruct a ``ResearchReport``.
+                        payload = getattr(env, "payload", None)
+                        if isinstance(payload, dict):
+                            registry.zetesis_reports.append(payload)
+
+                registry._zetesis_drain_task = _asyncio_wave_e.create_task(
+                    _drain_zetesis_reports()
+                )
+            except Exception as exc:  # noqa: BLE001
+                registry.errors["zetesis_subscriber"] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
 
     # --- Tektos plugin mount + agent singleton (ADR-063) ----------------------
     # Depends on frontend_contract (descriptor registration), llm, memory.
@@ -602,6 +647,33 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             pass
 
+    # Stage 1.5 Wave E (ADR-071): cancel the zetesis drain task and
+    # unsubscribe before stopping the plugin so no queue.put() happens
+    # after we've torn down the ring buffer.
+    if registry._zetesis_drain_task is not None:
+        try:
+            registry._zetesis_drain_task.cancel()
+            try:
+                await registry._zetesis_drain_task
+            except BaseException:  # noqa: BLE001,S110
+                # asyncio.CancelledError inherits from BaseException on
+                # Python 3.8+. Swallow all shutdown-path exceptions
+                # (including cancellation) — this is best-effort teardown.
+                pass
+        except Exception:  # noqa: BLE001
+            pass
+    if (
+        registry.event_bus is not None
+        and registry.zetesis_report_queue is not None
+    ):
+        try:
+            registry.event_bus.unsubscribe(
+                "zetesis.research.completed",
+                registry.zetesis_report_queue,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     if registry.zetesis is not None:
         try:
             await registry.zetesis.stop()
@@ -631,7 +703,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.7.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.8.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -1783,6 +1855,165 @@ async def gnosis_graph_node(node_id: str) -> dict[str, Any]:
         "node": match,
         "neighbor_count": len(neighbors),
         "neighbors": neighbor_summaries,
+    }
+
+
+# ---------------------------------------------------------------------------
+# ADR-071 Stage 1.5 Wave E — Louvain community assignment + annotation write.
+# ---------------------------------------------------------------------------
+
+
+def _compute_louvain_communities(
+    facts: list[dict[str, Any]],
+    reports: list[dict[str, Any]],
+) -> tuple[dict[str, int], float]:
+    """Deterministic Louvain community assignment via networkx.
+
+    Builds an undirected weighted graph from the provided facts + reports
+    (same projection used by the graph endpoints), runs
+    ``networkx.algorithms.community.louvain_communities`` with
+    ``seed=42``, and returns ``({node_id: community_id}, modularity)``.
+    On empty input returns ``({}, 0.0)``.
+    """
+    nodes, edges = _graph_project_nodes_edges(facts, reports)
+    if not nodes:
+        return ({}, 0.0)
+
+    import networkx as _nx
+    from networkx.algorithms.community import louvain_communities as _louvain
+    from networkx.algorithms.community import modularity as _modularity
+
+    g = _nx.Graph()
+    for n in nodes:
+        g.add_node(n["id"])
+    for e in edges:
+        # Skip degenerate self-loops (would confuse modularity computation).
+        if e["source"] == e["target"]:
+            continue
+        g.add_edge(e["source"], e["target"])
+
+    if g.number_of_edges() == 0:
+        # Isolated nodes — each is its own singleton community.
+        assignments = {n["id"]: idx for idx, n in enumerate(nodes)}
+        return (assignments, 0.0)
+
+    communities = _louvain(g, seed=42)
+    assignments: dict[str, int] = {}
+    for cid, member_set in enumerate(communities):
+        for node_id in member_set:
+            assignments[str(node_id)] = cid
+    try:
+        q = float(_modularity(g, communities))
+    except Exception:  # noqa: BLE001
+        q = 0.0
+    return (assignments, q)
+
+
+@app.get("/api/gnosis/graph/communities")
+async def read_gnosis_graph_communities(
+    corpus: str | None = None,
+) -> dict[str, Any]:
+    """Return Louvain community assignments for the current graph.
+
+    ADR-071 D1: deterministic (`seed=42`) server-side community detection.
+    Degrades to an empty page (HTTP 200) when ``registry.memory is None``
+    to match the Wave D list-endpoint cold-boot behavior (ADR-070 D7).
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    memory = getattr(registry, "memory", None)
+    now_iso = _dt.now(_tz.utc).isoformat()
+
+    if memory is None:
+        return {
+            "algorithm": "louvain",
+            "communities": {},
+            "modularity": 0.0,
+            "corpus": corpus,
+            "computed_at": now_iso,
+            "node_count": 0,
+            "edge_count": 0,
+            "degraded": True,
+        }
+
+    facts = await _graph_fetch_memory_facts(corpus, cap=500)
+    reports = _graph_zetesis_reports(corpus)
+    nodes, edges = _graph_project_nodes_edges(facts, reports)
+    assignments, modularity = _compute_louvain_communities(facts, reports)
+
+    return {
+        "algorithm": "louvain",
+        "communities": assignments,
+        "modularity": modularity,
+        "corpus": corpus,
+        "computed_at": now_iso,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "degraded": False,
+    }
+
+
+class _GnosisAnnotationBody(BaseModel):
+    """Request body for ``POST /api/gnosis/graph/annotate`` (ADR-071 D2).
+
+    All four required fields must be non-empty strings (or a float in the
+    unit interval for ``confidence``). ``node_id`` is the subject the
+    annotation attaches to.
+    """
+
+    node_id: str = Field(..., min_length=1)
+    provenance: str = Field(..., min_length=1)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    note: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+
+
+@app.post("/api/gnosis/graph/annotate")
+async def annotate_gnosis_node(
+    body: _GnosisAnnotationBody,
+) -> dict[str, Any]:
+    """Persist a user annotation as a MemoryPort event.
+
+    ADR-071 D2: wraps ``MemoryPort.write_event(predicate='annotation', ...)``
+    with defense-in-depth zero-trust validation. Pydantic checks the
+    request layer; the port layer runs ``validate_zero_trust_write``
+    again and raises ``ValueError`` on any violation (surfaced as 400).
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        raise HTTPException(
+            503,
+            detail=registry.errors.get("memory") or "memory unavailable",
+        )
+
+    try:
+        memory_event_id = await memory.write_event(
+            subject=body.node_id,
+            predicate="annotation",
+            object=body.note,
+            provenance=body.provenance,
+            confidence=body.confidence,
+            attributes={
+                "annotation_kind": "user",
+                "reason": body.reason,
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        # AMG block or adapter-level failure. Surface class name so the UI
+        # can render a targeted error state.
+        raise HTTPException(
+            409, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {
+        "memory_event_id": str(memory_event_id),
+        "written_at": _dt.now(_tz.utc).isoformat(),
     }
 
 
