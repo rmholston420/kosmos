@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { ElementDefinition, Stylesheet, Core } from "cytoscape";
+import type { ElementDefinition, StylesheetCSS, Core } from "cytoscape";
 import {
   kernelClient,
   type GraphEdge,
@@ -82,7 +82,7 @@ function toElements(nodes: GraphNode[], edges: GraphEdge[]): ElementDefinition[]
   return [...nodeEls, ...edgeEls];
 }
 
-const STYLESHEET: Stylesheet[] = [
+const STYLESHEET: StylesheetCSS[] = [
   {
     selector: "node",
     style: {
@@ -269,7 +269,7 @@ export default function MemoryIntegrityPanel({ panels }: { panels: Panel[] }) {
             elements={elements}
             style={{ width: "100%", height: "100%" }}
             layout={{ name: "cose", animate: false }}
-            stylesheet={STYLESHEET as unknown as Stylesheet[]}
+            stylesheet={STYLESHEET as unknown as StylesheetCSS[]}
             cy={onCy}
           />
         </div>
