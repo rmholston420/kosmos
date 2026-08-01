@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Kosmos favicon — mandala-derived concentric geometry (central point +
+  three rings) in Ratnasambhava gold on Nagtang black. Aligns with the
+  UX Design Spec §"Tibetan-Inspired Visual Theme" rule: geometric
+  restraint, no literal deity/lotus ornament.
+
+  Next 16 auto-serves any `app/icon.{ico,svg,png}` as the favicon; this
+  file is the only wiring required.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="4" fill="oklch(12% 0.005 260)"/>
+  <g fill="none" stroke="oklch(80% 0.15 85)" stroke-width="1">
+    <circle cx="16" cy="16" r="12"/>
+    <circle cx="16" cy="16" r="8"/>
+    <circle cx="16" cy="16" r="4"/>
+  </g>
+  <circle cx="16" cy="16" r="1.5" fill="oklch(80% 0.15 85)"/>
+</svg>
