@@ -362,8 +362,32 @@ async function _unmapped(name: string): Promise<never> {
   );
 }
 
+// Kernel `/api/gnosis/corpora` returns `{corpora: [...]}` (envelope
+// with a single `corpora` array key) — see kernel/app.py:1381. The
+// pre-Stage-1.9 sidecar returned a bare array, so the two remaining
+// consumers (ui/app/gnosis/page.tsx + tests) expect an array shape.
+// Unwrap here so call sites keep working without churn.
+interface CorporaEnvelope {
+  corpora: unknown[];
+}
+function _isCorporaEnvelope(v: unknown): v is CorporaEnvelope {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "corpora" in v &&
+    Array.isArray((v as CorporaEnvelope).corpora)
+  );
+}
+
 export const gnosisGateClient = {
-  listCorpora: () => getJSONFromBase(GNOSIS_GATE_BASE, "/api/gnosis/corpora"),
+  listCorpora: async () => {
+    const raw = await getJSONFromBase(GNOSIS_GATE_BASE, "/api/gnosis/corpora");
+    if (Array.isArray(raw)) return raw;
+    if (_isCorporaEnvelope(raw)) return raw.corpora;
+    throw new Error(
+      "unexpected /api/gnosis/corpora shape: " + JSON.stringify(raw).slice(0, 80),
+    );
+  },
   getCorpusDetail: (_corpusName: string) => _unmapped("getCorpusDetail"),
   getProvenance: (_corpusName: string, _eventId: string) => _unmapped("getProvenance"),
   query: (_corpusName: string, q: string, _asOf?: string, limit?: number) =>
