@@ -1302,6 +1302,99 @@ async def tektos_turn(request: Request) -> dict[str, Any]:
     return _dataclass_to_dict(step)
 
 
+@app.post("/api/tektos/intention")
+async def tektos_intention(request: Request) -> dict[str, Any]:
+    """Stage 3.13 (ADR-077): scaffold + gate one intention.
+
+    Body: ``{"intention": <non-empty str>}``. On success:
+
+    1. :func:`plugins.tektos.intention.scaffold_intention` materializes
+       an OpenSpec change directory OUTSIDE the working Kosmos tree
+       (destination governed by ``$KOSMOS_TEKTOS_INTENTION_ROOT``).
+    2. :func:`plugins.tektos.openspec.plan.produce_plan` parses that
+       directory into a :class:`Plan` and writes per-artifact +
+       plan MemoryPort events (Stage 3.6 surface, unchanged).
+    3. :func:`plugins.tektos.renderer.project.render_and_gate_plan_card`
+       proposes the plan at HUMAN_REVIEW via APEX and writes the
+       plan-card event (Stage 3.7 surface, unchanged).
+
+    Returns the :class:`PlanCard` as JSON. The frontend then follows
+    the existing approval workflow (``GET /api/approvals/{id}`` +
+    ``POST /api/approvals/{id}/approve|reject``) exactly as it does
+    for every other HUMAN_REVIEW-tiered plan surface.
+
+    Stage 3.14+ will add /api/tektos/plan/{id}/{approve,execute,diff}
+    routes for sandboxed execution + real-diff apply.
+    """
+    memory = registry.memory
+    approval = registry.approval
+    if memory is None or approval is None:
+        missing = [
+            n for n, v in (("memory", memory), ("approval", approval)) if v is None
+        ]
+        raise HTTPException(
+            503,
+            detail=(
+                registry.errors.get("memory")
+                or registry.errors.get("approval")
+                or f"tektos.intention depends on {missing}; not booted"
+            ),
+        )
+
+    body = await _read_optional_json(request)
+    intention = body.get("intention")
+    if not isinstance(intention, str) or not intention.strip():
+        raise HTTPException(
+            400, detail="'intention' must be a non-empty string"
+        )
+
+    try:
+        from plugins.tektos.intention import scaffold_intention
+        from plugins.tektos.openspec.plan import produce_plan
+        from plugins.tektos.plugin import TEKTOS_PLAN_APPROVAL_PANEL_ID
+        from plugins.tektos.renderer.project import render_and_gate_plan_card
+    except ImportError as exc:  # tektos not booted / missing dep
+        raise HTTPException(503, detail=f"tektos import failed: {exc}") from exc
+
+    try:
+        scaffold = scaffold_intention(intention)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(502, detail=f"scaffold write failed: {exc}") from exc
+
+    try:
+        plan_result = await produce_plan(scaffold.change_dir, memory)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    try:
+        card = await render_and_gate_plan_card(
+            plan_result.plan,
+            panel_id=TEKTOS_PLAN_APPROVAL_PANEL_ID,
+            approval=approval,
+            memory=memory,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {
+        "change_id": scaffold.change_id,
+        "change_dir": str(scaffold.change_dir),
+        "intention": scaffold.intention,
+        "scaffolded_at": scaffold.scaffolded_at.isoformat(),
+        "plan_card": _dataclass_to_dict(card),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Gnosis retrieval surrogate — ADR-064
 #

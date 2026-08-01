@@ -40,6 +40,28 @@ export interface AnomalyRecord {
 export interface DiffRender { approval_id: string; change_id: string; body: string; diff_sha256: string; }
 export interface ExecutionResult { approval_id: string; change_id: string; before: string; after: string; diff_sha256: string; }
 
+// Stage 3.13 (ADR-077). Mirrors plugins/tektos/renderer/models.py PlanCard.
+export interface PlanCard {
+  change_id: string;
+  rendered_summary: string;
+  task_count: number;
+  done_task_count: number;
+  delta_added: number;
+  delta_modified: number;
+  delta_removed: number;
+  confidence: number;
+  tier: ChangeApprovalTier;
+  approval_id: string;
+  panel_id: string;
+}
+export interface TektosIntentionResult {
+  change_id: string;
+  change_dir: string;
+  intention: string;
+  scaffolded_at: string;
+  plan_card: PlanCard;
+}
+
 export interface DeliverySloReport {
   window: number; sample_count: number; p50_ms: number; p95_ms: number;
   p99_ms: number; max_ms: number; breach_count_over_500ms: number;
@@ -122,9 +144,17 @@ export const kernelClient = {
           resolved_by: opts?.resolved_by ?? "kosmos_ui",
         }),
 
-  // ADR-067 D4: Tektos Plan→Approve→Execute→Diff route surface deferred to Stage 2
-  // pending a dedicated Tektos-plan-surface ADR. Kernel currently exposes only
-  // POST /api/tektos/turn (ADR-063). The four calls below will 404 until then.
+  // Stage 3.13 (ADR-077): submit an intention -> scaffold OpenSpec change
+  // dir + produce plan + gate through APEX. Returns a TektosIntentionResult
+  // whose plan_card carries the approval_id used by the existing
+  // /api/approvals/{id}/{approve,reject} routes.
+  submitTektosIntention: (intention: string) =>
+    postJSON<TektosIntentionResult>("/api/tektos/intention", { intention }),
+
+  // ADR-067 D4: Tektos Plan→Approve→Execute→Diff route surface deferred to
+  // Stage 3.14. Kernel currently exposes POST /api/tektos/turn (ADR-063) and
+  // POST /api/tektos/intention (ADR-077, Stage 3.13). The four calls below
+  // will 404 until Stage 3.14 lands the sandbox-gated executor.
   getPlanDetail: (approvalId: string) => getJSON<ApprovalRecord>(`/api/tektos/plan/${approvalId}`),
   approveTektosPlan: (approvalId: string) =>
     postJSON<ApprovalRecord>(`/api/tektos/plan/${approvalId}/approve`, {}),
