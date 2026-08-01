@@ -2058,3 +2058,16 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`.
 - **PORTING_LEDGER / ADR updated:** ADR-060 new; PORTING_LEDGER unchanged.
 - **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
+
+## 2026-08-01 02:10 EDT — Stage 6.5.4 · WebSocket event-bus bridge (ADR-061)
+
+- **Stage / plugin / port:** Stage 6.5.4 · Kernel HTTP surface · EventBusPort (consumer side)
+- **What changed:** Added kernel-owned `GET /api/events/ws` WebSocket route. On connect, sends a `ready` JSON frame with the subscribed event-type list, then forwards every published `EventEnvelope` on subscribed types as `event` frames. Query param `?types=a,b,c` selects the subscription set; when absent, subscribes to `WS_DEFAULT_EVENT_TYPES = (phrouros.anomaly.detected, zetesis.research.started, zetesis.research.completed)`. Concurrency uses one `event_bus.subscribe(t, maxsize=256)` per type + one forwarder task per queue + a `_drain_client` task for prompt disconnect detection; `asyncio.wait(return_when=FIRST_COMPLETED)` unblocks on any task finishing; finally-block unsubscribes each queue best-effort. `kernel/app.py` version 6.5.3 → 6.5.4.
+- **Files touched:**
+  - `kernel/app.py` (added `WebSocket`/`WebSocketDisconnect` imports, `asyncio` import, `WS_DEFAULT_EVENT_TYPES`, `_WS_QUEUE_MAXSIZE`, `_parse_ws_types`, `_envelope_to_wire`, `events_ws` handler; version bump; docstring update)
+  - `docs/adrs/ADR-061-stage-6-5-4-websocket-event-bus-bridge.md` (new)
+  - `docs/adrs/README.md` (row inserted before ADR-060)
+  - `tests/kernel/test_stage_6_5_4_websocket_event_bus_bridge.py` (new, 10 tests)
+- **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `EventBusPort` protocol and `EventEnvelope` untouched.
+- **PORTING_LEDGER / ADR updated:** ADR-061 new; PORTING_LEDGER unchanged.
+- **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
