@@ -19,6 +19,10 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("F6 · Zetesis SSE reaches event: completed", () => {
+  // ADR-072 §D · test hardening: absorb single-transient SSE flakes
+  // (503 Ollama warmup, embeddings timeout) without masking a regression.
+  test.describe.configure({ retries: 1 });
+
   test("POST /api/zetesis/research emits completed, not error", async ({ request }) => {
     const res = await request.post("/api/zetesis/research", {
       data: { query: "smoke-test-adr-056-no-op" },

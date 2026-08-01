@@ -13,6 +13,11 @@ import { test, expect } from "@playwright/test";
 // skip gracefully if the glue endpoint is not yet mounted.
 
 test.describe("Zetesis research surface", () => {
+  // ADR-072 §D · test hardening: real ODR trials via Ollama can transient-
+  // fail (503 warmup, embeddings timeout) once out of ~10 runs. Retry once
+  // to absorb one transient without masking a real regression.
+  test.describe.configure({ retries: 1 });
+
   test("page renders query input in idle state", async ({ page }) => {
     await page.goto("/zetesis");
     await expect(page.getByTestId("zetesis-query-input")).toBeVisible();
