@@ -1,9 +1,19 @@
 # ADR-052 — Stage 6.1 · Zetesis plugin skeleton + Stage-5 deferral
 
-**Status:** Ratified v25
+> **STATUS AMENDMENT (2026-08-01):** §Q2=A partially superseded by
+> **ADR-057** (Stage 6.3 · Zetesis UI route surface). The
+> zero-panels / zero-routes / empty-design-tokens shape was
+> **Stage-6.1-specific**. ADR-057 promotes `build_zetesis_descriptor()`
+> to a **one-route, zero-panel** shape at Stage 6.3 (route `/zetesis`
+> with locked constants; panels still empty, land Stage 6.4). Original
+> §Q2=A text is preserved verbatim below — the amendment applies only
+> at 6.3+ boundaries.
+
+**Status:** Ratified v25 · Amended 2026-08-01 (§Q2=A superseded by ADR-057 at Stage 6.3)
 **Lock-in phase:** Stage 6.1 (Phase 6 — Research + ADR-010 Resolution)
 **Supersedes:** —
 **Amends:** ADR-015 (Oikos-Ahead-of-Zetesis Build Sequencing)
+**Amended by:** ADR-057 (§Q2=A shape)
 
 ## Context
 

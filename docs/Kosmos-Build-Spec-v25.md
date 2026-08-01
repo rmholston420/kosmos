@@ -686,3 +686,38 @@ This specification is complete and self-contained. Every element from Build Spec
 **Supersession:** v25 supersedes v19, v20, v20.1, v20.2, v20.3, v21 (informational only), v22, v23, v24, Tektos Build Spec v1, Rollout Plan v3, UI Parity Addendum, pre-build patterns note, all nine standalone ADRs, Oikos Plugin Spec v1, and the Praxis/LangChain4j note, in full.
 
 **Baseline for future revisions:** any addendum, agentic scan, or new ADR authored after v25 lives alongside v25 (not replacing it) until formally folded into v26.
+
+
+---
+
+## Kosmos v25 Addendum — Integrated AI Orchestration
+
+_Appended 2026-08-01 per ADR-057 (Option C ratification). Adds seven load-bearing rules that constrain post-Stage-6.3 build without requiring separate ADRs for each. Each rule is enforceable and testable._
+
+### Rule 1 — llama-swap-only model routing
+
+All local LLM routing goes through `llama-swap` when a model swap is required (memory-tight envelopes on Colossus's 32 GB VRAM). Router-mode dispatch inside `OllamaAdapter` is forbidden after Stage 6.4 lands unless a follow-up ADR ratifies dual-mode operation. Rationale: single dispatch point simplifies observability + failure mode analysis. Enforcement: ADR to author when the first non-`llama-swap` router path is proposed.
+
+### Rule 2 — MoltMCP transport pinning
+
+Cross-agent MCP transport is pinned to Streamable HTTP (per ADR-010 lock; ODR uses `langchain-mcp` over shared SearXNG). WebSocket, SSE, or stdio-only transports may be added as **contender** paths in a follow-up ADR but never as the primary. Rationale: matches Colossus single-node topology; avoids WS-reconnect bookkeeping in the kernel event bus.
+
+### Rule 3 — OpenHands ADR-013 pattern-vendor floor
+
+Post-Stage-3 Tektos work continues to consume the OpenHands SDK via the **pattern-vendor** floor set by ADR-013/036 (no upstream source copied; `Agent`/`Conversation` surface rewritten behind `LLMPort` + `MemoryPort`). No further OpenHands runtime source enters the tree without a superseding ADR. Rationale: keeps the port surface stable across upstream churn.
+
+### Rule 4 — Zetesis inner-loop lock (ODR-post-6.3.9)
+
+The Stage 6.3.9 tuned Open Deep Research substrate is locked as Zetesis's research inner loop per ADR-055. Substitution requires a fresh ADR with a re-run of the ADR-010 F1–F6 rubric on the current Colossus fixture and a rating ≥ 5.33 (the current baseline). AREX-Turbo re-comparison remains deferred (not cancelled) per KNOWN_ISSUES.md.
+
+### Rule 5 — source_diversity as audit signal only
+
+`source_diversity ≥ 5` is an **audit signal only** for the Stage 6.4 exit gate — not a blocker. Ratified 2026-08-01 (Option B). Rubric-critique guidance on diversity is a Stage 6.4+ follow-up. Rationale: quality trumps diversity; 6.3.9 trial 2 demonstrated a 2-domain result rated 5.5/6 by omitting unrelated citations. Diversity gating without semantic anchoring rewards padding.
+
+### Rule 6 — A2A + AGUI protocol pinning
+
+When multi-agent coordination arrives (Stage 7+, Synedrion System-5), agent-to-agent communication uses the A2A protocol and human-facing UI streams use AGUI. Both are pinned as **contender ADRs** for the transport decision — no other agent-comms wire format enters the tree without a superseding ADR. Rationale: forecloses vendor lock-in from LangGraph-native / CrewAI-native transports.
+
+### Rule 7 — Kosmos GUI dark-first design lock
+
+The Kosmos GUI (Stage 6.4+) is dark-first. Light mode is a `data-theme` opt-in, not the default. Design tokens ship dark-mode values as canonical; light-mode overrides live in a separate token layer. Rationale: matches Rigpa-LMS visual design system (see knowledge wiki `concepts/rigpa-lms-visual-design-system`) and user preference. Enforcement: any Stage 6.4+ component that defaults to light styling requires an ADR override.

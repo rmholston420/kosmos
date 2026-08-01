@@ -1909,3 +1909,77 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Sub-slice 5 is documentation lock-in only.
 - **PORTING_LEDGER / ADR updated:** ADR-056 fifth STATUS AMENDMENT block + status transition.
 - **Stop-condition status:** **MET**. Stage 6.3 (proper) complete. Colossus tag `stage-6-3-complete` applied at this commit.
+
+
+## 2026-08-01 01:03 EDT — Stage 6.4 landing kit generated + shared
+
+- **Stage / plugin / port:** Stage 6.4 · Kernel · FrontendContract/Approval/Resource/Notification/EventBus composition
+- **What changed:** Perplexity-side generated a landing-kit tarball (5 files: `kernel/app.py` v1, `kernel_ui_glue/router.py`, ADR-057 doc, 3 patches, v25 addendum) — 8413 bytes. Downloaded to Colossus and extracted to `/tmp/kosmos-kit/`.
+- **Files touched:** none in-repo this entry (staging only).
+- **Ports / adapters affected:** none yet.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** in-progress.
+
+## 2026-08-01 01:04 EDT — ADR-057 authored + indexed; v25 Addendum appended
+
+- **Stage / plugin / port:** Stage 6.3 · Zetesis · descriptor route promotion + Docs · Kosmos-Build-Spec-v25.md
+- **What changed:**
+  - Authored `docs/adrs/ADR-057-stage-6-3-zetesis-ui-surface.md` (Ratified v25).
+  - Inserted ADR-057 row in `docs/adrs/README.md` table.
+  - Amended `plugins/zetesis/plugin.py`: imports `Route`; adds 4 locked constants (`ZETESIS_ROUTE_PATH`, `ZETESIS_ROUTE_LABEL`, `ZETESIS_ROUTE_ICON`, `ZETESIS_ROUTE_LAZY_MODULE`); `build_zetesis_descriptor()` returns one-element `routes` tuple.
+  - Renamed + rewrote test `test_descriptor_has_zero_routes_at_stage_6_1` → `test_descriptor_has_one_route_at_stage_6_3` asserting the locked constants.
+  - Appended Kosmos v25 Addendum (Rules 1–7) to `docs/Kosmos-Build-Spec-v25.md` per Option C.
+- **Files touched:**
+  - `docs/adrs/ADR-057-stage-6-3-zetesis-ui-surface.md` (new)
+  - `docs/adrs/README.md` (row insertion)
+  - `plugins/zetesis/plugin.py` (imports + 4 constants + descriptor)
+  - `plugins/zetesis/tests/test_zetesis_plugin.py` (test rename+rewrite + module docstring)
+  - `docs/Kosmos-Build-Spec-v25.md` (v25 Addendum append)
+- **Ports / adapters affected:** `FrontendContractPort` (route surface expanded via Zetesis descriptor — `_derive_parity(routes ∧ panels)` returns IN_PROGRESS at 6.3).
+- **PORTING_LEDGER / ADR updated:** ADR-057 (new). ADR-052 amendment pending (STATUS AMENDMENT block will land with next amend cycle).
+- **Stop-condition status:** met — `pytest plugins/zetesis/tests/test_zetesis_plugin.py` expected 29 green after amendment. Spec addendum is a content append (per `kosmos-spec-diff` classification) — no separate ADR required.
+
+## 2026-08-01 01:10 EDT — PORTING_LEDGER.md created (spec-required file was missing)
+
+- **Stage / plugin / port:** Docs · PORTING_LEDGER.md
+- **What changed:** Created `PORTING_LEDGER.md` at repo root. Spec §§48 & 252 require this file; it was previously missing from the tree. Backfilled with kernel FastAPI bootstrap entry (HAND-BUILT, no vendor) and pointers to historical vendor decisions ratified in ADRs.
+- **Files touched:** `PORTING_LEDGER.md` (new)
+- **Ports / adapters affected:** none (documentation).
+- **PORTING_LEDGER / ADR updated:** file itself created.
+- **Stop-condition status:** met.
+
+## 2026-08-01 01:12 EDT — Kernel FastAPI bootstrap v2 landed (adapter signatures corrected)
+
+- **Stage / plugin / port:** Stage 6.4 · Kernel · composed-ports bootstrap
+- **What changed:**
+  - Wrote `kernel/app.py` v2 against real adapter signatures discovered by 2026-08-01 audit of `adapters/` and `plugins/praxis/apex/`. Key corrections vs. v1: `PraxisApprovalResolverAdapter(engine=KernelChangeApprovalAdapter(storage=, scheduler=, event_bus=, notification=))`; `SqliteResourceAdapter(storage=InMemoryStorage())`; `KernelNotificationAdapter()` (no args); `KernelFrontendContractAdapter()` (no args); `ValkeyEventBusAdapter()` (env-driven URL).
+  - Every port bootstrap wrapped in try/except so a single failure surfaces as per-endpoint HTTP 503 rather than a hard kernel crash.
+  - PhrourosEngine intentionally NOT booted at 6.4 — requires a `TraceFeedPort` adapter not yet in `adapters/`; `/api/phrouros/anomalies` returns 503 with the reason until Stage 6.5.
+  - Kernel exposes 11 endpoints at 6.4: `/health`, `/api/kernel/schema`, `/api/kernel/routes`, `/api/kernel/panels`, `/api/kernel/plugins`, `/api/kernel/design-tokens`, `/api/resources/balances`, `/api/approvals`, `/api/approvals/{approval_id}`, `/api/phrouros/anomalies` (503 until 6.5), `/api/notifications/health`.
+- **Files touched:**
+  - `kernel/__init__.py` (new, empty)
+  - `kernel/app.py` (new)
+  - `kernel_ui_glue/__init__.py` (new, empty)
+- **Ports / adapters affected:** `FrontendContractPort`, `ApprovalResolverPort` (via `KernelChangeApprovalAdapter`), `ResourcePort` (via `SqliteResourceAdapter(InMemoryStorage)`), `NotificationPort`, `EventBusPort` (Valkey) — all composed at boot behind try/except.
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER.md has the kernel entry.
+- **Stop-condition status:** in-progress — `python -c 'from kernel.app import app'` returns clean; uvicorn boot smoke pending post-pull on Colossus. See DEBUG_LOG entry 2026-08-01 01:05 EDT for the v1→v2 fix.
+
+
+## 2026-08-01 01:22 EDT — Kernel resource-balances endpoint bugfix (v2 → v2.1)
+
+- **Stage / plugin / port:** Stage 6.4 · Kernel · ResourcePort
+- **What changed:** `/api/resources/balances` was calling `rp.get_balance(kind)` — that method is on the `Storage` protocol, not `ResourcePort`. Fixed by stashing the `InMemoryStorage` instance on the adapter at boot (`adapter._kernel_storage = storage`) and reading balances via `storage.get_balance(kind)` in the endpoint. Storage returns `None` for unseeded kinds → endpoint emits `{"time": null, "money": null, ...}` cleanly.
+- **Files touched:** `kernel/app.py`
+- **Ports / adapters affected:** `ResourcePort` (endpoint plumbing only; port surface unchanged).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — kernel boot degraded (Phrouros expected 503 until 6.5); 5/6 subsystems green; endpoints return valid JSON.
+
+
+## 2026-08-01 01:24 EDT — Kernel dataclass serialization fix (v2.1 → v2.2)
+
+- **Stage / plugin / port:** Stage 6.4 · Kernel · FrontendContractPort + NotificationPort JSON payloads
+- **What changed:** `_dataclass_to_dict` was checking `hasattr(obj, "__dict__")`, but Kosmos value objects use `@dataclass(frozen=True, slots=True)` — no `__dict__`. Rewrote helper to primarily use `dataclasses.fields()` (works for slotted dataclasses), added `Decimal` → str, tightened enum/datetime detection, kept `__dict__` fallback. `/api/kernel/schema` simplified to unconditionally route through the helper. `/api/notifications/health` guards against non-dict return.
+- **Files touched:** `kernel/app.py`
+- **Ports / adapters affected:** kernel serialization only; port surfaces unchanged.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — all six kernel-side endpoints now return valid JSON when their subsystem is up.

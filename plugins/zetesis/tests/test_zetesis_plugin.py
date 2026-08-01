@@ -4,7 +4,8 @@ Stage 6.1 DoD is literally "Plugin loads." These tests verify:
 
 - Locked module constants match plugin identity + MemoryPort contract.
 - :func:`build_zetesis_descriptor` produces the ADR-052 §Q2=A shape
-  (zero panels, zero routes, empty design tokens).
+  amended by ADR-057: one route (`/zetesis`), zero panels, empty
+  design tokens.
 - :class:`ZetesisPlugin` constructs cheaply and side-effect-free.
 - :meth:`ZetesisPlugin.start` is idempotent and registers exactly once.
 - :meth:`ZetesisPlugin.stop` is idempotent and unregisters cleanly.
@@ -93,17 +94,34 @@ def test_descriptor_metadata_matches_module_constants() -> None:
     assert d.kernel_compat == ZETESIS_KERNEL_COMPAT
 
 
-def test_descriptor_has_zero_panels_at_stage_6_1() -> None:
-    """ADR-052 §Q2=A: Stage 6.1 DoD is literally 'Plugin loads.'
-    Panels land at Stage 6.3/6.4 when real research output exists."""
+def test_descriptor_has_zero_panels_at_stage_6_3() -> None:
+    """ADR-052 §Q2=A amended by ADR-057: panels remain empty at 6.3;
+    they land at Stage 6.4 when the kernel FastAPI shell mounts."""
     d = build_zetesis_descriptor()
     assert d.panels == ()
 
 
-def test_descriptor_has_zero_routes_at_stage_6_1() -> None:
-    """ADR-052 §Q2=A: routes land at Stage 6.3/6.4."""
+def test_descriptor_has_one_route_at_stage_6_3() -> None:
+    """ADR-057 promotes the descriptor from zero routes to one route.
+    Locked constants live in `plugins.zetesis.plugin`."""
+    from plugins.zetesis.plugin import (
+        ZETESIS_ROUTE_ICON,
+        ZETESIS_ROUTE_LABEL,
+        ZETESIS_ROUTE_LAZY_MODULE,
+        ZETESIS_ROUTE_PATH,
+    )
+
     d = build_zetesis_descriptor()
-    assert d.routes == ()
+    assert len(d.routes) == 1
+    (route,) = d.routes
+    assert route.path == ZETESIS_ROUTE_PATH == "/zetesis"
+    assert route.label == ZETESIS_ROUTE_LABEL == "Zetesis"
+    assert route.icon == ZETESIS_ROUTE_ICON == "🔬"
+    assert (
+        route.lazy_module
+        == ZETESIS_ROUTE_LAZY_MODULE
+        == "zetesis/pages/ResearchPage"
+    )
 
 
 def test_descriptor_has_empty_design_tokens_at_stage_6_1() -> None:
