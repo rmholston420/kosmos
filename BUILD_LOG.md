@@ -2881,3 +2881,35 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none this commit (ratification-only)
 - **PORTING_LEDGER / ADR updated:** ADR-073 status flipped
 - **Stop-condition status:** met for ADR ratification. Next: code PR lands ports/embeddings.py + Ollama adapter + Graphiti migration + kernel version 6.9.0 → 6.10.0.
+
+## 2026-08-01 10:36 EDT — ADR-073 code landed on branch stage-1-6-p0-embeddings-port
+
+- **Stage / plugin / port:** Stage 1.6 · Phase 0 · EmbeddingsPort (new port + adapter)
+- **What changed:**
+  - New port `ports/embeddings.py` — `EmbeddingsPort` Protocol (batch-only `embed`, `dimensions`, `is_healthy`, idempotent `close`), plus `EmbeddingError` / `EmbeddingDimensionMismatch` exception classes.
+  - New adapter `adapters/embeddings/ollama/adapter.py` — `OllamaEmbeddingsAdapter` calling Ollama's native `/api/embed` endpoint. Default `nomic-embed-text` (768-dim). Static `_MODEL_DIMENSIONS` table avoids probe-on-init; live-probe fallback for unknown models.
+  - New Graphiti bridge `adapters/memory/dozerdb/kosmos_graphiti_embedder.py` — `KosmosGraphitiEmbedder` duck-types Graphiti's `EmbedderClient` protocol (single-str returns single vector, list returns batch).
+  - `adapters/memory/dozerdb/graphiti_temporal_index.py`: `__init__` accepts `embeddings: EmbeddingsPort | None = None`; when provided, wraps in `KosmosGraphitiEmbedder`; when None, retains legacy `OpenAIEmbedderConfig(api_key="ollama-not-used", ...)` shim with `DeprecationWarning`.
+  - `kernel/app.py`: `_BootRegistry.embeddings` field added; `_boot_embeddings` block boots `OllamaEmbeddingsAdapter` alongside `_boot_llm`; DozerDb memory boot passes `registry.embeddings` into `GraphitiTemporalIndex`; version `6.9.0 → 6.10.0`.
+  - `ports/llm.py`: `embed()` docstring flagged deprecated with ADR-073 reference.
+  - `adapters/llm/ollama/adapter.py` + `adapters/llm/llama_swap/adapter.py`: `embed()` emits `warnings.warn(DeprecationWarning)` citing ADR-073.
+  - Tests: `tests/ports/test_embeddings_protocol.py` (8 tests, protocol conformance) + `adapters/embeddings/ollama/test_contract.py` (11 tests fast + 1 live-Colossus opt-in) + `tests/kernel/test_stage_1_6_adr_073_embeddings_port.py` (7 tests: version bump, port import, protocol satisfaction, deprecation warnings on both LLM adapters, Graphiti bridge shape).
+  - PORTING_LEDGER: Stage 1.6 Phase 0 section added — no new vendored code (httpx already satisfies transport per ADR-063; `EmbeddingsPort` is Kosmos-original).
+- **Files touched:**
+  - `ports/embeddings.py` (new)
+  - `adapters/embeddings/__init__.py` (new)
+  - `adapters/embeddings/ollama/__init__.py` (new)
+  - `adapters/embeddings/ollama/adapter.py` (new)
+  - `adapters/embeddings/ollama/test_contract.py` (new)
+  - `adapters/memory/dozerdb/kosmos_graphiti_embedder.py` (new)
+  - `adapters/memory/dozerdb/graphiti_temporal_index.py` (modified)
+  - `ports/llm.py` (deprecation docstring)
+  - `adapters/llm/ollama/adapter.py` (DeprecationWarning)
+  - `adapters/llm/llama_swap/adapter.py` (DeprecationWarning)
+  - `kernel/app.py` (registry + boot block + version bump + Graphiti wiring)
+  - `tests/ports/test_embeddings_protocol.py` (new)
+  - `tests/kernel/test_stage_1_6_adr_073_embeddings_port.py` (new)
+  - `PORTING_LEDGER.md` (Stage 1.6 Phase 0 section)
+- **Ports / adapters affected:** `EmbeddingsPort` (new), `LLMPort.embed()` (deprecated), Graphiti wiring (migrated).
+- **PORTING_LEDGER / ADR updated:** PORTING_LEDGER Stage 1.6 Phase 0 section; ADR-073 already Ratified v25 in PR #22.
+- **Stop-condition status:** in-progress — sandbox pytest imports + agent-side test runs green (25 pass, 1 skipped live-tier). Colossus verify + PR review outstanding before merge.

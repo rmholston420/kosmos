@@ -184,6 +184,19 @@ class LlamaSwapAdapter:
         input: str | list[str],
         model: str | None = None,
     ) -> dict[str, Any]:
+        """POST /v1/embeddings via llama-swap.
+
+        .. deprecated:: ADR-073 (Ratified v25 2026-08-01)
+           Use ``ports.embeddings.EmbeddingsPort`` instead.
+        """
+        import warnings
+
+        warnings.warn(
+            "LlamaSwapAdapter.embed() is deprecated per ADR-073. "
+            "Use EmbeddingsPort (adapters.embeddings.ollama).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         payload: dict[str, Any] = {
             "model": self._resolve_model(model),
             "input": input,

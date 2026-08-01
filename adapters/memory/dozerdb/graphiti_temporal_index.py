@@ -1,4 +1,4 @@
-"""adapters.memory.dozerdb.graphiti_temporal_index — Real Graphiti TemporalIndex (ADR-027, ADR-047).
+"""adapters.memory.dozerdb.graphiti_temporal_index — Real Graphiti TemporalIndex (ADR-027, ADR-047, ADR-073).
 
 Wraps `graphiti_core.Graphiti` for temporal knowledge-graph indexing over the
 same DozerDB Bolt endpoint that `DozerDbGraphBackend` targets. Satisfies the
@@ -7,7 +7,11 @@ same DozerDB Bolt endpoint that `DozerDbGraphBackend` targets. Satisfies the
 Graphiti requires an LLM client (entity extraction) + an embedder (semantic
 search). Kosmos wires both to the local Ollama endpoint per session lock:
 - LLM: qwen3-coder via OpenAIGenericClient (Ollama's OpenAI-compatible `/v1`)
-- Embedder: nomic-embed-text via OpenAIEmbedder
+- Embedder: per ADR-073, a caller-supplied ``EmbeddingsPort`` bridged via
+  ``KosmosGraphitiEmbedder``. When no embeddings port is supplied, the
+  legacy inline ``OpenAIEmbedderConfig(api_key="ollama-not-used", ...)`` path
+  remains reachable behind a ``DeprecationWarning`` for the deprecation
+  window declared in ADR-073.
 
 All `graphiti_core` imports are lazy so the fast unit tier does not require
 the package to be importable.
@@ -17,10 +21,14 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ports.memory import MemoryHit
+
+if TYPE_CHECKING:
+    from ports.embeddings import EmbeddingsPort
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +55,7 @@ class GraphitiTemporalIndex:
         llm_url: str = "http://localhost:11434/v1",
         llm_model: str = "qwen3-coder",
         embed_model: str = "nomic-embed-text",
+        embeddings: EmbeddingsPort | None = None,
     ) -> None:
         self._uri = uri
         self._user = user
@@ -54,6 +63,11 @@ class GraphitiTemporalIndex:
         self._llm_url = llm_url
         self._llm_model = llm_model
         self._embed_model = embed_model
+        # ADR-073 D4: when supplied, wraps in KosmosGraphitiEmbedder and
+        # passes to Graphiti(embedder=...). When None, the legacy
+        # OpenAIEmbedderConfig(api_key="ollama-not-used") shim is still
+        # reachable behind a DeprecationWarning for the deprecation window.
+        self._embeddings = embeddings
         self._graphiti: Any | None = None
         self._closed = False
         self._indices_built = False
@@ -214,12 +228,32 @@ class GraphitiTemporalIndex:
                 model=self._llm_model,
             )
             llm_client = OpenAIGenericClient(config=llm_cfg)
-            embed_cfg = OpenAIEmbedderConfig(
-                api_key="ollama-not-used",
-                base_url=self._llm_url,
-                embedding_model=self._embed_model,
-            )
-            embedder = OpenAIEmbedder(config=embed_cfg)
+            if self._embeddings is not None:
+                # ADR-073 D4: preferred path — route Graphiti embeddings
+                # through EmbeddingsPort, avoiding the OpenAI-shim dance.
+                from adapters.memory.dozerdb.kosmos_graphiti_embedder import (
+                    KosmosGraphitiEmbedder,
+                )
+
+                embedder = KosmosGraphitiEmbedder(
+                    self._embeddings, model=self._embed_model
+                )
+            else:
+                warnings.warn(
+                    "GraphitiTemporalIndex constructed without an "
+                    "EmbeddingsPort; falling back to the deprecated "
+                    "OpenAIEmbedder(api_key='ollama-not-used') shim. "
+                    "Wire an EmbeddingsPort per ADR-073 before Stage 1.6 "
+                    "Phase 1 begins.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                embed_cfg = OpenAIEmbedderConfig(
+                    api_key="ollama-not-used",
+                    base_url=self._llm_url,
+                    embedding_model=self._embed_model,
+                )
+                embedder = OpenAIEmbedder(config=embed_cfg)
             # Graphiti also instantiates OpenAIRerankerClient() with no args,
             # which reads OPENAI_API_KEY from env. Provide an Ollama-configured
             # reranker so no external credentials are required.

@@ -99,6 +99,10 @@ class _BootRegistry:
         # Stage 6.5.6 additions (ADR-063).
         self.llm: Any = None
         self.memory: Any = None
+        # Stage 1.6 Phase 0 (ADR-073): kernel-owned EmbeddingsPort. Separate
+        # from ``self.llm`` so chat-only backends (e.g. llama-swap) don't
+        # have to satisfy an embeddings surface. Populated by ``_boot_embeddings``.
+        self.embeddings: Any = None
         self.tektos: Any = None
         self.tektos_agent: Any = None
         self.tektos_agent_lock: Any = None
@@ -337,6 +341,21 @@ async def lifespan(app: FastAPI):
 
     registry.llm = _boot_llm
 
+    # --- Embeddings (OllamaEmbeddingsAdapter) --------------------------------
+    # Stage 1.6 Phase 0 addition (ADR-073): kernel-owned EmbeddingsPort split
+    # off from LLMPort. Uses Ollama's native ``/api/embed`` endpoint (NOT the
+    # ``/v1/embeddings`` OpenAI-compat path); default model ``nomic-embed-text``
+    # (768-dim). Env overrides: ``KOSMOS_OLLAMA_BASE_URL`` +
+    # ``KOSMOS_OLLAMA_EMBED_MODEL``. Failure surfaces under
+    # ``registry.errors['embeddings']``.
+    @_try("embeddings")
+    def _boot_embeddings():
+        from adapters.embeddings.ollama.adapter import OllamaEmbeddingsAdapter
+
+        return OllamaEmbeddingsAdapter()
+
+    registry.embeddings = _boot_embeddings
+
     # --- Memory (DozerDbMemoryAdapter, env-gated backends) --------------------
     # Stage 6.5.6 addition (ADR-063): kernel-owned MemoryPort shared by
     # Tektos and future plugins.
@@ -399,6 +418,9 @@ async def lifespan(app: FastAPI):
                 password=password,
                 database=database,
             )
+            # ADR-073 D4: pass the kernel-owned EmbeddingsPort to Graphiti
+            # so it uses OllamaEmbeddingsAdapter's native /api/embed path
+            # instead of the deprecated OpenAI-shim.
             temporal = GraphitiTemporalIndex(
                 uri=uri,
                 user=user,
@@ -406,6 +428,7 @@ async def lifespan(app: FastAPI):
                 llm_url=llm_url,
                 llm_model=llm_model,
                 embed_model=embed_model,
+                embeddings=registry.embeddings,
             )
             amg = AmgGuardPolicy(policy_preset="tiered")
             return DozerDbMemoryAdapter(graph=graph, amg=amg, temporal=temporal)
@@ -703,7 +726,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.9.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.10.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------

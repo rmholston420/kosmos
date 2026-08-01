@@ -1,48 +1,36 @@
-# Kosmos Session Handoff — 2026-08-01 09:46 EDT
+# Kosmos Session Handoff — 2026-08-01 10:36 EDT
 
 ## Current build-sequencing position
-
-- **Stage / phase:** Stage 1.5 Wave F complete on Part 2; Wave F overall STILL PROPOSED (ADR-072 not yet ratified)
-- **Plugin / kernel component:** GUI shell + kernel introspection + Zetesis end-to-end
-- **Port(s) in progress:** none — Wave F Part 2 shipped, awaiting decision on next PR scope
+- **Stage / phase:** Stage 1.6 · Phase 0 (EmbeddingsPort lockdown)
+- **Plugin / kernel component:** kernel-owned `EmbeddingsPort` + primary `OllamaEmbeddingsAdapter` + Graphiti wiring migration
+- **Port(s) in progress:** `ports/embeddings.py` (new); `LLMPort.embed()` (deprecated)
 
 ## Completed this session
-
-- **F6** (`c223b11`) — ADR-056 §D3 no-op search compliance. Adapter-side loosening: `QdrantVectorAdapter.search(query_vector=[])` returns `[]`. ADR-056 amended with 2026-08-01 STATUS AMENDMENT. Non-list still rejected. Zetesis SSE `event: completed` reached in 12.1s.
-- **F3** (`c1d39d0`) — MemoryIntegrityPanel: client-side provenance substring search + 10-bin confidence histogram in Nagtang gold (Ratnasambhava scale). Filter-empty branch when substring hides all nodes.
-- **F4** (`97ba222`) — NotificationTray Radix Dialog drawer wired into PersistentShell. Subscribes to `WS_DEFAULT_EVENT_TYPES`, rolling history capped at 100, tone classification via ADR-072 accents.
-- **F5** (`a0fb05e`) — `/kernel` introspection page: read-only browsable renderer of `/api/kernel/schema`. Three sections (plugins, aggregate panels, design tokens). Sidebar sixth Job route.
-- **F3 test race-fix** (`90786a4`) — `beforeEach` in `17-memory-integrity-f3.spec.ts` now `Promise.race`s the three terminal branches so filter-empty expectation doesn't hit a mid-mount window.
-- **PR #19** MERGED as squash `56a7fe6` at 2026-08-01 09:46 EDT. Full Playwright suite: **68 passed, 7 skipped, 0 failed** on Colossus.
+- ADR-073 authored → Proposed → Ratified v25; merged as PR #22 (`1b41fc9`).
+- Code branch `stage-1-6-p0-embeddings-port` cut from `main`.
+- New port `ports/embeddings.py` + `OllamaEmbeddingsAdapter` + `KosmosGraphitiEmbedder` + kernel boot + Graphiti migration + LLMPort deprecation warnings.
+- Kernel version bumped `6.9.0 → 6.10.0`.
+- Tests: 25 pass (8 protocol + 10 adapter fast + 7 kernel), 1 skipped (live-Ollama tier gated by `KOSMOS_STAGE_16_LIVE=1`).
+- PORTING_LEDGER updated with Stage 1.6 Phase 0 section (no new vendored code).
 
 ## Remaining before current Definition of Done
-
-Wave F Definition of Done (from ADR-072 Proposed):
-
-- [x] F0 · design-token bridge + shell chrome (PR #18)
-- [x] F1 · algedonic pill (PR #18)
-- [x] F2 · Cmd+K palette stub (PR #18)
-- [x] F3 · MemoryIntegrity provenance search + histogram (PR #19)
-- [x] F4 · NotificationTray drawer (PR #19)
-- [x] F5 · /kernel introspection page (PR #19)
-- [x] F6 · ADR-056 §D3 no-op search compliance (PR #19)
-- [ ] **ADR-072 ratification PR** — flip status Proposed → Ratified v25, bump kernel `6.8.0 → 6.9.0`, fold in Next.js CVE-2025-66478 bump
+- Push branch + open code PR (ADR-073 ratification code).
+- Colossus verify: pull branch, run `pytest adapters/embeddings adapters/memory/dozerdb tests/ports tests/kernel/test_stage_1_6_adr_073_embeddings_port.py -q`, confirm 25 green + live-tier passes with `KOSMOS_STAGE_16_LIVE=1`.
+- Optional: run full Playwright regression (should stay 67/6/0 — no UI changes in this PR).
+- Merge PR with `--admin` bypass on user approval.
 
 ## Open questions / awaiting user answer
-
-Two ADR authorings to sequence:
-
-1. **ADR-072 ratification** — pure paper PR (status + version + Next.js CVE bump), or hold until F7 test-hardening also lands?
-2. **ADR-073 (EmbeddingsPort + Ollama nomic-embed-text routing)** — needed to fix ODR OpenAI fallback observed in F6 verification. Stage 6.4 territory.
-3. **ADR-056 §D3 failure-semantics STATUS AMENDMENT** — small: current runtime publishes `event: completed` with an `error` field populated on inner-loop failure; spec §D3 says on failure completed is NOT published. Two options: amend spec to allow graceful-completion-with-error (better GUI UX), or fix plugin to re-raise. Ask user which.
+- none
 
 ## Exact next action
+On Colossus:
 
-Ask user which of the three follow-ups is next:
-
-- **(A)** ADR-072 ratification PR (paper + version bump + Next.js CVE)
-- **(B)** ADR-073 authoring + EmbeddingsPort + Ollama routing (fixes ODR OpenAI fallback)
-- **(C)** ADR-056 §D3 failure-semantics amendment (small, standalone)
-- **(D)** F7 test-hardening (kill-switch afterEach guard + serialize/retry Zetesis SSE specs)
-
-Or a combination. Default recommendation: (C) first (tiny), then (A), then (B), with (D) folded into (A) opportunistically.
+```bash
+cd ~/dev/kosmos
+git fetch origin
+git checkout stage-1-6-p0-embeddings-port
+git pull --ff-only
+python -m pytest tests/ports/test_embeddings_protocol.py adapters/embeddings/ollama/test_contract.py tests/kernel/test_stage_1_6_adr_073_embeddings_port.py -q
+KOSMOS_STAGE_16_LIVE=1 python -m pytest adapters/embeddings/ollama/test_contract.py::test_live_nomic_embed_text_is_768_dim -q
+curl -s http://127.0.0.1:8000/health | grep -o '"version":"[^"]*"'   # expect 6.10.0 once kernel restarted
+```
