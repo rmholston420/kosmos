@@ -2671,3 +2671,19 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** VectorPort (semantics loosened at adapter boundary); Zetesis research call path now completes end-to-end on live Colossus.
 - **PORTING_LEDGER / ADR updated:** ADR-056 amended (2026-08-01). ADR-073 (EmbeddingsPort + Ollama nomic-embed-text) referenced in the amendment as the follow-on Stage 6.4 real-retrieval work; not yet authored.
 - **Stop-condition status:** F6 slice **met** on branch; awaiting Colossus verification (`git pull` + kernel restart + `curl /api/zetesis/research` + Playwright `16-zetesis-completes.spec.ts`). PR #19 scope now F3 + F4 + F5 + F6.
+
+## 2026-08-01 09:34 EDT — Stage 1.5 Wave F · F3 · MemoryIntegrity provenance search + confidence histogram
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Gnosis · MEMORY_INTEGRITY panel
+- **What changed:**
+  - Added client-side search-by-provenance filter to `MemoryIntegrityPanel`. Case-insensitive substring match on the `provenance` field of already-loaded nodes; filtering happens locally (no extra `/api/gnosis/graph/nodes` round-trip). Empty query = no filter; nodes with `provenance == null` are dropped when a query is active.
+  - Added confidence histogram (10 [0.0, 0.1) … [0.9, 1.0] bins) over the *filtered* node set. Nodes with `null` confidence are counted separately as `unknown`. Histogram bars use `--rgpa-accent-gold` (Nagtang gold on Ratnasambhava scale) per ADR-072 Tibetan design system.
+  - Added summary stats row: `n` (filtered total), `μ` (arithmetic mean over known confidence), `?` (unknown count, hidden when zero).
+  - Added distinct empty state (`memory-integrity-filter-empty`) that renders when the filter hides all nodes but the underlying node set is non-empty.
+  - Edges are filtered transitively by endpoint membership inside the existing `toElements(nodes, edges, communities)` call — no edge-level filter code added.
+- **Files touched:**
+  - `ui/components/panels/MemoryIntegrityPanel.tsx` (~165 lines added: `provenanceQuery` state, `filteredNodes` / `confidenceStats` `useMemo`, search input in header, stats section above canvas, filter-empty branch)
+  - `ui/tests/17-memory-integrity-f3.spec.ts` (new, 3 tests: input present + controlled, stats section with 10 bins visible, filter round-trip restores stats)
+- **Ports / adapters affected:** none (pure UI on kernel data already flowing).
+- **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F3 falls under Wave F's "make placeholders real"; ratified after full Wave F lands.
+- **Stop-condition status:** F3 slice **met** on branch; awaiting Colossus verification.
