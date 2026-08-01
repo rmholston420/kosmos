@@ -3056,3 +3056,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met
+
+## 2026-08-01 11:40 EDT — ADR-075 authored (Stage 1.6 Phase 2)
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · umbrella ADR (docs-only, no code yet)
+- **What changed:** Authored `docs/adrs/ADR-075-stage-1-6-phase-2.md` (Proposed) covering five decisions: D1 hard-delete GraphitiTemporalIndex + KosmosGraphitiEmbedder (supersedes ADR-073 §4 deferral); D2 `POST /api/memory/search-semantic` + `/memory/search` UI page; D3 kernel drain subscribed to `zetesis.research.completed` fanning out to `MemoryPort.write_event` (ADR-007 preserved); D4 client-side `next_cursor` pagination for `/gnosis/graph` with `MAX_PAGES=10`; D5 kernel version 6.11.0 → 6.12.0. Index row appended to `docs/adrs/README.md`.
+- **Files touched:** docs/adrs/ADR-075-stage-1-6-phase-2.md (new); docs/adrs/README.md (row insert)
+- **Ports / adapters affected:** none yet — code lands in a follow-on PR after ratification
+- **PORTING_LEDGER / ADR updated:** ADR-075 (Proposed)
+- **Stop-condition status:** in-progress — awaiting PR review + ratification
