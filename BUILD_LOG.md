@@ -2004,3 +2004,20 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort (real DozerDbMemoryAdapter + in-memory backends), VectorPort (real QdrantVectorAdapter + InMemoryQdrantBackend), DataPort (FilesystemDataAdapter rooted at `~/.local/state/kosmos/data`), ResourcePort (shared kernel `SqliteResourceAdapter`), NotificationPort (shared kernel `KernelNotificationAdapter`), FrontendContractPort (shared kernel instance — required for descriptor visibility), EventBusPort (shared), LLMPort (real `OllamaAdapter`), SearchPort (real `SearxngAdapter`), ObservabilityPort (real `OtelStackObservabilityAdapter` with `StubOtelBackend`).
 - **PORTING_LEDGER / ADR updated:** ADR-058 (new); `PORTING_LEDGER.md` Stage 6.5 block appended.
 - **Stop-condition status:** in-progress — DoD conditions asserted by `test_stage_6_5_zetesis_mount.py`; Colossus smoke pending post-pull. Tag `stage-6-5-zetesis-mount` deferred until Colossus 11-endpoint smoke + new integration tier both green.
+
+## 2026-08-01 01:48 EDT — Stage 6.5.1+6.5.2 · Phrouros wire + resource seed (ADR-059)
+
+- **Stage / plugin / port:** Stage 6.5.1 · Kernel · TraceFeedPort + Stage 6.5.2 · ResourcePort seed
+- **What changed:**
+  - Authored `docs/adrs/ADR-059-stage-6-5-1-2-phrouros-wire-and-resource-seed.md` (Ratified). Locks three decisions: (D1) Phrouros wires on kernel start over `InMemoryTraceFeedAdapter` with `LoopDetector` only — the three skeleton detectors raise `DetectorNotImplementedError` per `plugins/phrouros/detector.py` docstring and `UnauthorizedToolDetector` requires a curated tool allowlist not yet defined at kernel level; (D2) resource seed of the six canonical `ResourceKind` values written at boot via `replenish()` — `time=1440`, `money=100.00`, `attention=100`, `compute=100`, `knowledge=0`, `energy=100`; failure is best-effort (surfaces under `registry.errors["resource_seed"]` without degrading the resource subsystem); (D3) kernel version 6.5.0 → 6.5.2.
+  - Amended `kernel/app.py`: added `KERNEL_RESOURCE_SEED` module constant. Resource-seed block runs after `_boot_resource` in the lifespan. Phrouros boot block composes `PhrourosEngine(trace_feed=InMemoryTraceFeedAdapter(), detectors=(LoopDetector(),), notification_port=..., resource_port=..., event_bus=...)` and calls `await engine.start()`. `_BootRegistry` gains a `trace_feed` slot. Shutdown stops Phrouros then closes the trace feed before closing the event bus.
+  - Added `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py` — 5 fast integration tests: `/health.subsystems.phrouros` is True, `/api/phrouros/anomalies` returns 200 with `[]` on boot, publishing 6 identical `TraceEvent`s into `registry.trace_feed` produces a `loop_detector` anomaly visible on `/api/phrouros/anomalies`, `/api/resources/balances` returns non-None `ResourceBalance` for all six canonical kinds, seed values match `KERNEL_RESOURCE_SEED`.
+  - Amended `docs/adrs/README.md`: added ADR-059 row.
+- **Files touched:**
+  - `docs/adrs/ADR-059-stage-6-5-1-2-phrouros-wire-and-resource-seed.md` (new)
+  - `docs/adrs/README.md` (row insertion)
+  - `kernel/app.py` (resource seed + Phrouros wire; version 6.5.0 → 6.5.2)
+  - `tests/kernel/test_stage_6_5_1_2_phrouros_and_seed.py` (new)
+- **Ports / adapters affected:** TraceFeedPort now bound to `InMemoryTraceFeedAdapter` at kernel level; ResourcePort seeded via `replenish()`; no new adapter files.
+- **PORTING_LEDGER / ADR updated:** ADR-059 (new); PORTING_LEDGER unchanged (all adapters already listed).
+- **Stop-condition status:** in-progress — DoD conditions asserted by the new test tier; Colossus smoke pending post-pull. `/api/phrouros/anomalies` transitions from 503 → 200; `/api/resources/balances` transitions from null-fields → real balances.

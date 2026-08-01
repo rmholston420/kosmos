@@ -1,22 +1,29 @@
-"""Kosmos kernel FastAPI app (Stage 6.5 — Zetesis mount).
+"""Kosmos kernel FastAPI app (Stage 6.5.1+6.5.2 — Phrouros wire + resource seed).
 
-Boot sequence:
+Boot sequence (Stage 6.5.1+6.5.2):
 
-1. Six kernel subsystems boot behind per-subsystem try/except:
+1. Seven kernel subsystems boot behind per-subsystem try/except:
    ``notification``, ``frontend_contract``, ``resource``, ``event_bus``,
-   ``approval``, ``phrouros`` (deferred to a later stage).
-2. Zetesis plugin mounts once ``frontend_contract`` has booted (real
-   adapter mount, ADR-058). Failure is degraded, not fatal — the plugin
-   error surfaces under ``registry.errors["zetesis"]`` and
-   ``/api/kernel/plugins`` returns ``[]``.
+   ``approval``, ``phrouros`` (now real — ADR-059), ``zetesis`` (ADR-058).
+2. Resource subsystem is seeded at boot with baseline balances so
+   ``/api/resources/balances`` returns real numbers instead of ``null``
+   (ADR-059 §D2). Failure is degraded, not fatal.
+3. Phrouros mounts once ``event_bus``, ``notification``, ``resource``
+   have booted. It composes ``PhrourosEngine`` over the shipped
+   ``InMemoryTraceFeedAdapter`` (ports/trace_feed.py) + the four
+   ``ports/observability`` detectors + the shared kernel adapters
+   (ADR-059 §D1). Failure surfaces under ``registry.errors["phrouros"]``.
 
-Kernel HTTP endpoints are unchanged from Stage 6.4.
+Kernel HTTP endpoints unchanged from Stage 6.5 except
+``/api/phrouros/anomalies`` now returns 200 with real (usually empty)
+records instead of 503.
 """
 
 from __future__ import annotations
 
 import dataclasses
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -38,6 +45,7 @@ class _BootRegistry:
         self.phrouros: Any = None
         self.event_bus: Any = None
         self.zetesis: Any = None
+        self.trace_feed: Any = None
 
 
 registry = _BootRegistry()
@@ -54,6 +62,28 @@ def _try(subsystem: str):
             return None
 
     return wrap
+
+
+# ---------------------------------------------------------------------------
+# Resource seed defaults (ADR-059 §D2)
+# ---------------------------------------------------------------------------
+
+
+# Kept in one place so tests and docs can reference them.
+# ResourceKind values are enumerated in ports/resource.py: time, money,
+# attention, compute, knowledge, energy (six canonical kinds per spec §16).
+# Seed values are baselines the operator can adjust with subsequent
+# ``replenish()`` calls; they are NOT commitments about real physical
+# resources, only presentation defaults so the GUI's resource-meter
+# widgets render immediately at boot.
+KERNEL_RESOURCE_SEED: dict[str, Decimal] = {
+    "time": Decimal("1440"),        # one day of minutes
+    "money": Decimal("100.00"),     # $100 discretionary budget
+    "attention": Decimal("100"),    # normalized 0-100 pool
+    "compute": Decimal("100"),      # normalized capacity pool
+    "knowledge": Decimal("0"),      # accrues from Zetesis / research output
+    "energy": Decimal("100"),       # normalized human-energy pool
+}
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +131,23 @@ async def lifespan(app: FastAPI):
 
     registry.resource = _boot_resource
 
+    # --- Resource seed (ADR-059 §D2) — best-effort ---------------------------
+    if registry.resource is not None:
+        try:
+            from ports.resource import ResourceKind
+
+            for kind_name, amount in KERNEL_RESOURCE_SEED.items():
+                try:
+                    kind = ResourceKind(kind_name)
+                except ValueError:
+                    # Kind not in current ResourceKind enum; skip silently.
+                    # Seed table intentionally lists forward-compatible names.
+                    continue
+                await registry.resource.replenish(kind, amount)
+        except Exception as exc:  # noqa: BLE001
+            # Resource stays up; seeding is best-effort.
+            registry.errors["resource_seed"] = f"{type(exc).__name__}: {exc}"
+
     # --- EventBus (Valkey; env-driven URL, best-effort) -----------------------
     @_try("event_bus")
     def _boot_event_bus():
@@ -136,14 +183,45 @@ async def lifespan(app: FastAPI):
 
     registry.approval = _boot_approval
 
-    # --- Phrouros (best-effort — needs TraceFeedPort we don't wire yet) ------
-    # We intentionally skip PhrourosEngine at 6.4 boot: it requires a real
-    # TraceFeedPort adapter which is not yet in adapters/. Anomalies endpoint
-    # returns 503 until Stage 6.5.1+.
-    registry.errors["phrouros"] = (
-        "PhrourosEngine not wired at 6.5 — TraceFeedPort adapter not yet "
-        "provisioned. See ADR-046."
-    )
+    # --- Phrouros (ADR-059 §D1 — wire the real engine over InMemoryTraceFeedAdapter) ---
+    # Requires event_bus + notification + resource to have booted. If any is
+    # missing we surface the reason and continue degraded.
+    if (
+        registry.event_bus is None
+        or registry.notification is None
+        or registry.resource is None
+    ):
+        registry.errors["phrouros"] = (
+            "phrouros depends on event_bus + notification + resource; "
+            "one of them failed to boot"
+        )
+    else:
+        try:
+            # Only LoopDetector ships a real implementation at Stage 6.5.1
+            # (per plugins/phrouros/detector.py module docstring). The
+            # three skeletons (bus_factor_1, model_swap_slo, stub_degradation)
+            # raise DetectorNotImplementedError on detect() and are wired in
+            # by their own future stages. UnauthorizedToolDetector requires
+            # a curated tool allowlist not yet defined at kernel level and
+            # is deferred to the stage that produces one.
+            from plugins.phrouros.detectors.loop import LoopDetector
+            from plugins.phrouros.engine import PhrourosEngine
+            from ports.trace_feed import InMemoryTraceFeedAdapter
+
+            trace_feed = InMemoryTraceFeedAdapter()
+            registry.trace_feed = trace_feed
+
+            engine = PhrourosEngine(
+                trace_feed=trace_feed,
+                detectors=(LoopDetector(),),
+                notification_port=registry.notification,
+                resource_port=registry.resource,
+                event_bus=registry.event_bus,
+            )
+            await engine.start()
+            registry.phrouros = engine
+        except Exception as exc:  # noqa: BLE001
+            registry.errors["phrouros"] = f"{type(exc).__name__}: {exc}"
 
     # --- Zetesis plugin mount (ADR-058) ---------------------------------------
     # Depends on frontend_contract having booted; reuses the same
@@ -173,10 +251,22 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown — stop the plugin then close the event bus.
+    # Shutdown — stop plugins/engines then close the event bus.
     if registry.zetesis is not None:
         try:
             await registry.zetesis.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
+    if registry.phrouros is not None:
+        try:
+            await registry.phrouros.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
+    if registry.trace_feed is not None:
+        try:
+            await registry.trace_feed.close()
         except Exception:  # noqa: BLE001
             pass
 
@@ -191,7 +281,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.2", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
