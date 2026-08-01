@@ -2334,3 +2334,13 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — awaiting Colossus re-run.
+
+## 2026-08-01 05:36 EDT — Stage 1 · GUI shell fixup #7 — always render AgentTracePanel (unowned Phrouros slot)
+
+- **Stage / plugin / port:** Stage 1 · GUI shell.
+- **What changed:**
+  - `ui/components/PanelGrid.tsx` — when zero plugins register an `AGENT_TRACE` panel, the grid used to fall back to `PlaceholderPanel`, which reuses `data-testid="panel-AGENT_TRACE"` but never renders the `agent-trace-list`/`agent-trace-empty` children. AGENT_TRACE surfaces `/api/phrouros/anomalies` directly (unowned by any panel-registering plugin), so always render `AgentTracePanel` for that slot regardless of registrations. Other slots retain the placeholder fallback.
+- **Files touched:** `ui/components/PanelGrid.tsx`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none.
+- **Stop-condition status:** in-progress — awaiting Colossus re-run.

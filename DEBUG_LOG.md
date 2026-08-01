@@ -586,3 +586,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Coerced fetch results to arrays with `Array.isArray(r) ? r : []` in AgentTracePanel, ApprovalsQueuePanel, and the Tektos index page. Kernel endpoint itself is unchanged.
 - **Files changed:** `ui/components/panels/AgentTracePanel.tsx`, `ui/components/panels/ApprovalsQueuePanel.tsx`, `ui/app/tektos/page.tsx`.
 - **Related BUILD_LOG entry:** 2026-08-01 05:34 EDT.
+
+## 2026-08-01 05:36 EDT — Agent Trace: PlaceholderPanel shadows the real component when no plugin registers the slot
+
+- **Symptom:** `expect(list.or(empty)).toBeVisible()` still fails after array-coercion hardening. `/api/phrouros/anomalies` returns `200 []`, panel wrapper `panel-AGENT_TRACE` is visible, but neither `agent-trace-list` nor `agent-trace-empty` ever appears.
+- **Affected stage / plugin / port:** Stage 1 · GUI shell.
+- **Root cause:** `PanelGrid.renderPanelBySlot()` returns `PlaceholderPanel` when `slotPanels.length === 0`. `PlaceholderPanel` reuses `data-testid={`panel-${slot}`}`, so the wrapper looks present but it renders `panel-AGENT_TRACE-empty`, not `agent-trace-empty`. The real `AgentTracePanel` (which owns those child testids) was never mounted.
+- **Fix applied:** Special-case AGENT_TRACE in `PanelGrid` to always render `AgentTracePanel`, since Phrouros anomalies are surfaced directly from the kernel and are not owned by any panel-registering plugin.
+- **Files changed:** `ui/components/PanelGrid.tsx`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:36 EDT.

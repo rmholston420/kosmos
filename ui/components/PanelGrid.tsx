@@ -16,6 +16,14 @@ function renderPanelBySlot(slot: string, panels: Panel[]) {
     .filter((p) => p.slot === slot)
     .sort((a, b) => b.priority - a.priority);
 
+  // AGENT_TRACE reads directly from Phrouros (/api/phrouros/anomalies)
+  // and is not owned by any panel-registering plugin. Always render its
+  // real component so it can surface anomalies (or the empty state)
+  // regardless of PanelSlot registration.
+  if (slot === "AGENT_TRACE") {
+    return <AgentTracePanel key={slot} panels={slotPanels} />;
+  }
+
   if (slotPanels.length === 0) {
     return <PlaceholderPanel key={slot} slot={slot} />;
   }
@@ -24,8 +32,6 @@ function renderPanelBySlot(slot: string, panels: Panel[]) {
       return <ApprovalsQueuePanel key={slot} panels={slotPanels} />;
     case "GOVERNANCE":
       return <GovernancePanel key={slot} panels={slotPanels} />;
-    case "AGENT_TRACE":
-      return <AgentTracePanel key={slot} panels={slotPanels} />;
     default:
       return <PlaceholderPanel key={slot} slot={slot} populated />;
   }
