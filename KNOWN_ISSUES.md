@@ -54,3 +54,14 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
   4. If AREX-Turbo wins under tuned parity, Zetesis's `LLMPort` binding can be swapped without any port-contract change (ADR-052 Q3=A skeleton was designed for this — inner-loop-agnostic port surface).
 - **Related DEBUG_LOG search terms:** "AREX", "arex-turbo", "max context length", "context-ceiling", "structural_finalize", "ADR-010", "head-to-head", "Zetesis inner loop", "run_arex_trial", "run_odr_trial".
 - **Candidate revisit stage:** post-Phase-6 (Zetesis exit-gate landed, next phase started). Not blocking Stage 6.3 (proper) (Zetesis kernel wiring), Stage 6.4 (Stage-6 exit gate), or any downstream stage. See `ADR-055-stage-6-4-odr-tuned-ratification.md` §Rationale point 3 for cost-of-delay analysis.
+
+### 2026-08-01 — Tektos UI htmx asset path breaks under kernel mount
+
+- **Blocks:** none (dashboard HTML renders; only client-side htmx behavior degrades)
+- **Symptom:** `plugins/tektos/ui/templates/*.html` inserts `<script src="/htmx.min.js"></script>` (root-relative). When the UI is mounted at `/tektos-ui` in the kernel, browsers resolve that URL against the kernel root, which returns 404. Verified on Colossus:
+  - `GET /htmx.min.js` → 404
+  - `GET /tektos-ui/htmx.min.js` → 200
+  Server-side smoke tests still pass because they hit the sub-app path directly; browser-side htmx interactions (approve/execute HTMX POST swaps) will silently no-op until this is fixed.
+- **Attempted fixes:** none yet (isolated at 2026-08-01 during Stage 6.5.8 live smoke).
+- **Next investigation:** either (a) change the template to `<script src="htmx.min.js"></script>` (relative to sub-app root) or `<script src="./htmx.min.js"></script>`; or (b) inject a `SCRIPT_NAME`-aware asset URL builder into the Jinja env of `build_tektos_ui_app` so mount-prefix changes stay transparent. Option (b) is preferred — matches how `starlette.Request.url_for` handles mounted apps.
+- **Related DEBUG_LOG search terms:** `tektos-ui htmx 404`, `SCRIPT_NAME`, `mount prefix`, `root-relative asset`.

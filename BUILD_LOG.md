@@ -2173,3 +2173,18 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (zero new ports; reuses `ApprovalResolverPort`, `MemoryPort`, `ExecutorPort` — all pre-existing).
 - **PORTING_LEDGER / ADR updated:** ADR-065 authored + ratified.
 - **Stop-condition status:** in-progress — PR #9 opened, awaiting Colossus retest.
+
+## 2026-08-01 04:19 EDT — Stage 6.5.8 · SHIPPED · Tektos UI kernel mount
+
+- **Stage / plugin / port:** Stage 6.5.8 · Tektos UI · kernel mount at `/tektos-ui/*` (ADR-065)
+- **What changed:**
+  - PR #9 squash-merged to main at `1b9af612`.
+  - Tag `stage-6-5-8-tektos-ui-mount` pushed (annotated SHA `aa549c3a`).
+  - Colossus retest green: 12/12 fast tests in 0.30s (kernel-boot + sub-app contract + boot-degradation tiers). Live smoke green: `/health.subsystems.tektos_ui = true`, `GET /tektos-ui/healthz = 200 ok`, `GET /tektos-ui/ = 200` (Kosmos Tektos Dashboard HTML), `GET /tektos-ui/htmx.min.js = 200`.
+  - One follow-up issue filed in `KNOWN_ISSUES.md`: sub-app template hardcodes `<script src="/htmx.min.js">` (root-relative), which 404s under kernel mount. Server-side contract is correct; only client-side htmx binding is affected. Deferred to Stage 3.11 UI template hardening.
+- **Files touched:**
+  - `KNOWN_ISSUES.md` (new entry — htmx root-relative asset path)
+  - `BUILD_LOG.md` (this entry)
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — Stage 6.5.8 shipped + tagged.
