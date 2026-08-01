@@ -77,12 +77,14 @@ class PatchApplied:
     commit_sha:
         Full 40-char SHA of the commit produced.
     files_changed:
-        Number of files touched by the commit (parsed from ``git
-        show --stat``).
+        Tuple of repo-relative paths touched by the commit, in the
+        order ``git show --name-only`` emits them. Empty tuple only
+        if git reports no touched paths (should not happen in the
+        patcher flow — we prefer a safe default over a raise).
     """
 
     commit_sha: str
-    files_changed: int
+    files_changed: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,7 +263,7 @@ class Patcher:
 
             stat = await self._sandbox.exec(
                 handle=self._handle,
-                argv=("git", "show", "--stat", "--format=", sha),
+                argv=("git", "show", "--name-only", "--format=", sha),
                 approval_id=self._approval_id,
                 timeout_seconds=10.0,
             )
@@ -270,7 +272,7 @@ class Patcher:
             log.info(
                 "patch applied at %s (%d files, commit_msg=%r)",
                 sha[:12],
-                files_changed,
+                len(files_changed),
                 commit_message[:80],
             )
             return PatchApplied(
@@ -378,33 +380,22 @@ def _truncate(text: str) -> str:
     )
 
 
-def _parse_files_changed(show_stat: str) -> int:
-    """Parse ``git show --stat --format=`` output for the file count.
+def _parse_files_changed(show_name_only: str) -> tuple[str, ...]:
+    """Parse ``git show --name-only --format=`` output into a tuple of paths.
 
-    ``git show --stat --format=`` prints the diffstat plus a summary
-    line like::
+    ``git show --name-only --format=`` prints one repo-relative path
+    per line with no header (``--format=`` suppresses the commit
+    header) and no diffstat. Blank lines and leading/trailing
+    whitespace are stripped.
 
-        3 files changed, 12 insertions(+), 4 deletions(-)
-
-    Returns 0 when the summary line is missing (e.g. commits with no
-    file changes — should not happen in the patcher flow, but we
-    prefer a safe default over a raise).
+    Returns an empty tuple when no paths are reported (e.g. commits
+    with no file changes — should not happen in the patcher flow, but
+    we prefer a safe default over a raise).
     """
-    for raw_line in reversed(show_stat.splitlines()):
+    paths: list[str] = []
+    for raw_line in show_name_only.splitlines():
         line = raw_line.strip()
         if not line:
             continue
-        parts = line.split()
-        # Match "N file changed," or "N files changed," — the trailing
-        # comma is part of the git format string, so a plain equality
-        # check is enough.
-        if (
-            len(parts) >= 3
-            and parts[1].startswith("file")
-            and parts[2] == "changed,"
-        ):
-            try:
-                return int(parts[0])
-            except ValueError:
-                return 0
-    return 0
+        paths.append(line)
+    return tuple(paths)

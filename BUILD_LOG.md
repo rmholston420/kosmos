@@ -3620,3 +3620,17 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none (UI-layer wiring only; consumes existing kernel HTTP endpoints).
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met for UI wiring — new test IDs `tektos-exec-{id,final-status,tasks-succeeded,tasks-attempted,tasks-failed,commit-count,commit-list}` and `tektos-diff-{base-ref,task-count,body}` render; disabled/enabled gating matches the state machine. Colossus verification pending: `cd ui && pnpm install && pnpm build && pnpm test:e2e -- 29-tektos-plan-detail.spec.ts` (03 smoke needs `KOSMOS_SEED_APPROVAL_ID` + running kernel with `_boot_tektos_sandbox` succeeded).
+
+## 2026-08-01 19:02 EDT — Patcher.PatchApplied.files_changed now list of paths (fixes loop seam)
+
+- **Stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` · `patcher.PatchApplied` ↔ `loop.TaskAttempt`
+- **What changed:** Aligned real `Patcher` to loop's declared `tuple[str, ...]` contract for `files_changed`, unblocking real successful-patch end-to-end. `git show --stat --format=` → `git show --name-only --format=`; parser rewritten; unit tests updated; integration test updated. No changes to `loop.py`, `test_loop.py`, or ADR-080.
+- **Files touched:**
+  - `plugins/tektos/executor/patcher.py`
+  - `plugins/tektos/executor/tests/test_patcher.py`
+  - `plugins/tektos/executor/tests/test_patcher_integration.py`
+  - `DEBUG_LOG.md` (closed diagnosis entry)
+  - `KNOWN_ISSUES.md` (removed resolved entry)
+- **Ports / adapters affected:** none (internal executor contract only).
+- **PORTING_LEDGER / ADR updated:** — (ADR-080 leaves `files_changed?` optional with no fixed type; list of paths is compatible).
+- **Stop-condition status:** met (unit tests to be verified on Colossus; integration test opt-in via `KOSMOS_TEKTOS_REAL_GIT=1` requires real git).

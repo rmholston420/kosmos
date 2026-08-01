@@ -863,3 +863,22 @@ Entry format per `kosmos-log-maintenance` skill:
   - `plugins/tektos/executor/patcher.py` (2. Apply step + docstring)
   - `plugins/tektos/executor/tests/test_patcher.py` (dropped `test_git_add_failure_raises`, updated happy-path response sequence)
 - **Related BUILD_LOG entry:** 2026-08-01 17:57 EDT (Stage 3.14b step 2c landing).
+
+## 2026-08-01 19:02 EDT — executor loop files_changed type contract mismatch with real Patcher
+
+- **Symptom:** `TypeError: 'int' object is not iterable` at `plugins/tektos/executor/loop.py:467` (`attributes["files_changed"] = list(files_changed)`) when the real `Patcher` returned `PatchApplied(files_changed=<int>)` and the loop tried to serialize it into the MemoryPort `tektos.executor.task_attempted` event. Blocked any real successful-patch end-to-end run of `/api/tektos/plan/{approval_id}/execute`.
+- **Affected stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` · `patcher.PatchApplied` ↔ `loop.TaskAttempt`
+- **Root cause:** Two contracts collided. `PatchApplied.files_changed` was declared `int` (file count parsed from `git show --stat`). `TaskAttempt.files_changed` and `_emit_task_attempted(...)` were declared `tuple[str, ...]` (list of paths). The loop's fake `_FakePatcher` in `test_loop.py` matched the loop's declared shape; the real `Patcher` matched the historical int shape. Both test suites were internally consistent but disagreed with each other, and no test crossed the seam.
+- **Fix applied:** Aligned `Patcher` to the loop-side contract (list of paths is more useful downstream: MemoryPort events, provenance correlation, review UI). Changes:
+  - `PatchApplied.files_changed: int` → `tuple[str, ...]` (repo-relative paths, order from `git show --name-only`).
+  - `git show --stat --format= <sha>` → `git show --name-only --format= <sha>`.
+  - `_parse_files_changed(str) -> int` → `_parse_files_changed(str) -> tuple[str, ...]` (splitlines, strip, drop blanks).
+  - Log line switched from raw int to `len(files_changed)`.
+  - `test_patcher.py`: happy-path "show" fake stdout now `"src/foo.py\n"`; `_parse_files_changed` unit tests rewritten (singular / plural / whitespace-and-blank-lines / empty-input).
+  - `test_patcher_integration.py`: `out.files_changed == 1` → `out.files_changed == ("hello.py",)`.
+  - No change to `loop.py`, `test_loop.py`, or ADR-080 (which already spec'd `files_changed?` as optional attribute with no fixed type — a list of paths is compatible).
+- **Files changed:**
+  - `plugins/tektos/executor/patcher.py`
+  - `plugins/tektos/executor/tests/test_patcher.py`
+  - `plugins/tektos/executor/tests/test_patcher_integration.py`
+- **Related BUILD_LOG entry:** 2026-08-01 19:02 EDT

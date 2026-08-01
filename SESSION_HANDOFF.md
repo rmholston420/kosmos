@@ -1,42 +1,35 @@
-# Kosmos Session Handoff — 2026-08-01 18:57 EDT
+# Kosmos Session Handoff — 2026-08-01 19:02 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 3.14b step 3 COMPLETE (UI wiring for /execute + /diff)
-- **Plugin / kernel component:** Tektos executor / Next.js UI
-- **Port(s) in progress:** none — next work is Colossus end-to-end verify (step 4)
+- **Stage / phase:** Stage 3.14b step 3 COMPLETE + verified · executor `files_changed` contract fixed (uncommitted)
+- **Plugin / kernel component:** Tektos executor (`Patcher` / `TektosExecutorLoop`) + Next.js UI
+- **Port(s) in progress:** none
 
 ## Completed this session
-- Stage 3.14b step 2e — kernel endpoints wired (`32ad696`, 96/96 tests verified on Colossus)
-- Stage 3.14b step 3 — UI wiring:
-  - `ui/lib/kernel-client.ts`: `TektosExecutionResult` + `TektosDiffResult` types mirror ADR-080 endpoint shapes; `executeTektosPlan` / `getTektosDiff` retyped.
-  - `ui/app/tektos/detail/page.tsx`: Execute + Show Diff no longer placeholders — full state machine (Execute unlocks post-approval, Show Diff unlocks post-execute, 404 surfaced explicitly as "no diff cached"). New `Execution result` and `Worktree diff` panels with dedicated `data-testid`s.
-  - `ui/tests/03-tektos-plan-workflow.spec.ts`: rewritten for the new response shape (execution_id/final_status/commit_shas; no more diff_sha256).
-  - `ui/tests/29-tektos-plan-detail.spec.ts`: header updated (no behavioral changes to the two existing missing/unknown-id smokes).
+- Stage 3.14b step 2e — kernel endpoints wired (commit `32ad696`, 96/96 verified on Colossus).
+- Stage 3.14b step 3 — UI wiring for `/execute` + `/diff` (commit `1626f75`, verified: 2 unseeded detail smokes pass, `pnpm build` clean).
+- Executor `files_changed` contract fix — `Patcher.PatchApplied.files_changed: int → tuple[str, ...]`; parser rewritten to consume `git show --name-only --format=`; unit + integration tests updated to match. `KNOWN_ISSUES.md` entry moved to `DEBUG_LOG.md` as closed diagnosis.
 
 ## Remaining before current Definition of Done
-Step 3's UI wiring DoD is met. Remaining for Stage 3.14b full:
+Full 3.14b DoD:
 
-- **Step 4 — Colossus end-to-end verify:**
-  - `cd ~/dev/kosmos && git pull`
-  - `cd ui && pnpm install && pnpm build` (typecheck + Next.js production build)
-  - `pnpm test:e2e -- 29-tektos-plan-detail.spec.ts` (unseeded smokes)
-  - Optional (seeded): scaffold a real Tektos intention, approve it, run `KOSMOS_SEED_APPROVAL_ID=<id> pnpm test:e2e -- 03-tektos-plan-workflow.spec.ts` with kernel + Ollama live. This will trip the KNOWN_ISSUES `files_changed` bug on any successful patch; expect it to fail at the loop-level MemoryPort write, not at the UI.
+- **Verify** the `files_changed` fix on Colossus:
+  ```bash
+  cd ~/dev/kosmos && git pull
+  pytest plugins/tektos/executor/tests/test_patcher.py -x
+  pytest plugins/tektos/executor/tests/test_loop.py -x
+  # Optional (needs real git + fixture):
+  KOSMOS_TEKTOS_REAL_GIT=1 pytest plugins/tektos/executor/tests/test_patcher_integration.py -x
+  ```
+  Expected: patcher unit tests + loop tests still pass (loop side unchanged), integration test asserts the new tuple shape.
+- **Seeded end-to-end** happy path via `03-tektos-plan-workflow.spec.ts` with a real Tektos intention + Ollama live. This was previously blocked by the `TypeError` at loop:467 — should now proceed through to SUCCEEDED.
 
 ## Open questions / awaiting user answer
-- After Colossus verify: fix the `files_changed` type contract mismatch (KNOWN_ISSUES 2026-08-01) as the next slice, since seeded end-to-end runs will trip it? Or defer and pick a different follow-up?
+- After verify: run the seeded happy path (option 2 from earlier), or move on to a different follow-up (Stage 3.15+ / UI flake cleanup)?
 
 ## Exact next action
-User: pull and typecheck-build the UI on Colossus:
+User: pull and run the executor unit tests on Colossus:
 ```bash
-cd ~/dev/kosmos && git pull && cd ui && pnpm install && pnpm build
+cd ~/dev/kosmos && git pull && pytest plugins/tektos/executor/tests/test_patcher.py plugins/tektos/executor/tests/test_loop.py -x
 ```
-Expected: clean Next.js build (no TS errors on `TektosExecutionResult`, `TektosDiffResult`, or `KernelHttpError` imports).
-
-Then run the unseeded Playwright smoke:
-```bash
-pnpm test:e2e -- 29-tektos-plan-detail.spec.ts
-```
-Expected: 2 passing (missing ?id= error state; unknown id error state).
-
-## Known follow-up work (not blocking step 3)
-- `KNOWN_ISSUES.md` 2026-08-01: `TaskAttempt.files_changed` type contract mismatch between real `Patcher` (returns `int`) and loop (declares `tuple[str, ...]`, calls `list(...)` on it). Blocks any real end-to-end successful patch and thus blocks the seeded `03-tektos-plan-workflow.spec.ts` happy path. Fix targets: either change `TaskAttempt.files_changed` to `int` (matches `Patcher.PatchApplied`) OR change `Patcher._parse_files_changed` to return the tuple of paths (matches loop and existing `test_loop.py` fakes).
+Expected: all patcher + loop tests pass (patcher signature changed, loop signature unchanged).

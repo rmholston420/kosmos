@@ -122,8 +122,8 @@ def _happy_path_responses() -> list[dict[str, Any]]:
         {
             "match": "show",
             "exit_code": 0,
-            "stdout": " src/foo.py | 3 +--\n 1 file changed, 1 insertion(+), 2 deletions(-)\n",
-        },  # stat
+            "stdout": "src/foo.py\n",
+        },  # name-only
         {"match": "rm", "exit_code": 0},                                     # cleanup
     ]
 
@@ -202,7 +202,7 @@ async def test_happy_path_returns_patch_applied(
     out = await patcher.try_apply(patch="--- a\n+++ b\n", commit_message="do it")
     assert isinstance(out, PatchApplied)
     assert out.commit_sha == "a" * 40
-    assert out.files_changed == 1
+    assert out.files_changed == ("src/foo.py",)
 
 
 @pytest.mark.asyncio
@@ -383,18 +383,21 @@ def test_truncate_appends_marker_when_over_limit() -> None:
 
 
 def test_parse_files_changed_singular() -> None:
-    stat = " src/a.py | 3 +--\n 1 file changed, 1 insertion(+), 2 deletions(-)\n"
-    assert _parse_files_changed(stat) == 1
+    out = "src/a.py\n"
+    assert _parse_files_changed(out) == ("src/a.py",)
 
 
 def test_parse_files_changed_plural() -> None:
-    stat = " src/a.py | 3 +--\n src/b.py | 5 ++++-\n 2 files changed, 5 insertions(+), 3 deletions(-)\n"
-    assert _parse_files_changed(stat) == 2
+    out = "src/a.py\nsrc/b.py\n"
+    assert _parse_files_changed(out) == ("src/a.py", "src/b.py")
 
 
-def test_parse_files_changed_missing_summary_returns_zero() -> None:
-    assert _parse_files_changed(" some diff without summary\n") == 0
+def test_parse_files_changed_strips_blank_lines_and_whitespace() -> None:
+    # ``git show --name-only --format=`` can emit a leading blank line
+    # (the empty commit header) and trailing newline padding.
+    out = "\n src/a.py \n\nsrc/b.py\n\n"
+    assert _parse_files_changed(out) == ("src/a.py", "src/b.py")
 
 
-def test_parse_files_changed_empty_input_returns_zero() -> None:
-    assert _parse_files_changed("") == 0
+def test_parse_files_changed_empty_input_returns_empty_tuple() -> None:
+    assert _parse_files_changed("") == ()

@@ -111,7 +111,7 @@ async def test_real_patch_applies_and_commits_with_two_identity(
     )
     out = await patcher.try_apply(patch=patch, commit_message="say world")
     assert isinstance(out, PatchApplied), out
-    assert out.files_changed == 1
+    assert out.files_changed == ("hello.py",)
     assert len(out.commit_sha) == 40
 
     # Verify commit identity: BOTH author + committer must be
