@@ -1,4 +1,4 @@
-"""Kosmos kernel FastAPI app (Stage 6.5.4 — WebSocket event-bus bridge).
+"""Kosmos kernel FastAPI app (Stage 6.5.5 — approval resolve endpoints).
 
 Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
 
@@ -14,7 +14,7 @@ Boot sequence (Stage 6.5.1+6.5.2 baseline preserved; 6.5.3 adds route only):
    ``ports/observability`` detectors + the shared kernel adapters
    (ADR-059 §D1). Failure surfaces under ``registry.errors["phrouros"]``.
 
-Kernel HTTP endpoints (6.5.4):
+Kernel HTTP endpoints (6.5.5):
 
 - ``/api/phrouros/anomalies`` — 200 with real (usually empty) records.
 - ``POST /api/zetesis/research`` — SSE endpoint (ADR-060) emitting
@@ -23,6 +23,9 @@ Kernel HTTP endpoints (6.5.4):
 - ``GET /api/events/ws`` — WebSocket event-bus bridge (ADR-061); on
   connect sends a ``ready`` frame with the subscribed event-type list,
   then forwards published ``EventEnvelope``s as JSON ``event`` frames.
+- ``POST /api/approvals/{approval_id}/approve`` and
+  ``POST /api/approvals/{approval_id}/reject`` — approval resolve
+  endpoints (ADR-062) over the existing ``ApprovalResolverPort``.
 """
 
 from __future__ import annotations
@@ -297,7 +300,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.4", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.5", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +432,121 @@ async def approval_get(approval_id: str) -> dict[str, Any]:
         record = await ap.get_by_id(approval_id)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(404, detail=str(exc)) from exc
+    return _dataclass_to_dict(record)
+
+
+# ADR-062 — approval resolve endpoints
+
+
+def _resolve_error_status(exc: BaseException) -> int:
+    """Map an ``ApprovalResolverPort.resolve`` exception to an HTTP status.
+
+    Class names are matched against Praxis APEX's error hierarchy
+    without importing plugin modules from the kernel:
+
+    - ``ApprovalNotFoundError`` → 404
+    - ``InvalidTransitionError`` → 409 (already resolved)
+    - ``ValueError`` → 400 (reject-without-reason etc.)
+    - anything else → 500
+    """
+    name = type(exc).__name__
+    if name == "ApprovalNotFoundError":
+        return 404
+    if name == "InvalidTransitionError":
+        return 409
+    if isinstance(exc, ValueError):
+        return 400
+    return 500
+
+
+async def _read_optional_json(request: Request) -> dict[str, Any]:
+    """Parse an optional JSON body. Empty body → ``{}``. Bad JSON → 400."""
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, detail=f"invalid JSON body: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(400, detail="body must be a JSON object")
+    return payload
+
+
+@app.post("/api/approvals/{approval_id}/approve")
+async def approval_approve(
+    approval_id: str, request: Request
+) -> dict[str, Any]:
+    ap = registry.approval
+    if ap is None:
+        raise HTTPException(503, detail=registry.errors.get("approval"))
+    body = await _read_optional_json(request)
+
+    reason = body.get("reason")
+    modifications = body.get("modifications")
+    resolved_by = body.get("resolved_by", "user")
+
+    if reason is not None and not isinstance(reason, str):
+        raise HTTPException(400, detail="reason must be a string")
+    if modifications is not None and not isinstance(modifications, dict):
+        raise HTTPException(400, detail="modifications must be a JSON object")
+    if not isinstance(resolved_by, str) or not resolved_by.strip():
+        raise HTTPException(
+            400, detail="resolved_by must be a non-empty string"
+        )
+
+    try:
+        record = await ap.resolve(
+            approval_id,
+            True,
+            reason=reason,
+            modifications=modifications,
+            resolved_by=resolved_by,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            _resolve_error_status(exc), detail=str(exc)
+        ) from exc
+    return _dataclass_to_dict(record)
+
+
+@app.post("/api/approvals/{approval_id}/reject")
+async def approval_reject(
+    approval_id: str, request: Request
+) -> dict[str, Any]:
+    ap = registry.approval
+    if ap is None:
+        raise HTTPException(503, detail=registry.errors.get("approval"))
+    body = await _read_optional_json(request)
+
+    reason = body.get("reason")
+    resolved_by = body.get("resolved_by", "user")
+
+    if not isinstance(reason, str) or not reason.strip():
+        raise HTTPException(
+            400,
+            detail="reject requires a non-empty 'reason' field",
+        )
+    if not isinstance(resolved_by, str) or not resolved_by.strip():
+        raise HTTPException(
+            400, detail="resolved_by must be a non-empty string"
+        )
+
+    try:
+        record = await ap.resolve(
+            approval_id,
+            False,
+            reason=reason,
+            resolved_by=resolved_by,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            _resolve_error_status(exc), detail=str(exc)
+        ) from exc
     return _dataclass_to_dict(record)
 
 
