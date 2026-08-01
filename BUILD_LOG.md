@@ -1973,3 +1973,13 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** `ResourcePort` (endpoint plumbing only; port surface unchanged).
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met — kernel boot degraded (Phrouros expected 503 until 6.5); 5/6 subsystems green; endpoints return valid JSON.
+
+
+## 2026-08-01 01:24 EDT — Kernel dataclass serialization fix (v2.1 → v2.2)
+
+- **Stage / plugin / port:** Stage 6.4 · Kernel · FrontendContractPort + NotificationPort JSON payloads
+- **What changed:** `_dataclass_to_dict` was checking `hasattr(obj, "__dict__")`, but Kosmos value objects use `@dataclass(frozen=True, slots=True)` — no `__dict__`. Rewrote helper to primarily use `dataclasses.fields()` (works for slotted dataclasses), added `Decimal` → str, tightened enum/datetime detection, kept `__dict__` fallback. `/api/kernel/schema` simplified to unconditionally route through the helper. `/api/notifications/health` guards against non-dict return.
+- **Files touched:** `kernel/app.py`
+- **Ports / adapters affected:** kernel serialization only; port surfaces unchanged.
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — all six kernel-side endpoints now return valid JSON when their subsystem is up.

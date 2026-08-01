@@ -198,10 +198,7 @@ async def kernel_schema() -> dict[str, Any]:
     if fc is None:
         raise HTTPException(503, detail=registry.errors.get("frontend_contract"))
     schema = await fc.render_kernel_schema()
-    # render_kernel_schema returns a dataclass-ish object; coerce to dict-safe
-    if hasattr(schema, "__dict__"):
-        return {k: v for k, v in schema.__dict__.items() if not k.startswith("_")}
-    return schema  # type: ignore[return-value]
+    return _dataclass_to_dict(schema)
 
 
 @app.get("/api/kernel/routes")
@@ -318,7 +315,10 @@ async def notification_health() -> dict[str, Any]:
         slo = await n.check_delivery_slo()
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
-    return _dataclass_to_dict(slo)
+    payload = _dataclass_to_dict(slo)
+    if not isinstance(payload, dict):
+        return {"report": payload}
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -327,21 +327,39 @@ async def notification_health() -> dict[str, Any]:
 
 
 def _dataclass_to_dict(obj: Any) -> Any:
-    """Best-effort coerce dataclass / mapping / iterable to JSON-safe dict."""
+    """Best-effort coerce dataclass / mapping / iterable to JSON-safe dict.
+
+    Handles frozen-slotted dataclasses (no `__dict__`), Decimal, datetime,
+    enum, and nested containers. Kosmos value objects are almost all
+    `@dataclass(frozen=True, slots=True)` so `dataclasses.fields()` is
+    the reliable extraction path.
+    """
+    import dataclasses
+    from decimal import Decimal
+
     if obj is None:
         return None
+    if isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return {
+            f.name: _dataclass_to_dict(getattr(obj, f.name))
+            for f in dataclasses.fields(obj)
+        }
+    if hasattr(obj, "isoformat"):  # datetime / date
+        return obj.isoformat()
+    if hasattr(obj, "value") and hasattr(obj, "name"):  # enum
+        return obj.value
+    if isinstance(obj, dict):
+        return {str(k): _dataclass_to_dict(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return [_dataclass_to_dict(v) for v in obj]
     if hasattr(obj, "__dict__") and not isinstance(obj, type):
         return {
             k: _dataclass_to_dict(v)
             for k, v in vars(obj).items()
             if not k.startswith("_")
         }
-    if isinstance(obj, dict):
-        return {k: _dataclass_to_dict(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple, set, frozenset)):
-        return [_dataclass_to_dict(v) for v in obj]
-    if hasattr(obj, "isoformat"):  # datetime
-        return obj.isoformat()
-    if hasattr(obj, "value"):  # enum
-        return obj.value
     return obj

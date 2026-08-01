@@ -441,3 +441,20 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Stash the storage instance on the adapter at boot (`adapter._kernel_storage = storage`), then read balances via `storage.get_balance(kind)` in the endpoint with try/except → None fallback. `_kernel_storage` attribute is kernel-private and does not modify the `ResourcePort` protocol.
 - **Files changed:** `kernel/app.py`
 - **Related BUILD_LOG entry:** 2026-08-01 01:22 EDT
+
+
+## 2026-08-01 01:24 EDT — /api/kernel/schema + /api/notifications/health return non-JSON
+
+- **Symptom:**
+  ```
+  jq: parse error: Invalid numeric literal at line 1, column 9
+  fastapi.exceptions.ResponseValidationError: 1 validation error:
+   {'type': 'dict_type', 'loc': ('response',), 'msg': 'Input should be a valid dictionary',
+    'input': DeliverySloReport(window=100, sample_count=0, p50_ms=0.0, p95_ms=0.0, ...)}
+  ```
+  Both endpoints ran their coerce helper against a `@dataclass(frozen=True, slots=True)` value object and returned the object unchanged (helper's `hasattr(obj, "__dict__")` branch never matched because slotted dataclasses have no `__dict__`).
+- **Affected stage / plugin / port:** Stage 6.4 · Kernel · FrontendContractPort + NotificationPort
+- **Root cause:** `_dataclass_to_dict` assumed all value objects were regular classes. Kosmos-wide convention (see `ports/frontend_contract.py`, `ports/notification.py`, `ports/resource.py`) is `@dataclass(frozen=True, slots=True)` — `slots=True` suppresses `__dict__`, so the helper's primary branch was a no-op. Objects passed through to FastAPI's response serializer, which rejected `DeliverySloReport` (dict-type mismatch) and silently emitted the schema object's `repr` for `/api/kernel/schema` (jq parse error).
+- **Fix applied:** Rewrote `_dataclass_to_dict` to check `dataclasses.is_dataclass(obj)` **first** and use `dataclasses.fields(obj)` + `getattr(obj, f.name)` for extraction. Added `Decimal` → `str` coercion (money/resource amounts) and tightened enum detection to require both `.value` and `.name` (avoiding false positives on `Decimal` and str-enum ambiguity).
+- **Files changed:** `kernel/app.py`
+- **Related BUILD_LOG entry:** 2026-08-01 01:24 EDT
