@@ -55,3 +55,9 @@ skills/user/
 .secrets/
 .playwright-mcp/
 .venv-eval/
+ui/node_modules
+ui/.next
+ui/out
+ui/test-results
+ui/playwright-report
+ui/.playwright

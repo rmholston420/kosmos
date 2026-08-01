@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-vairochana: oklch(97% 0.01 90);
+  --color-akshobhya: oklch(45% 0.12 250);
+  --color-ratnasambhava: oklch(80% 0.15 85);
+  --color-amitabha: oklch(50% 0.18 25);
+  --color-amoghasiddhi: oklch(50% 0.13 145);
+  --color-nagtang: oklch(12% 0.005 260);
+}
+
+[data-theme="nagtang"] body {
+  background-color: var(--color-nagtang);
+  color: var(--color-vairochana);
+}

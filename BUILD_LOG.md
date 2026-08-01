@@ -2214,3 +2214,45 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none. Zero new port surface; zero new file under `adapters/`. `_WebSocketAlgedonicSink` is a kernel-internal `Sink`-protocol implementation, not a port.
 - **PORTING_LEDGER / ADR updated:** ADR-066 authored + ratified. Zero `PORTING_LEDGER.md` change.
 - **Stop-condition status:** in-progress — PR #10 opened, awaiting Colossus retest.
+
+## 2026-08-01 05:04 EDT — Stage 1 · GUI shell (ADR-057 + ADR-067) — branch ready
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · Next.js 16 static export + Gnosis Stage 4.6 gate mount (ADR-057, ADR-067)
+- **What changed:**
+  - Scaffolded `ui/` — Next.js 16 static export shell wired to existing `/api/*` kernel routes.
+    - `ui/app/`: root layout + provider tree + Zetesis research page.
+    - `ui/components/`: top bar (Cmd+K stub, algedonic pill, model-swap stub), sidebar, kernel-schema debug panel, approvals inbox, phrouros anomalies panel, resources balance/queue panel, notifications tray, Gnosis panel, Zetesis research page shell — all Radix + Tailwind + OKLCH tokens.
+    - `ui/lib/kernel-client.ts` — typed client for kernel routes.
+    - `ui/tests/*.spec.ts` — 9 Playwright specs (`00-empty-state` through `08-zetesis-research`).
+    - `ui/next.config.js` sets `output: "export"`.
+    - `ui/package.json`, `ui/tsconfig.json`, `ui/playwright.config.ts`.
+    - `npm install` complete (53 packages); Playwright chromium installed.
+  - Kernel mount (`kernel/app.py`): appended one `app.mount("/gnosis-gate", build_stage_46_gate_app(corpora=ALL_CORPORA))` block, best-effort exception-guarded, module-scope. No other kernel change.
+  - **ADR-067 authored** — supersedes `Kosmos-gui-build-spec-v1.md` §5 `kernel_ui_glue` router.
+    Cross-reference against `kernel/app.py` at commit `3197b6d` (Stage 6.5.9) shows every glue-router
+    endpoint already lives at the identical `/api/*` path on the kernel FastAPI app. Spec's mount
+    block referenced non-existent module-level names — real adapter access flows through `registry.*`.
+    - D1: `kernel_ui_glue/` package NOT included; UI targets `/api/*` directly.
+    - D2: Gnosis Stage 4.6 gate mount at `/gnosis-gate` retained (distinct ASGI sub-app).
+    - D3: `ui/lib/kernel-client.ts` URLs corrected: `/api/kernel/tokens` → `/api/kernel/design-tokens`,
+      `POST /api/approvals/{id}/resolve` → split into `/approve` and `/reject` per ADR-062,
+      `/ws/algedonic` → `/api/algedonic/ws`.
+    - D4: `/api/tektos/plan/{id}[/approve|/execute|/diff]` UI wiring deferred to Stage 2 pending a
+      Tektos-plan-surface ADR (kernel only exposes `/api/tektos/turn` at 6.5.6). Client methods
+      preserved with a header comment marking the Stage 2 gap.
+    - D5: `Kosmos-gui-build-spec-v1.md` §5 note deferred to a follow-up amendment in the project
+      file repo (that spec is not tracked in the git repo).
+- **Files touched:**
+  - `ui/` (34 new files, full Next.js 16 shell)
+  - `kernel/app.py` (single Gnosis-gate mount block appended)
+  - `docs/adrs/ADR-067-stage-1-gui-glue-router-superseded.md` (new)
+  - `docs/adrs/README.md` (row inserted above ADR-066)
+  - `BUILD_LOG.md` (this entry)
+  - `SESSION_HANDOFF.md` (overwritten with Stage 1 state)
+- **Ports / adapters affected:** none. Zero new port surface. `kernel_ui_glue/` intentionally NOT
+  added (superseded by ADR-067). No `adapters/` change; no plugin change.
+- **PORTING_LEDGER / ADR updated:** ADR-067 authored + ratified. Zero `PORTING_LEDGER.md` change
+  (Next.js is a build-time UI framework consumed via `ui/package.json` per ADR-057 static-export
+  policy; no runtime Python dependency).
+- **Stop-condition status:** in-progress — branch `stage-1-gui-shell` pushed, PR #11 to open; DoD
+  requires `ui/` builds green via `next build` and all Playwright test tiers green on Colossus.

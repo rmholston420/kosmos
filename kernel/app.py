@@ -1592,3 +1592,22 @@ def _dataclass_to_dict(obj: Any) -> Any:
             if not k.startswith("_")
         }
     return obj
+
+# --- KOSMOS_STAGE_1_GNOSIS_GATE_MOUNT (ADR-067) ---
+# Stage 1 GUI mount: Gnosis Stage 4.6 gate is a distinct ASGI sub-app; every
+# other GUI-required endpoint already lives at /api/* on this kernel app.
+# See ADR-067 (Stage 1 GUI · kernel_ui_glue superseded).
+try:
+    from adapters.memory.dozerdb.gate.server import (
+        build_stage_46_gate_app as _kosmos_build_stage_46_gate_app,
+    )
+    from adapters.memory.dozerdb.corpora import ALL_CORPORA as _KOSMOS_ALL_CORPORA
+
+    app.mount("/gnosis-gate", _kosmos_build_stage_46_gate_app(corpora=_KOSMOS_ALL_CORPORA))
+except Exception as _kosmos_gate_exc:  # noqa: BLE001
+    import logging as _kosmos_logging
+
+    _kosmos_logging.getLogger(__name__).warning(
+        "Kosmos Gnosis gate not mounted at /gnosis-gate: %s", _kosmos_gate_exc
+    )
+# --- END KOSMOS_STAGE_1_GNOSIS_GATE_MOUNT ---
