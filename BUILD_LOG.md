@@ -2355,3 +2355,15 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — awaiting Colossus pytest re-run + Playwright confirmation.
+
+## 2026-08-01 05:45 EDT — Stage 1 · DoD-green · pre-merge log & handoff
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · session close.
+- **What changed:**
+  - Appended KNOWN_ISSUES.md entries for Next.js 16 CVE-2025-66478, deferred `PhrourosEngine.list_all()` (ADR-034 amendment), deferred `ResourcePort.get_balance()` (ADR-029 amendment).
+  - Overwrote SESSION_HANDOFF.md to reflect Stage 1 complete, pending PR #11 merge.
+  - Project wiki updated on the Kosmos project wiki (out-of-repo): `entities/rigpa-lms.md`, `projects/kosmos-lms.md`, `projects/kosmos-gui.md`, `index.md`.
+- **Files touched:** `KNOWN_ISSUES.md`, `SESSION_HANDOFF.md`, `BUILD_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** none (ADR-067 already ratified in prior commit).
+- **Stop-condition status:** met — awaiting `gh pr merge 11`.

@@ -54,3 +54,27 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
   4. If AREX-Turbo wins under tuned parity, Zetesis's `LLMPort` binding can be swapped without any port-contract change (ADR-052 Q3=A skeleton was designed for this — inner-loop-agnostic port surface).
 - **Related DEBUG_LOG search terms:** "AREX", "arex-turbo", "max context length", "context-ceiling", "structural_finalize", "ADR-010", "head-to-head", "Zetesis inner loop", "run_arex_trial", "run_odr_trial".
 - **Candidate revisit stage:** post-Phase-6 (Zetesis exit-gate landed, next phase started). Not blocking Stage 6.3 (proper) (Zetesis kernel wiring), Stage 6.4 (Stage-6 exit gate), or any downstream stage. See `ADR-055-stage-6-4-odr-tuned-ratification.md` §Rationale point 3 for cost-of-delay analysis.
+
+### 2026-08-01 — Next.js 16.0.0 CVE-2025-66478 (SSRF via image optimization)
+
+- **Blocks:** no blockers for Stage 1 (image optimization is disabled via `images.unoptimized: true` in `ui/next.config.js` because `output: "export"` requires it). Revisit before enabling any server-side image transform.
+- **Symptom:** CVE-2025-66478 in Next.js 16.0.0 image-optimization SSRF; also `baseline-browser-mapping` prints "data over two months old" warnings on every build.
+- **Attempted fixes:** none — deferred to Stage 2.
+- **Next investigation:** bump `next` to the latest 16.x patch and `baseline-browser-mapping` to latest at Stage 2 kickoff; re-run pytest + Playwright.
+- **Related DEBUG_LOG search terms:** `next.js 16`, `CVE-2025-66478`, `baseline-browser-mapping`.
+
+### 2026-08-01 — Deferred: `PhrourosEngine.list_all()` port (ADR-034 amendment)
+
+- **Blocks:** no blockers for Stage 1 (UI Phrouros anomalies panel currently reads via `/api/phrouros/anomalies` which returns an empty list until a Phrouros engine is booted).
+- **Symptom:** `PhrourosPort` has no `list_all()` — the UI would benefit from a bulk query rather than per-anomaly polling.
+- **Attempted fixes:** none — held for ADR amendment.
+- **Next investigation:** decide at Stage 2 whether `list_all(limit, since)` belongs on `PhrourosPort` (amend ADR-034) or is a UI-only aggregate.
+- **Related DEBUG_LOG search terms:** `Phrouros`, `anomalies`, `list_all`.
+
+### 2026-08-01 — Deferred: `ResourcePort.get_balance()` port (ADR-029 amendment)
+
+- **Blocks:** no blockers for Stage 1 — the UI uses `/api/resources/balances` which returns the full dict, and the six `ResourceKind` panels have a per-kind entry (nullable) per ADR-066 D2.
+- **Symptom:** `ResourcePort` exposes only the aggregate dict; a per-kind `get_balance(kind)` would let unowned-port panels lazy-load without pulling all six.
+- **Attempted fixes:** none — held for ADR amendment.
+- **Next investigation:** at Stage 2 decide whether the per-kind accessor lives on `ResourcePort` (amend ADR-029) or the aggregate is the only sanctioned API.
+- **Related DEBUG_LOG search terms:** `ResourcePort`, `get_balance`, `resource balances`.
