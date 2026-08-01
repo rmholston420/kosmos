@@ -66,11 +66,22 @@ const NODE_LIMIT = 100;
 const EDGE_LIMIT = 100;
 const MAX_PAGES = 10; // ADR-075 D4 ceiling: 1000 nodes + 1000 edges.
 
+// 2026-08-01 hotfix: `react-force-graph-*` renders to canvas / WebGL and
+// does NOT resolve CSS custom-properties. Previously these values were
+// passed as `var(--color-accent, #7dd3fc)` strings which either failed
+// silently on WebGL or degraded to near-invisible defaults. We now hard
+// code accessible high-contrast fallbacks that pop against a dark canvas
+// (Nagtang black `#0b0b0b`). Design-token integration can replace these
+// once the Tibetan Five-Wisdom palette is finalized for graph geometry.
 const KIND_COLOR: Record<GraphNode["kind"], string> = {
-  subject: "var(--color-accent, #7dd3fc)",
-  object: "var(--color-muted, #a3a3a3)",
-  zetesis_report: "var(--color-primary, #f472b6)",
+  subject: "#7dd3fc",       // sky-300 — subject nodes
+  object: "#d4d4d8",        // zinc-300 — object nodes (was near-invisible muted grey)
+  zetesis_report: "#f472b6", // pink-400 — zetesis report nodes
 };
+
+const LINK_COLOR = "#9ca3af";           // gray-400 — visible on dark canvas
+const LINK_HIGHLIGHT_COLOR = "#fbbf24"; // amber-400
+const CANVAS_BG = "#0b0b0b";            // Nagtang black
 
 export default function GnosisGraphPage() {
   const [corpus, setCorpus] = useState<string>("");
@@ -230,16 +241,17 @@ export default function GnosisGraphPage() {
         style={{
           width: "100%",
           height: "70vh",
-          border: "1px solid var(--color-border, #333)",
-          borderRadius: "var(--radius-2, 6px)",
-          background: "var(--color-canvas, #0b0b0b)",
+          border: "1px solid #333",
+          borderRadius: "6px",
+          background: CANVAS_BG,
+          overflow: "hidden",
         }}
       >
         <DimensionalForceGraph
           graphData={graphData}
-          backgroundColor="var(--color-canvas, #0b0b0b)"
-          nodeColor={(n) => KIND_COLOR[(n as ForceGraphNode).kind] ?? "#888"}
-          linkColor={() => "var(--color-muted, #6b7280)"}
+          backgroundColor={CANVAS_BG}
+          nodeColor={(n) => KIND_COLOR[(n as ForceGraphNode).kind] ?? "#e5e7eb"}
+          linkColor={() => LINK_COLOR}
           nodeLabel={(n) => {
             const node = n as ForceGraphNode;
             const conf =
@@ -251,8 +263,9 @@ export default function GnosisGraphPage() {
             const link = l as ForceGraphLink;
             return link.label || link.kind;
           }}
-          linkDirectionalArrowLength={3}
+          linkDirectionalArrowLength={4}
           linkDirectionalArrowRelPos={0.9}
+          linkDirectionalParticles={2}
         />
       </section>
 

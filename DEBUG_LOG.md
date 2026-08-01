@@ -694,3 +694,13 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** ``os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")`` seed alongside the API key seed at ``plugins/zetesis/research/odr.py`` module import. Both use ``setdefault`` so an operator running a mixed local + hosted setup (with ``export OPENAI_BASE_URL=https://api.openai.com/v1``) is not overridden.
 - **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
 - **Supersedes:** 2026-08-01 12:26 EDT
+
+## 2026-08-01 12:47 EDT — Gnosis 3D graph blank; nodes hard to see in 2D
+
+- **Symptom:** `/gnosis/graph` toggled to 3D renders an empty canvas; 2D shows nodes but they and their edges are nearly invisible against the dark background.
+- **Affected stage / plugin / port:** Stage 1.6 Phase 1 · Gnosis Graph UI · ADR-074 D5
+- **Root cause (issue 1 — 3D blank):** `react-force-graph-3d` renders via WebGL and requires explicit numeric `width`/`height` props. `DimensionalForceGraph` was spreading `{ graphData, backgroundColor, nodeColor, ... }` without width/height. When only CSS `height: 70vh` was applied to the wrapper, the WebGL renderer's internal viewport initialized at 0×0 on first mount and never recomputed. `ForceGraph2D` (canvas 2d) reads container bounds itself so it survived.
+- **Root cause (issue 2 — nodes hard to see):** Node/link/background colors were passed as CSS custom-property strings `var(--color-accent, #7dd3fc)`. `react-force-graph-*` renderers do NOT resolve CSS variables — the raw string reaches the canvas / WebGL layer where it either fails silently or falls back to near-transparent defaults. Object nodes (colored with `var(--color-muted, #6b7280)`) and edge links were the worst affected.
+- **Fix applied:** (a) `ui/components/graph/DimensionalForceGraph.tsx` — wrap `<Graph>` in a measured `<div>` using `useLayoutEffect` for first paint + `ResizeObserver` for reflow, pass numeric `width`/`height` to both 2D and 3D. Extended `DimensionalForceGraphProps` with `linkDirectionalParticles` function overload + optional `nodeRelSize`. (b) `ui/app/gnosis/graph/page.tsx` — replaced all `var(--...)` color strings with hard-coded high-contrast hex (subject `#7dd3fc`, object `#d4d4d8`, zetesis_report `#f472b6`, link `#9ca3af`, canvas `#0b0b0b`). Added `linkDirectionalParticles={2}` so edges show motion, and bumped `linkDirectionalArrowLength` from 3 → 4. Wrapper gets `overflow: hidden`.
+- **Files changed:** ui/components/graph/DimensionalForceGraph.tsx; ui/app/gnosis/graph/page.tsx
+- **Related BUILD_LOG entry:** —
