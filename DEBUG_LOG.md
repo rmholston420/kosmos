@@ -618,3 +618,12 @@ Entry format per `kosmos-log-maintenance` skill:
   After clean rebuild: pytest 15/15, kill-switch Playwright 5/5, full Playwright 38 passed / 6 skipped / 0 failed. Diagnostic confirmed by observing `curl -s http://127.0.0.1:8000/ | head` served real Next.js HTML with valid chunk src attributes matching the new `ui/out/_next/static/chunks/` contents.
 - **Files changed:** none. Operational discipline only. Prevention: any Wave-C-and-later Colossus test paste must include the clean-rebuild step.
 - **Related BUILD_LOG entry:** 2026-08-01 07:07 EDT.
+
+## 2026-08-01 09:54 EDT — _FakeFrontendContract signature drift
+
+- **Symptom:** `TypeError: _FakeFrontendContract.register_plugin() missing 1 required positional argument: 'spec'` raised inside `ZetesisPlugin.start()` at `plugins/zetesis/plugin.py:387` when new `test_failure_semantics.py` tests called `plugin.start()`.
+- **Affected stage / plugin / port:** Stage 6.3 · Zetesis fast-tier test fixtures · FrontendContractPort protocol conformance.
+- **Root cause:** `plugins/zetesis/tests/conftest.py` `_FakeFrontendContract` had stale 2-arg signature (`register_plugin(self, name, spec)`) predating the port-protocol change to `register_plugin(descriptor)`. Latent because no port-wiring test called `.start()`.
+- **Fix applied:** Updated `_FakeFrontendContract` to full `FrontendContractPort` protocol conformance: `register_plugin(descriptor) -> PluginRegistration` + trivial defaults for `list_plugins`, `get_route_manifest`, `get_design_tokens`, `get_state_namespaces`, `get_panel_manifest`, `check_ui_parity`, plus `NotImplementedError` for `render_kernel_schema`.
+- **Files changed:** `plugins/zetesis/tests/conftest.py`.
+- **Related BUILD_LOG entry:** 2026-08-01 09:54 EDT (session Wave F Part 2 close-out).

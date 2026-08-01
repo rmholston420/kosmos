@@ -2736,3 +2736,44 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met on branch; awaits Colossus full-suite re-verify (target 68/68 GREEN).
+
+## 2026-08-01 09:50 EDT — ADR-056 §D3 failure-semantics clarification (option C)
+
+- **Stage / plugin / port:** Stage 6.3 / 6.5 · Zetesis / SSE router / EventBus contract
+- **What changed:**
+  - Amended `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` with a second 2026-08-01 STATUS AMENDMENT block ("failure-semantics clarification"), prepended above the earlier "adapter compliance" block. Status line updated to `Ratified v25 — Completed 2026-07-30 — Amended 2026-08-01 (twice)`.
+  - Amendment refines the original §D3 rule ("on inner-loop failure, the started event is published … completed event is not published … research() re-raises verbatim") into two failure classes:
+    1. **Fatal failures** — inner loop raises. research() re-raises. Started event fires; completed does NOT. Router emits `event: error`.
+    2. **Recoverable failures** — inner loop catches sub-call error into `TrialMetrics.error` and returns a partial `TrialMetrics`. research() returns `ResearchReport(error=..., answer=partial)`. Completed event IS published. Router emits `event: completed` with `report.error` preserved.
+  - Rationale: live Stage 6.5 Wave F verification confirmed the ODR inner loop already implements graceful sub-call error capture (observed 2026-08-01 during F6 verification via missing `OPENAI_API_KEY` on one sub-call). Enforcing strict all-or-nothing would destroy either partial-result UX or diagnostic signal.
+  - No plugin or router code change — amendment documents already-shipped behavior.
+- **Files touched:**
+  - `docs/adrs/ADR-056-stage-6-3-proper-zetesis-kernel-wiring.md` (STATUS AMENDMENT block added; status-line "twice")
+  - `plugins/zetesis/tests/test_failure_semantics.py` (new, 137 lines, 2 async tests: fatal path re-raises + suppresses completed; recoverable path returns ResearchReport(error, partial-answer) + publishes completed). Uses `make_zetesis_plugin` fixture from `conftest.py` plus a local `_RecordingEventBus` satisfying the full `EventBusPort` runtime-checkable Protocol.
+- **Ports / adapters affected:** none (contract-level clarification only)
+- **PORTING_LEDGER / ADR updated:** ADR-056 (Ratified v25 — Amended 2026-08-01 twice)
+- **Stop-condition status:** amendment complete on branch. Awaits Colossus fast-tier run of the two new contract tests.
+
+## 2026-08-01 09:54 EDT — ADR-056 §D3 amendment · conftest _FakeFrontendContract signature fix
+
+- **Stage / plugin / port:** Stage 6.3 · Zetesis fast-tier fixtures · FrontendContractPort protocol conformance
+- **Symptom on Colossus:** `test_failure_semantics.py` tests failed at `plugin.start()` with `TypeError: _FakeFrontendContract.register_plugin() missing 1 required positional argument: 'spec'`.
+- **Root cause:** The `_FakeFrontendContract` in `plugins/zetesis/tests/conftest.py` had a stale 2-arg signature (`register_plugin(name, spec)`) predating the port-protocol change to `register_plugin(descriptor)`. Existing port-wiring tests never called `.start()`, so the bug was latent. `test_failure_semantics.py` is the first `conftest.make_zetesis_plugin` consumer that calls `.start()`.
+- **Fix:** Updated `_FakeFrontendContract` to full `FrontendContractPort` protocol conformance:
+  - `register_plugin(descriptor) -> PluginRegistration` (returns a real `PluginRegistration` with `UiParityStatus.IN_PROGRESS`).
+  - Adds `list_plugins`, `get_route_manifest`, `get_design_tokens`, `get_state_namespaces`, `get_panel_manifest`, `check_ui_parity` as trivial defaults.
+  - `render_kernel_schema` raises `NotImplementedError` (fixture stub; port-wiring tests never call it).
+- **Files touched:**
+  - `plugins/zetesis/tests/conftest.py` (`_FakeFrontendContract` updated; imports added)
+- **Ports / adapters affected:** none — test fixture only
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met on branch; awaits Colossus re-verify (target 2/2 GREEN for `test_failure_semantics.py`, no regression on other Zetesis fast-tier tests).
+
+## 2026-08-01 09:54 EDT — DEBUG_LOG entry · _FakeFrontendContract signature drift
+
+- **Symptom:** `TypeError: _FakeFrontendContract.register_plugin() missing 1 required positional argument: 'spec'` raised inside `ZetesisPlugin.start()` at `plugin.py:387`.
+- **Affected stage / plugin / port:** Stage 6.3 fast-tier test fixtures · FrontendContractPort.
+- **Root cause:** conftest fake predated port-protocol change; latent because no prior consumer called `.start()`.
+- **Fix applied:** conftest fake now implements the full protocol.
+- **Files changed:** `plugins/zetesis/tests/conftest.py`.
+- **Related BUILD_LOG entry:** 2026-08-01 09:54 EDT (this session).
