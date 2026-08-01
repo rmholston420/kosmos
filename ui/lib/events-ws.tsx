@@ -117,8 +117,24 @@ export function EventsWSProvider({
       }
       if (!parsed || typeof parsed !== "object") return;
       const obj = parsed as Record<string, unknown>;
-      // Handshake frame: {frame: "ready", subscribed: [...]} — ignore.
-      if (typeof obj.frame === "string") return;
+
+      // Kernel wire format (kernel/app.py::_envelope_to_wire):
+      //   handshake  → {frame: "ready", subscribed: [...]}
+      //   event      → {frame: "event", envelope: {event_type, payload, ts, event_id}}
+      // 2026-08-01 bugfix: previously we early-returned on ANY `frame`
+      // string, silently dropping every event. Now we ignore only
+      // `"ready"` and unwrap `envelope` for `"event"`.
+      if (obj.frame === "ready") return;
+      if (obj.frame === "event" && obj.envelope && typeof obj.envelope === "object") {
+        const env = obj.envelope as Record<string, unknown>;
+        if (typeof env.event_type === "string" && typeof env.payload === "object") {
+          dispatch(env as unknown as WSEnvelope);
+        }
+        return;
+      }
+
+      // Legacy / flat envelope shape (kept for backward compat with
+      // fixture doubles that emit unwrapped envelopes).
       if (typeof obj.event_type === "string" && typeof obj.payload === "object") {
         dispatch(obj as unknown as WSEnvelope);
       }

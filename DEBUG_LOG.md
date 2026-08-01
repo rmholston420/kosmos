@@ -704,3 +704,23 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** (a) `ui/components/graph/DimensionalForceGraph.tsx` — wrap `<Graph>` in a measured `<div>` using `useLayoutEffect` for first paint + `ResizeObserver` for reflow, pass numeric `width`/`height` to both 2D and 3D. Extended `DimensionalForceGraphProps` with `linkDirectionalParticles` function overload + optional `nodeRelSize`. (b) `ui/app/gnosis/graph/page.tsx` — replaced all `var(--...)` color strings with hard-coded high-contrast hex (subject `#7dd3fc`, object `#d4d4d8`, zetesis_report `#f472b6`, link `#9ca3af`, canvas `#0b0b0b`). Added `linkDirectionalParticles={2}` so edges show motion, and bumped `linkDirectionalArrowLength` from 3 → 4. Wrapper gets `overflow: hidden`.
 - **Files changed:** ui/components/graph/DimensionalForceGraph.tsx; ui/app/gnosis/graph/page.tsx
 - **Related BUILD_LOG entry:** —
+
+## 2026-08-01 12:59 EDT — live event stream dropped every frame
+
+- **Symptom:** NotificationTray showed 0 unread and 0 DOM entries even though Playwright diagnostic (`tests/diagnostics/events-and-graph.spec.ts`) confirmed `zetesis.research.started` and `zetesis.research.completed` frames both arrived on `/api/events/ws` and the tray reported `data-connected="true"`.
+- **Affected stage / plugin / port:** Stage 1.5 · kernel↔UI · EventBusPort WS bridge
+- **Root cause:** `ui/lib/events-ws.tsx::ws.onmessage` early-returned on ANY frame whose `frame` field was a string. The kernel wire format (`kernel/app.py::_envelope_to_wire`) sends events as `{"frame":"event","envelope":{event_type,payload,...}}`, so the guard for the `{"frame":"ready"}` handshake was silently dropping every actual event too. The `if (typeof obj.event_type === "string" && typeof obj.payload === "object")` dispatch branch below was unreachable for real kernel events.
+- **Fix applied:** Narrow the guard to `obj.frame === "ready"` and add an unwrap branch for `obj.frame === "event"` that pulls the nested `envelope` and dispatches it. Kept the flat-envelope branch for backward compat with legacy fixture doubles.
+- **Files changed:**
+  - `ui/lib/events-ws.tsx`
+- **Related BUILD_LOG entry:** —
+
+## 2026-08-01 12:59 EDT — diagnostic 3D-toggle selector missed
+
+- **Symptom:** `tests/diagnostics/events-and-graph.spec.ts` logged `[toggle] 3D toggle located: false` and skipped the 3D screenshot, so the ResizeObserver hotfix in `DimensionalForceGraph` was not exercised.
+- **Affected stage / plugin / port:** Stage 1.5 · UI · gnosis graph diagnostic
+- **Root cause:** Selector `[data-testid="graph-dimension-toggle-3d"]` did not match. Real testids are `graph-dimension-toggle` on the radiogroup and `graph-dimension-option-2d|3d` on the labels wrapping the actual radio inputs.
+- **Fix applied:** Target `[data-testid="graph-dimension-option-3d"] input[type="radio"]` and use Playwright's `check()` for the radio semantics.
+- **Files changed:**
+  - `ui/tests/diagnostics/events-and-graph.spec.ts`
+- **Related BUILD_LOG entry:** —

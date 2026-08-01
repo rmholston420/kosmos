@@ -128,12 +128,14 @@ test.describe("Diagnostic: gnosis graph + live event stream", () => {
       fullPage: false,
     });
 
-    // Toggle to 3D. GraphDimensionToggle exposes a role=switch or button.
-    const toggle3d = page.locator('[data-testid="graph-dimension-toggle-3d"], button:has-text("3D")').first();
+    // Toggle to 3D. GraphDimensionToggle is a radiogroup at
+    // data-testid="graph-dimension-toggle" with radio inputs inside
+    // data-testid="graph-dimension-option-2d|3d" labels.
+    const toggle3d = page.locator('[data-testid="graph-dimension-option-3d"] input[type="radio"]');
     const hasToggle = (await toggle3d.count()) > 0;
     console.log(`[toggle] 3D toggle located: ${hasToggle}`);
     if (hasToggle) {
-      await toggle3d.click();
+      await toggle3d.check();
       await page.waitForTimeout(3000);
 
       // Verify the wrapper reports the new dimension
