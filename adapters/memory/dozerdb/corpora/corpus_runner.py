@@ -126,35 +126,12 @@ class InMemoryTemporalIndex:
         self._closed = True
 
 
-# ── Live-tier helpers ──────────────────────────────────────────────────────
+# ── Live-tier helpers (removed by ADR-075 D1) ──────────────────────────────
+#
+# ``live_tier_requested()``, ``build_live_index()``, and
+# ``run_corpus_live()`` were removed with the GraphitiTemporalIndex
+# deletion. The in-memory runner remains the only supported path.
 
-
-def live_tier_requested() -> bool:
-    """True when `KOSMOS_STAGE_42_LIVE=1` is set."""
-    return os.getenv("KOSMOS_STAGE_42_LIVE") == "1"
-
-
-def build_live_index() -> _TemporalIndexLike:
-    """Construct a real `GraphitiTemporalIndex` from env vars.
-
-    Requires:
-    - `MEMORY_BOLT_URI` (default `bolt://localhost:7687`)
-    - `MEMORY_BOLT_USER` (default `neo4j`)
-    - `MEMORY_BOLT_PASSWORD` (default `kosmos-dev-password`)
-    - `OLLAMA_URL` (default `http://localhost:11434/v1`)
-    - `OLLAMA_LLM_MODEL` (default `qwen3-coder`)
-    - `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`)
-    """
-    from ..graphiti_temporal_index import GraphitiTemporalIndex
-
-    return GraphitiTemporalIndex(
-        uri=os.getenv("MEMORY_BOLT_URI", "bolt://localhost:7687"),
-        user=os.getenv("MEMORY_BOLT_USER", "neo4j"),
-        password=os.getenv("MEMORY_BOLT_PASSWORD", "kosmos-dev-password"),
-        llm_url=os.getenv("OLLAMA_URL", "http://localhost:11434/v1"),
-        llm_model=os.getenv("OLLAMA_LLM_MODEL", "qwen3-coder"),
-        embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
-    )
 
 
 # ── Runner ─────────────────────────────────────────────────────────────────
@@ -220,14 +197,4 @@ async def run_corpus_in_memory(corpus: Corpus) -> CorpusRunSummary:
         await index.close()
 
 
-async def run_corpus_live(corpus: Corpus) -> CorpusRunSummary:
-    """Convenience: run against a real `GraphitiTemporalIndex`.
-
-    Caller is responsible for setting `KOSMOS_STAGE_42_LIVE=1` and
-    ensuring the Compose stack + Ollama are up.
-    """
-    index = build_live_index()
-    try:
-        return await run_corpus(corpus, index, tier="live")
-    finally:
-        await index.close()
+# ``run_corpus_live`` removed by ADR-075 D1 (Graphiti hard-delete).

@@ -38,6 +38,21 @@ test.describe("Gnosis graph visualization (ADR-074 D5)", () => {
     await expect(stats.or(empty)).toBeVisible({ timeout: 5000 });
   });
 
+  test("graph stats footer reports pagination pages counter (ADR-075 D4)", async ({
+    page,
+  }) => {
+    await page.goto("/gnosis/graph");
+    // Either data appeared (stats visible) or empty-state — but the
+    // stats footer format must include the "pages" pagination counter
+    // when it is visible.
+    const stats = page.getByTestId("graph-stats");
+    const empty = page.getByTestId("graph-empty");
+    await expect(stats.or(empty)).toBeVisible({ timeout: 5000 });
+    if (await stats.isVisible()) {
+      await expect(stats).toContainText(/pages\s+\d+\/10/);
+    }
+  });
+
   test("2D/3D toggle persists in localStorage", async ({ page }) => {
     await page.goto("/gnosis/graph");
     await page.getByTestId("graph-dimension-option-3d").click();

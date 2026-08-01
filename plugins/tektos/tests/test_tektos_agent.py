@@ -164,6 +164,10 @@ class _FakeMemoryPort:
     async def quarantine_write(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("Stage 3.1 must not call MemoryPort.quarantine_write")
 
+    async def search_semantic(self, *args: Any, **kwargs: Any) -> list:
+        # ADR-074 D1 added search_semantic to MemoryPort; fake degrades to [].
+        return []
+
     def is_healthy(self) -> bool:
         return True
 

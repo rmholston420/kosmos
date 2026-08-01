@@ -61,14 +61,15 @@ test.describe("Memory Integrity — Wave E polish", () => {
     ).toHaveCount(0);
   });
 
-  test("kernel version endpoint reports 6.11.0", async ({ request }) => {
+  test("kernel version endpoint reports 6.12.0", async ({ request }) => {
     // Sanity check the Wave E backend is what the UI sees. Bumped from
-    // 6.9.0 → 6.10.0 by ADR-073 (Stage 1.6 Phase 0) and from 6.10.0 →
-    // 6.11.0 by ADR-074 (Stage 1.6 Phase 1). Keep the string in sync
-    // with `app = FastAPI(..., version=...)` in `kernel/app.py`.
+    // 6.9.0 → 6.10.0 by ADR-073 (Stage 1.6 Phase 0), 6.10.0 → 6.11.0
+    // by ADR-074 (Stage 1.6 Phase 1), and 6.11.0 → 6.12.0 by ADR-075
+    // (Stage 1.6 Phase 2). Keep the string in sync with
+    // `app = FastAPI(..., version=...)` in `kernel/app.py`.
     const r = await request.get("/openapi.json");
     expect(r.ok()).toBeTruthy();
     const spec = await r.json();
-    expect(spec.info?.version).toBe("6.11.0");
+    expect(spec.info?.version).toBe("6.12.0");
   });
 });

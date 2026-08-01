@@ -31,13 +31,11 @@ from adapters.memory.dozerdb.corpora import (
     InMemoryTemporalIndex,
     QueryOutcome,
     TemporalQuery,
-    live_tier_requested,
     load_humanities_bilara_corpus,
     load_rigpa_export_corpus,
     load_superpowers_corpus,
     run_corpus,
     run_corpus_in_memory,
-    run_corpus_live,
 )
 
 # ── Corpus invariants ──────────────────────────────────────────────────────
@@ -660,25 +658,5 @@ def test_corpora_package_imports_no_plugins():
     assert not offenders, f"ADR-007 violation: {offenders}"
 
 
-# ── Env-gated live tier ────────────────────────────────────────────────────
-
-
-@pytest.mark.skipif(
-    not live_tier_requested(),
-    reason="live tier requires KOSMOS_STAGE_42_LIVE=1 + Compose + Ollama",
-)
-@pytest.mark.asyncio
-@pytest.mark.parametrize("corpus", ALL_CORPORA, ids=lambda c: c.name)
-async def test_live_tier_ingests_corpus_end_to_end(corpus: Corpus):
-    summary = await run_corpus_live(corpus)
-    assert summary.tier == "live"
-    assert summary.n_facts_ingested == len(corpus.facts)
-    # Live tier does NOT assert DoD semantic-search correctness — that
-    # depends on Graphiti + Ollama entity extraction and is captured
-    # opportunistically in PORT_CONTRACTS.md metrics. We only assert
-    # ingest + query returned without raising.
-    assert summary.n_queries_total == len(corpus.queries)
-
-
-# Silence unused import in the fast tier when live tier is skipped.
-_ = os
+# Env-gated live tier removed by ADR-075 D1 (Graphiti hard-delete).
+# Only the in-memory tier remains supported for the corpora runner.

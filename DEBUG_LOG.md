@@ -649,3 +649,21 @@ Entry format per `kosmos-log-maintenance` skill:
   - `ui/tests/13-community-collapse-and-annotate.spec.ts`
   - `docs/adrs/ADR-072-stage-1-5-wave-f-panel-completion.md` (§D item 4)
 - **Related BUILD_LOG entry:** 2026-08-01 10:12 EDT
+
+## 2026-08-01 11:59 EDT — MemoryPort protocol conformance failures in plugin fake ports
+
+- **Symptom:** Full-repo `pytest` (not `pytest tests/kernel/`) fails 5 tests all of the form `assert isinstance(_FakeMemoryPort(), MemoryPort)` in:
+  - `plugins/tektos/tests/test_openspec.py::test_fake_memory_port_conforms_to_memoryport_protocol`
+  - `plugins/tektos/tests/test_repomap.py::test_fake_memory_port_conforms_to_memoryport_protocol`
+  - `plugins/tektos/tests/test_tektos_agent.py::test_fake_memory_port_is_runtime_memoryport`
+  - `plugins/zetesis/tests/test_port_wiring_memory.py::test_memory_stub_is_protocol_conformant`
+  - `plugins/zetesis/tests/test_real_adapter_factory.py::test_factory_all_ports_protocol_conformant`
+- **Affected stage / plugin / port:** MemoryPort protocol · Tektos + Zetesis test/adapter fakes
+- **Root cause:** ADR-074 D1 (Stage 1.6 Phase 1) added `search_semantic(...)` to the `@runtime_checkable` `MemoryPort` protocol but did not update the plugin-local fake MemoryPorts. `runtime_checkable` isinstance checks require every method the Protocol declares. The failures existed on `main` after PR #25 but only surface when tests are run outside `tests/kernel/`. Discovered during Stage 1.6 Phase 2 (ADR-075) Colossus verify.
+- **Fix applied:** Added a no-op `search_semantic(*args, **kwargs) -> []` to each fake:
+  - `plugins/tektos/tests/test_openspec.py::_FakeMemoryPort`
+  - `plugins/tektos/tests/test_repomap.py::_FakeMemoryPort`
+  - `plugins/tektos/tests/test_tektos_agent.py::_FakeMemoryPort`
+  - `plugins/zetesis/adapters/memory_stub.py::ZetesisMemoryStub` (real stub, kept in prod path but only used for wiring; degrades to `[]`, matches the "adapters MAY degrade" clause in the port docstring).
+- **Files changed:** `plugins/tektos/tests/test_openspec.py`; `plugins/tektos/tests/test_repomap.py`; `plugins/tektos/tests/test_tektos_agent.py`; `plugins/zetesis/adapters/memory_stub.py`
+- **Related BUILD_LOG entry:** 2026-08-01 11:52 EDT (Stage 1.6 Phase 2 D1–D5)

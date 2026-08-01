@@ -181,7 +181,9 @@ def _stub_memory():
 
 
 def test_d7_kernel_version_6_8_0() -> None:
-    assert app.version == "6.8.0"
+    # Version pinned at ADR-071 D7 was 6.8.0; monotonically bumped since:
+    # ADR-073 D5 -> 6.10.0, ADR-074 -> 6.11.0, ADR-075 D5 -> 6.12.0.
+    assert app.version == "6.12.0"
 
 
 def test_d7_boot_registry_fields_present() -> None:

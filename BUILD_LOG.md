@@ -3074,3 +3074,48 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** ADR-075 Ratified v25
 - **Stop-condition status:** in-progress — merge PR #27 then cut code branch
+
+## 2026-08-01 11:52 EDT — Stage 1.6 Phase 2 D1: GraphitiTemporalIndex + KosmosGraphitiEmbedder hard-delete
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · MemoryPort · TemporalIndex sub-port
+- **What changed:** Per ADR-075 §D1, deleted `adapters/memory/dozerdb/graphiti_temporal_index.py`, `adapters/memory/dozerdb/kosmos_graphiti_embedder.py`, and their contract test `test_graphiti_temporal_index_contract.py`. `_boot_memory` dozerdb branch now composes `InMemoryTemporalIndex()` (ADR-070 subsystem). Dropped `graphiti-core` from `pyproject.toml`. Excised live-tier corpus code (`live_tier_requested`, `build_live_index`, `run_corpus_live`) and its regression test. Removed `test_kosmos_graphiti_embedder_bridge` (no longer meaningful). Verified `adapters.memory.dozerdb`, `adapters.memory.dozerdb.corpora`, and `kernel.app` import clean.
+- **Files touched:** adapters/memory/dozerdb/{__init__.py, corpora/{__init__.py, corpus_runner.py, test_corpora_contract.py}}; deleted adapters/memory/dozerdb/{graphiti_temporal_index.py, kosmos_graphiti_embedder.py, test_graphiti_temporal_index_contract.py}; kernel/app.py; pyproject.toml; tests/kernel/test_stage_1_6_adr_073_embeddings_port.py
+- **Ports / adapters affected:** MemoryPort.TemporalIndex composition changed (Graphiti impl removed; InMemoryTemporalIndex remains)
+- **PORTING_LEDGER / ADR updated:** ADR-075 §D1 executed
+- **Stop-condition status:** met
+
+## 2026-08-01 11:52 EDT — Stage 1.6 Phase 2 D2: POST /api/memory/search-semantic + /memory/search UI
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · MemoryPort · kernel-owned semantic search route
+- **What changed:** Per ADR-075 §D2, added `_MemorySearchSemanticBody` Pydantic model + `POST /api/memory/search-semantic` in `kernel/app.py`. Route wraps `MemoryPort.search_semantic(query, corpus=, limit=, min_score=)`. Degrades to `{hits: [], degraded: true, reason}` at 200 when `registry.memory is None` (no hard 503 for degraded lane). 400 on `ValueError`, 502 with class-name preserved on other failures. Added `MemorySearchSemanticBody`, `MemoryHitRow`, `MemorySearchSemanticResult` types + `memorySearchSemantic(body)` method on `kernelClient`. Wrote `ui/app/memory/search/page.tsx` (query input, corpus filter, hit list rendering id/score/as_of/payload, degraded banner, empty state). Added Link from `/memory` to `/memory/search`. Wrote `ui/tests/21-memory-search-semantic.spec.ts` (form scaffold, disabled-empty-query, submit resolves to any state, route contract, 422 on empty).
+- **Files touched:** kernel/app.py; ui/lib/kernel-client.ts; ui/app/memory/page.tsx; ui/app/memory/search/page.tsx (new); ui/tests/21-memory-search-semantic.spec.ts (new)
+- **Ports / adapters affected:** MemoryPort.search_semantic (surfaced via HTTP)
+- **PORTING_LEDGER / ADR updated:** ADR-075 §D2 executed
+- **Stop-condition status:** met
+
+## 2026-08-01 11:52 EDT — Stage 1.6 Phase 2 D3: Zetesis → semantic memory fan-out
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · Zetesis plugin · event bus subscriber
+- **What changed:** Per ADR-075 §D3, extended kernel `_drain_zetesis_reports` (subscribed to `zetesis.research.completed`) to also fan out drained payloads into `MemoryPort.write_event(subject="zetesis.report:<id>", predicate="zetesis.research.completed", object=<summary|answer|question>, provenance="zetesis.event_bus", confidence=1.0, attributes={report_id, kind: "zetesis.report"})`. Preserves ADR-007 (no cross-plugin import; the drain is kernel-owned). Best-effort per ADR-058: any exception lands in `registry.errors["zetesis_fanout"]` and does not block the queue. Skips when payload has no derivable summary text. Wrote `ui/tests/22-zetesis-fan-out-to-semantic.spec.ts` (kernel/errors doesn't surface `zetesis_fanout`; health surface still coherent).
+- **Files touched:** kernel/app.py; ui/tests/22-zetesis-fan-out-to-semantic.spec.ts (new)
+- **Ports / adapters affected:** MemoryPort.write_event (new caller); event bus subscription contract preserved
+- **PORTING_LEDGER / ADR updated:** ADR-075 §D3 executed
+- **Stop-condition status:** met
+
+## 2026-08-01 11:52 EDT — Stage 1.6 Phase 2 D4: /gnosis/graph client-side next_cursor pagination
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · Gnosis graph UI
+- **What changed:** Per ADR-075 §D4, replaced single-page fetch in `ui/app/gnosis/graph/page.tsx` with a lock-step node+edge pagination loop that follows `next_cursor` up to `MAX_PAGES = 10` (1000-node ceiling). Stops early when both cursors clear. Surfaces `graph-truncated` testid + pages-counter footer format `NNN nodes · MMM edges · pages X/10`. Extended `ui/tests/20-gnosis-graph-viz.spec.ts` with a pagination-counter assertion.
+- **Files touched:** ui/app/gnosis/graph/page.tsx; ui/tests/20-gnosis-graph-viz.spec.ts
+- **Ports / adapters affected:** none (UI-only; backend `next_cursor` unchanged)
+- **PORTING_LEDGER / ADR updated:** ADR-075 §D4 executed
+- **Stop-condition status:** met
+
+## 2026-08-01 11:52 EDT — Stage 1.6 Phase 2 D5: kernel version 6.11.0 → 6.12.0
+
+- **Stage / plugin / port:** Stage 1.6 Phase 2 · kernel/app.py
+- **What changed:** Per ADR-075 §D5, bumped `FastAPI(..., version="6.11.0" → "6.12.0")` in `kernel/app.py`. Updated the pinned assertion + test name + comment in `ui/tests/13-community-collapse-and-annotate.spec.ts` from `6.11.0` to `6.12.0`.
+- **Files touched:** kernel/app.py; ui/tests/13-community-collapse-and-annotate.spec.ts
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** ADR-075 §D5 executed
+- **Stop-condition status:** met

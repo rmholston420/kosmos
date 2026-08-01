@@ -24,7 +24,9 @@ import GraphDimensionToggle from "@/components/graph/GraphDimensionToggle";
 import {
   kernelClient,
   type GraphEdge,
+  type GraphEdgePage,
   type GraphNode,
+  type GraphNodePage,
 } from "@/lib/kernel-client";
 
 // SSR-off wrapper — DOM-only libs cannot run during Next build/export.
@@ -57,11 +59,12 @@ interface GraphViewData {
 }
 
 // Backend `_graph_validate_limit` in `kernel/app.py` rejects any
-// value outside [1, 100] with HTTP 400. Cap client requests to the
-// server ceiling. Larger graphs are Phase 2 tech debt (paginate via
-// `next_cursor`).
+// value outside [1, 100] with HTTP 400. Client pages until `next_cursor`
+// is null, capped at `MAX_PAGES` to keep the DOM sane on large corpora
+// (community-collapse per ADR-070 D3 is the correct answer at scale).
 const NODE_LIMIT = 100;
 const EDGE_LIMIT = 100;
+const MAX_PAGES = 10; // ADR-075 D4 ceiling: 1000 nodes + 1000 edges.
 
 const KIND_COLOR: Record<GraphNode["kind"], string> = {
   subject: "var(--color-accent, #7dd3fc)",
@@ -75,44 +78,94 @@ export default function GnosisGraphPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  const [pagesFetched, setPagesFetched] = useState<number>(0);
+  const [truncated, setTruncated] = useState<boolean>(false);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([
-      kernelClient.fetchGraphNodes({
-        corpus: corpus || undefined,
-        limit: NODE_LIMIT,
-      }),
-      kernelClient.fetchGraphEdges({
-        corpus: corpus || undefined,
-        limit: EDGE_LIMIT,
-      }),
-    ])
-      .then(([nodePage, edgePage]) => {
+    setPagesFetched(0);
+    setTruncated(false);
+
+    async function loadPaged(): Promise<void> {
+      const nodes: ForceGraphNode[] = [];
+      const edges: GraphEdge[] = [];
+      let nodeCursor: string | undefined = undefined;
+      let edgeCursor: string | undefined = undefined;
+      let hitCeiling = false;
+
+      // ADR-075 D4: page both node + edge streams in lock-step until
+      // either both cursors are null or the MAX_PAGES ceiling is hit.
+      const emptyNodePage: GraphNodePage = { nodes: [], next_cursor: null };
+      const emptyEdgePage: GraphEdgePage = { edges: [], next_cursor: null };
+      for (let page = 0; page < MAX_PAGES; page += 1) {
         if (cancelled) return;
-        const nodes: ForceGraphNode[] = nodePage.nodes.map((n) => ({
-          id: n.id,
-          label: n.label,
-          kind: n.kind,
-          provenance: n.provenance,
-          confidence: n.confidence,
+        const nodesPromise: Promise<GraphNodePage> =
+          nodeCursor === null
+            ? Promise.resolve(emptyNodePage)
+            : kernelClient.fetchGraphNodes({
+                corpus: corpus || undefined,
+                limit: NODE_LIMIT,
+                cursor: nodeCursor,
+              });
+        const edgesPromise: Promise<GraphEdgePage> =
+          edgeCursor === null
+            ? Promise.resolve(emptyEdgePage)
+            : kernelClient.fetchGraphEdges({
+                corpus: corpus || undefined,
+                limit: EDGE_LIMIT,
+                cursor: edgeCursor,
+              });
+        const [nodePage, edgePage] = await Promise.all([
+          nodesPromise,
+          edgesPromise,
+        ]);
+        nodes.push(
+          ...nodePage.nodes.map((n) => ({
+            id: n.id,
+            label: n.label,
+            kind: n.kind,
+            provenance: n.provenance,
+            confidence: n.confidence,
+          })),
+        );
+        edges.push(...(edgePage.edges as GraphEdge[]));
+        nodeCursor = nodePage.next_cursor ?? undefined;
+        edgeCursor = edgePage.next_cursor ?? undefined;
+        if (!cancelled) setPagesFetched(page + 1);
+        if (
+          (nodePage.next_cursor == null || nodeCursor === null) &&
+          (edgePage.next_cursor == null || edgeCursor === null)
+        ) {
+          nodeCursor = undefined;
+          edgeCursor = undefined;
+          break;
+        }
+        if (page === MAX_PAGES - 1 && (nodePage.next_cursor || edgePage.next_cursor)) {
+          hitCeiling = true;
+        }
+      }
+      if (cancelled) return;
+
+      const nodeIds = new Set(nodes.map((n) => n.id));
+      // Drop edges whose endpoints didn't survive the node page limit.
+      const links: ForceGraphLink[] = edges
+        .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+        .map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          kind: e.kind,
+          label: e.label,
+          provenance: e.provenance,
+          confidence: e.confidence,
         }));
-        const nodeIds = new Set(nodes.map((n) => n.id));
-        // Drop edges whose endpoints didn't survive the node page limit.
-        const links: ForceGraphLink[] = (edgePage.edges as GraphEdge[])
-          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-          .map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            kind: e.kind,
-            label: e.label,
-            provenance: e.provenance,
-            confidence: e.confidence,
-          }));
-        setData({ nodes, links });
-      })
+      setData({ nodes, links });
+      setTruncated(hitCeiling);
+    }
+
+    loadPaged()
       .catch((e: unknown) => {
         if (cancelled) return;
         setError(String(e));
@@ -120,6 +173,7 @@ export default function GnosisGraphPage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
@@ -206,8 +260,13 @@ export default function GnosisGraphPage() {
         data-testid="graph-stats"
         style={{ marginTop: "var(--space-2)", opacity: 0.75 }}
       >
-        {data.nodes.length} nodes · {data.links.length} edges · limit {NODE_LIMIT}
-        /{EDGE_LIMIT}
+        {data.nodes.length} nodes · {data.links.length} edges · pages{" "}
+        {pagesFetched}/{MAX_PAGES}
+        {truncated ? (
+          <span data-testid="graph-truncated" style={{ marginLeft: 8 }}>
+            · truncated at ceiling; use community collapse for full graph
+          </span>
+        ) : null}
       </footer>
     </main>
   );
