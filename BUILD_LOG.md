@@ -2517,3 +2517,55 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** ADR-069 status Ratified.
 - **Stop-condition status:** MET for Stage 1.5 Waves A+B+C. Wave D (MEMORY_INTEGRITY graph via cytoscape.js + `/api/gnosis/graph/*`) is next.
+
+## 2026-08-01 07:35 EDT — Stage 1.5 Wave D · MEMORY_INTEGRITY graph endpoints + panel (ADR-070)
+
+- **Stage / plugin / port:** Stage 1.5 · Kernel Gnosis surrogate + UI · MEMORY_INTEGRITY panel
+- **What changed:** Wires the previously-placeholder `MEMORY_INTEGRITY` panel to a real MemoryPort ⊕ Zetesis provenance graph. ADR-070 authored (Proposed). Six decisions D1–D6.
+  - **`kernel/app.py`**: version bump `6.6.0 → 6.7.0`; `_BootRegistry` gains `zetesis_reports: deque(maxlen=100)` + `zetesis_plugin: Any` handles; three new read-only routes:
+    - `GET /api/gnosis/graph/nodes?corpus=&limit=&cursor=` — deduped subjects/objects/Zetesis reports, opaque-cursor pagination, limit ∈ [1,100] default 20
+    - `GET /api/gnosis/graph/edges?corpus=&node_id=&limit=&cursor=` — projected S-P-O triples + Zetesis `cited_by`/`evidences` edges
+    - `GET /api/gnosis/graph/node/{node_id:path}` — node detail with `neighbor_count` and first 20 neighbor summaries
+    - Corpus filter maps to manifest `provenance_predicate`; zero-trust preserved (never fabricates provenance/confidence — surfaces `None` on missing).
+    - Kill-switch-gated automatically (all under `/api/**`, not in ADR-069 allow-list).
+  - **`ui/lib/kernel-client.ts`**: `fetchGraphNodes`, `fetchGraphEdges`, `fetchGraphNode` + typed `GraphNode`, `GraphEdge`, `GraphNodeKind`, `GraphNodePage`, `GraphEdgePage`, `GraphNodeDetail`, `GraphNeighborSummary`.
+  - **`ui/components/panels/MemoryIntegrityPanel.tsx`** (new): dynamic-imported cytoscape wrapper (SSR-safe for static export), corpus dropdown (5 corpora + `all`), node tap → inspector drawer with provenance/confidence/neighbors, terminal states `role="status"` (loading/empty) or `role="alert"` (error) — error state uses class name only, never raw exception.
+  - **`ui/components/PanelGrid.tsx`**: `MEMORY_INTEGRITY` always-render branch (mirrors `AGENT_TRACE`/`GOVERNANCE` pattern from Waves A–C).
+  - **`ui/package.json`**: adds `cytoscape ^3.30.0` + `react-cytoscapejs ^2.0.0` runtime deps + `@types/cytoscape` + `@types/react-cytoscapejs` dev deps.
+  - **`tests/kernel/test_stage_1_5_adr_070_gnosis_graph.py`** (new, 17 tests): version, three endpoints, limit bounds, memory-down 503, unknown corpus 400, malformed node_id 400, unknown node 404, cursor round-trip, zero-trust field surfacing, Zetesis union, error-report confidence=0.0, corpus subset filter, registry deque state.
+  - **`ui/tests/12-memory-integrity-graph.spec.ts`** (new, 5 tests): panel render + title + selector, corpus defaults to `all` with five options, terminal-state landing, corpus switch reload path, error state via route interception + no raw exception leak.
+- **Files touched:**
+  - `docs/adrs/ADR-070-stage-1-5-memory-integrity-graph.md` (new)
+  - `docs/adrs/README.md` (ADR-070 row)
+  - `PORTING_LEDGER.md` (Stage 1.5 Wave D · UI dependencies section: `cytoscape` + `react-cytoscapejs` VENDORED)
+  - `kernel/app.py` (version, registry fields, 3 endpoints + 7 helpers)
+  - `ui/lib/kernel-client.ts` (3 methods + 6 interfaces)
+  - `ui/components/panels/MemoryIntegrityPanel.tsx` (new)
+  - `ui/components/PanelGrid.tsx` (MEMORY_INTEGRITY branch)
+  - `ui/package.json` (2 runtime + 2 dev deps)
+  - `tests/kernel/test_stage_1_5_adr_070_gnosis_graph.py` (new, 17 tests)
+  - `ui/tests/12-memory-integrity-graph.spec.ts` (new, 5 tests)
+- **Ports / adapters affected:** none. Zero new ports; consumes existing `MemoryPort.query_temporal` + reads `registry.zetesis_reports` deque populated best-effort by future event-bus subscriber (Wave D+ optional).
+- **PORTING_LEDGER / ADR updated:** ADR-070 authored (Proposed); PORTING_LEDGER gains cytoscape + react-cytoscapejs entries.
+- **Stop-condition status:** met pending Colossus green pytest + green Playwright.
+
+## 2026-08-01 07:35 EDT — Wave D fixup: TS types + testid + cold-boot degradation
+
+- **Stage / plugin / port:** Stage 1.5 · Wave D · `/api/gnosis/graph/*` + `MemoryIntegrityPanel`
+- **What changed:**
+  - Removed deprecated `@types/cytoscape` stub (cytoscape ships own types since 3.20).
+  - Import corrected: `Stylesheet` (retired) → `StylesheetStyle` (has `style:` field). `StylesheetCSS` uses `css:`.
+  - `MemoryIntegrityPanel` outer wrapper: `<div data-testid="memory-integrity-panel">` → `<article data-testid="panel-MEMORY_INTEGRITY" data-populated="true">`. Aligns with AgentTrace/Governance shell convention.
+  - Kernel list endpoints degrade to empty page (200) when `registry.memory is None` instead of 503. Node-detail lookup still 503. ADR-070 amended with D7 documenting the decision.
+  - Wave D pytest updated: `test_d1_nodes_memory_down_503` → `test_d1_nodes_memory_down_returns_empty_page`; asserts empty page on both list endpoints.
+  - Wave D Playwright spec updated to query `panel-MEMORY_INTEGRITY`.
+- **Files touched:**
+  - `ui/components/panels/MemoryIntegrityPanel.tsx`
+  - `ui/tests/12-memory-integrity-graph.spec.ts`
+  - `ui/package.json`, `ui/pnpm-lock.yaml`
+  - `kernel/app.py`
+  - `tests/kernel/test_stage_1_5_adr_070_gnosis_graph.py`
+  - `docs/adrs/ADR-070-stage-1-5-memory-integrity-graph.md`
+- **Ports / adapters affected:** MemoryPort read-only (contract unchanged; degradation now surfaces as empty page not 5xx)
+- **PORTING_LEDGER / ADR updated:** ADR-070 amended (D7 added)
+- **Stop-condition status:** in-progress; awaiting Colossus full-suite validation

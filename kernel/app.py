@@ -121,6 +121,16 @@ class _BootRegistry:
         self.suspended: bool = False
         self.suspended_at: str | None = None
         self.suspend_reason: str | None = None
+        # Stage 1.5 Wave D (ADR-070): Zetesis report ring buffer for
+        # MEMORY_INTEGRITY graph endpoints. Populated best-effort by an
+        # event bus subscriber added on Zetesis mount. Bounded at 100 to
+        # cap memory footprint on Colossus's fixed envelope.
+        from collections import deque as _deque_reports
+
+        self.zetesis_reports: Any = _deque_reports(maxlen=100)
+        # Handle to the Zetesis plugin itself, when mounted. Kept as ``Any``
+        # to preserve ADR-007 (no cross-plugin type import in the kernel).
+        self.zetesis_plugin: Any = None
 
 
 registry = _BootRegistry()
@@ -621,7 +631,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.6.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.7.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -1393,6 +1403,387 @@ async def gnosis_event(event_id: str) -> dict[str, Any]:
         if getattr(hit, "id", None) == event_id:
             return _gnosis_hit_to_dict(hit)
     raise HTTPException(404, detail=f"event {event_id!r} not found")
+
+
+# ---------------------------------------------------------------------------
+# Gnosis graph endpoints — ADR-070 (Stage 1.5 Wave D)
+#
+# Three read-only routes projecting MemoryPort triples + Zetesis provenance
+# chains into a node-link graph shape consumable by cytoscape.js. Zero new
+# ports, zero plugin coupling; all kernel-owned per ADR-057. Zero-trust
+# discipline preserved: ``provenance`` and ``confidence`` are surfaced on
+# every node and edge, never fabricated. When Zetesis is absent, endpoints
+# degrade gracefully to MemoryPort-only.
+# ---------------------------------------------------------------------------
+
+import base64 as _b64
+import json as _graph_json
+
+_GRAPH_ID_RE = _gnosis_re.compile(r"^[A-Za-z0-9._:\-]+$")
+
+# CIDOC-CRM predicate prefixes for edge-kind classification. Predicates
+# that match are surfaced verbatim; non-CIDOC predicates still pass through
+# unchanged (spec says verbatim). Kept as data, not code, so future corpora
+# can add kinds without touching this file.
+_ZETESIS_EDGE_KIND_CITED_BY = "zetesis_cited_by"
+_ZETESIS_EDGE_KIND_EVIDENCES = "zetesis_evidences"
+_ZETESIS_NODE_KIND = "zetesis_report"
+
+
+def _graph_encode_cursor(offset: int) -> str:
+    """Encode an opaque pagination cursor.
+
+    Hides the offset-based implementation from clients; keeps the door
+    open to swap in keyset pagination without breaking the wire format.
+    """
+    raw = _graph_json.dumps({"offset": int(offset)}, separators=(",", ":"))
+    return _b64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip(
+        "="
+    )
+
+
+def _graph_decode_cursor(cursor: str | None) -> int:
+    """Decode an opaque pagination cursor to an offset. Missing or
+    malformed cursors yield offset 0.
+    """
+    if not cursor:
+        return 0
+    try:
+        pad = "=" * (-len(cursor) % 4)
+        raw = _b64.urlsafe_b64decode(cursor + pad).decode("utf-8")
+        parsed = _graph_json.loads(raw)
+        off = int(parsed.get("offset", 0))
+        return max(0, off)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _graph_provenance_matches(payload: dict[str, Any], predicate: str) -> bool:
+    """Return True when a MemoryHit payload belongs to the given corpus
+    provenance predicate. Mirrors the union-membership logic used by
+    ``/api/gnosis/query``.
+    """
+    provenances = payload.get("provenances") or []
+    if not isinstance(provenances, (list, tuple, set)):
+        provenances = []
+    singular = payload.get("provenance")
+    return predicate in provenances or singular == predicate
+
+
+async def _graph_fetch_memory_facts(
+    corpus: str | None, cap: int
+) -> list[dict[str, Any]]:
+    """Pull raw MemoryPort facts for graph projection.
+
+    ``cap`` bounds the raw pull; the caller is responsible for slicing
+    the projected node/edge list per cursor and limit. Uses the same
+    ``query_temporal`` bulk-fetch pattern the surrogate already relies on
+    (an empty-ish query text returns most-recent-first hits from the
+    adapter's default ranker).
+    """
+    if registry.memory is None:
+        return []
+    provenance_filter: str | None = None
+    if corpus is not None:
+        entry = _GNOSIS_CORPUS_BY_NAME.get(corpus)
+        if entry is None:
+            raise HTTPException(
+                400,
+                detail=(
+                    f"unknown 'corpus' {corpus!r}; valid: "
+                    f"{sorted(_GNOSIS_CORPUS_BY_NAME.keys())}"
+                ),
+            )
+        provenance_filter = entry["provenance_predicate"]
+    try:
+        hits = await registry.memory.query_temporal("*", limit=min(cap, 500))
+    except ValueError:
+        # An empty-string / wildcard query is not supported by every
+        # adapter. Fall back to an empty result; callers still surface
+        # the graph with Zetesis-only nodes if any.
+        return []
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+    out: list[dict[str, Any]] = []
+    for hit in hits:
+        payload = getattr(hit, "payload", None) or {}
+        if not isinstance(payload, dict):
+            continue
+        if provenance_filter is not None and not _graph_provenance_matches(
+            payload, provenance_filter
+        ):
+            continue
+        subject = payload.get("subject")
+        predicate = payload.get("predicate")
+        object_ = payload.get("object") or payload.get("object_")
+        if not (
+            isinstance(subject, str)
+            and isinstance(predicate, str)
+            and isinstance(object_, str)
+        ):
+            continue
+        provenance = payload.get("provenance")
+        confidence = payload.get("confidence")
+        as_of = getattr(hit, "as_of", None)
+        out.append(
+            {
+                "event_id": getattr(hit, "id", None),
+                "subject": subject,
+                "predicate": predicate,
+                "object": object_,
+                "provenance": provenance if isinstance(provenance, str) else None,
+                "confidence": (
+                    float(confidence)
+                    if isinstance(confidence, (int, float))
+                    else None
+                ),
+                "as_of": as_of.isoformat() if as_of is not None else None,
+            }
+        )
+    return out
+
+
+def _graph_zetesis_reports(
+    corpus: str | None,
+) -> list[dict[str, Any]]:
+    """Snapshot the Zetesis ring buffer for graph projection.
+
+    ``corpus`` filter: Zetesis reports have their own synthetic provenance
+    predicate (``"zetesis:<trial_id>"``); when a specific MemoryPort corpus
+    is filtered we exclude Zetesis unless the caller explicitly asked for
+    the Zetesis pseudo-corpus (not yet defined in Wave D — always include
+    when ``corpus is None``, always exclude otherwise).
+    """
+    if corpus is not None:
+        return []
+    reports = getattr(registry, "zetesis_reports", None)
+    if not reports:
+        return []
+    out: list[dict[str, Any]] = []
+    for r in list(reports):
+        # Support both ResearchReport dataclasses and plain dict envelopes
+        # (event bus subscribers may push either shape).
+        trial_id = getattr(r, "trial_id", None) or (
+            r.get("trial_id") if isinstance(r, dict) else None
+        )
+        query = getattr(r, "query", None) or (
+            r.get("query") if isinstance(r, dict) else ""
+        )
+        error = getattr(r, "error", None) if not isinstance(r, dict) else r.get(
+            "error"
+        )
+        citations = getattr(r, "citations", None) or (
+            r.get("citations") if isinstance(r, dict) else ()
+        )
+        memory_event_id = getattr(r, "memory_event_id", None) or (
+            r.get("memory_event_id") if isinstance(r, dict) else None
+        )
+        if not isinstance(trial_id, str) or not trial_id:
+            continue
+        out.append(
+            {
+                "trial_id": trial_id,
+                "query": query if isinstance(query, str) else "",
+                "error": error if isinstance(error, str) else None,
+                "citations": tuple(c for c in (citations or ()) if isinstance(c, str)),
+                "memory_event_id": (
+                    memory_event_id if isinstance(memory_event_id, str) else None
+                ),
+            }
+        )
+    return out
+
+
+def _graph_project_nodes_edges(
+    facts: list[dict[str, Any]], reports: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Dedupe subjects/objects and materialize typed edges.
+
+    Returns ``(nodes, edges)`` — both lists are stable-sorted for
+    deterministic pagination.
+    """
+    node_index: dict[str, dict[str, Any]] = {}
+    edges: list[dict[str, Any]] = []
+
+    def _upsert(label: str, kind: str, prov: str | None, conf: float | None) -> str:
+        node_id = f"{kind}:{label}"
+        existing = node_index.get(node_id)
+        if existing is None:
+            node_index[node_id] = {
+                "id": node_id,
+                "label": label,
+                "kind": kind,
+                "provenance": prov,
+                "confidence": conf,
+            }
+        return node_id
+
+    for f in facts:
+        s_id = _upsert(f["subject"], "subject", f["provenance"], f["confidence"])
+        o_id = _upsert(f["object"], "object", f["provenance"], f["confidence"])
+        edges.append(
+            {
+                "id": f"{f['event_id']}" if f.get("event_id") else f"{s_id}--{f['predicate']}--{o_id}",
+                "source": s_id,
+                "target": o_id,
+                "kind": f["predicate"],
+                "label": f["predicate"],
+                "provenance": f["provenance"],
+                "confidence": f["confidence"],
+                "as_of": f["as_of"],
+            }
+        )
+
+    for r in reports:
+        conf = 1.0 if r["error"] is None else 0.0
+        rprov = f"zetesis:{r['trial_id']}"
+        z_id = _upsert(
+            r["query"][:80] if r["query"] else r["trial_id"],
+            _ZETESIS_NODE_KIND,
+            rprov,
+            conf,
+        )
+        # Overwrite id so it's stable across reports with identical query
+        # prefixes but different trial_ids.
+        node_index[z_id]["id"] = f"zetesis:{r['trial_id']}"
+        node_index[f"zetesis:{r['trial_id']}"] = node_index.pop(z_id)
+        stable_z_id = f"zetesis:{r['trial_id']}"
+        for citation in r["citations"]:
+            c_id = _upsert(citation, "object", rprov, conf)
+            edges.append(
+                {
+                    "id": f"{stable_z_id}--cited--{c_id}",
+                    "source": stable_z_id,
+                    "target": c_id,
+                    "kind": _ZETESIS_EDGE_KIND_CITED_BY,
+                    "label": _ZETESIS_EDGE_KIND_CITED_BY,
+                    "provenance": rprov,
+                    "confidence": conf,
+                    "as_of": None,
+                }
+            )
+        if r["memory_event_id"]:
+            edges.append(
+                {
+                    "id": f"{stable_z_id}--ev--{r['memory_event_id']}",
+                    "source": stable_z_id,
+                    "target": f"event:{r['memory_event_id']}",
+                    "kind": _ZETESIS_EDGE_KIND_EVIDENCES,
+                    "label": _ZETESIS_EDGE_KIND_EVIDENCES,
+                    "provenance": rprov,
+                    "confidence": conf,
+                    "as_of": None,
+                }
+            )
+
+    nodes = sorted(node_index.values(), key=lambda n: n["id"])
+    edges.sort(key=lambda e: e["id"])
+    return nodes, edges
+
+
+def _graph_validate_limit(limit: int) -> int:
+    if not (1 <= limit <= 100):
+        raise HTTPException(400, detail="'limit' must be in [1, 100]")
+    return limit
+
+
+@app.get("/api/gnosis/graph/nodes")
+async def gnosis_graph_nodes(
+    corpus: str | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Paginated node list. See ADR-070 D1.
+
+    When the MemoryPort adapter is not yet booted, degrade gracefully to an
+    empty page. This matches the AgentTrace/Governance pattern: a panel that
+    always renders on the shell must not 5xx on cold-boot before its
+    dependencies are up, or the browser logs a console error.
+    """
+    if registry.memory is None:
+        return {"nodes": [], "next_cursor": None}
+    _graph_validate_limit(limit)
+    offset = _graph_decode_cursor(cursor)
+    facts = await _graph_fetch_memory_facts(corpus, cap=500)
+    reports = _graph_zetesis_reports(corpus)
+    nodes, _edges = _graph_project_nodes_edges(facts, reports)
+    page = nodes[offset : offset + limit]
+    next_cursor = (
+        _graph_encode_cursor(offset + limit) if offset + limit < len(nodes) else None
+    )
+    return {"nodes": page, "next_cursor": next_cursor}
+
+
+@app.get("/api/gnosis/graph/edges")
+async def gnosis_graph_edges(
+    corpus: str | None = None,
+    node_id: str | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Paginated edge list, optionally filtered to edges incident on a
+    specific ``node_id``. See ADR-070 D1.
+
+    Degrades to an empty page when MemoryPort is not booted (see
+    ``gnosis_graph_nodes``).
+    """
+    if registry.memory is None:
+        return {"edges": [], "next_cursor": None}
+    _graph_validate_limit(limit)
+    if node_id is not None and not _GRAPH_ID_RE.match(node_id.split(":", 1)[-1]):
+        raise HTTPException(400, detail="malformed 'node_id'")
+    offset = _graph_decode_cursor(cursor)
+    facts = await _graph_fetch_memory_facts(corpus, cap=500)
+    reports = _graph_zetesis_reports(corpus)
+    _nodes, edges = _graph_project_nodes_edges(facts, reports)
+    if node_id is not None:
+        edges = [e for e in edges if e["source"] == node_id or e["target"] == node_id]
+    page = edges[offset : offset + limit]
+    next_cursor = (
+        _graph_encode_cursor(offset + limit) if offset + limit < len(edges) else None
+    )
+    return {"edges": page, "next_cursor": next_cursor}
+
+
+@app.get("/api/gnosis/graph/node/{node_id:path}")
+async def gnosis_graph_node(node_id: str) -> dict[str, Any]:
+    """Single node detail with first 20 neighbor summaries.
+    See ADR-070 D1.
+    """
+    if registry.memory is None:
+        raise HTTPException(503, detail=registry.errors.get("memory"))
+    # ``node_id`` is a colon-prefixed synthetic id; the payload after the
+    # first colon must satisfy the id regex.
+    tail = node_id.split(":", 1)[-1] if ":" in node_id else node_id
+    if not _GRAPH_ID_RE.match(tail):
+        raise HTTPException(400, detail="malformed 'node_id'")
+    facts = await _graph_fetch_memory_facts(None, cap=500)
+    reports = _graph_zetesis_reports(None)
+    nodes, edges = _graph_project_nodes_edges(facts, reports)
+    match = next((n for n in nodes if n["id"] == node_id), None)
+    if match is None:
+        raise HTTPException(404, detail=f"node {node_id!r} not found")
+    neighbors = [e for e in edges if e["source"] == node_id or e["target"] == node_id]
+    neighbor_summaries = []
+    for e in neighbors[:20]:
+        other_id = e["target"] if e["source"] == node_id else e["source"]
+        other = next((n for n in nodes if n["id"] == other_id), None)
+        if other is not None:
+            neighbor_summaries.append(
+                {
+                    "id": other["id"],
+                    "label": other["label"],
+                    "kind": other["kind"],
+                    "via_edge_kind": e["kind"],
+                }
+            )
+    return {
+        "node": match,
+        "neighbor_count": len(neighbors),
+        "neighbors": neighbor_summaries,
+    }
 
 
 # ---------------------------------------------------------------------------
