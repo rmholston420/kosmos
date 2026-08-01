@@ -733,3 +733,27 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:**
   - `ui/tests/diagnostics/events-and-graph.spec.ts`
 - **Related BUILD_LOG entry:** —
+
+## 2026-08-01 13:38 EDT — Zetesis writes bypassed kernel DozerDB MemoryPort
+
+- **Symptom:** `/health` reported `memory: true` with empty `boot_errors`; `/api/gnosis/graph/nodes` returned a synthesized `zetesis_report` projection after a Zetesis run; but `docker exec kosmos-dozerdb cypher-shell "MATCH (n) RETURN count(n)"` stayed at `0` across kernel restarts. Direct `neo4j.GraphDatabase.driver().session().run("MERGE ...")` writes from the venv reached DozerDB and persisted, so the DB was healthy end-to-end.
+- **Affected stage / plugin / port:** Stage 1.8 · Zetesis plugin · MemoryPort
+- **Root cause:** `plugins/zetesis/adapters/real/factory.py::build_stage_6_5_zetesis_plugin` constructed its own `DozerDbMemoryAdapter(graph=InMemoryGraphBackend(), amg=NoOpAmgPolicy(), temporal=InMemoryTemporalIndex())` regardless of whether the kernel had a real DozerDB-backed MemoryPort in `registry.memory`. Zetesis's `self.memory.write_event(...)` therefore wrote into an ephemeral in-memory graph that vanished per request. The factory docstring flagged this as a Stage 6.5.1 TODO ("Real DozerDB/Graphiti/AMG backends land at Stage 6.5.1") — that stage had shipped but the factory was never updated.
+- **Fix applied:** Added `memory: MemoryPort | None = None` kwarg to `build_stage_6_5_zetesis_plugin`; kernel now passes `memory=registry.memory` at construction time. Factory only falls back to the InMemory adapter when no memory kwarg is supplied (preserves test-harness isolation). Merged via PR #33 (squash).
+- **Files changed:**
+  - plugins/zetesis/adapters/real/factory.py
+  - kernel/app.py
+- **Related BUILD_LOG entry:** 2026-08-01 13:45 EDT
+
+## 2026-08-01 13:26 EDT — Orphaned docker-proxy on 7687/7474 after DozerDB container removal
+
+- **Symptom:** `docker ps -a | grep dozer` returned zero rows, `sudo docker ps -a` also missing kosmos-dozerdb, yet `ss -tlnp | grep 7687` showed the port bound by a `docker-proxy` process (PID 11090, root-owned). The kernel's systemd `ExecStartPre` TCP probe on 7687 passed, so the service booted "healthy" while writes went into a black hole and reads returned empty. `docker volume ls | grep dozer` also returned nothing — the compose-project volumes (`dozerdb_data`, `dozerdb_logs`) had been removed alongside the container, so the ~696 previously-written nodes were unrecoverable.
+- **Affected stage / plugin / port:** Stage 1.8 · Docker / systemd wiring · DozerDB container lifecycle
+- **Root cause:** `docker compose down` (or equivalent) was run at some point between the initial DozerDB bring-up and the systemd install, removing the container AND its `docker-proxy` port-forwarders orphaned. Compose-project volumes were also swept. Docker-proxy is normally torn down by dockerd when the container dies; the orphan indicates dockerd exited or crashed between the container removal and the proxy cleanup, leaving the port bound.
+- **Fix applied:**
+  - `sudo lsof -iTCP:7687 -sTCP:LISTEN | awk 'NR>1 {print $2}' | xargs -r sudo kill -9` (same for 7474) to free the orphaned proxies.
+  - `docker compose -f ops/compose/memory.yml up -d` re-created container + fresh `compose_dozerdb_data` / `compose_dozerdb_logs` volumes.
+  - Waited for `docker inspect --format='{{.State.Health.Status}}'` to report `healthy`.
+  - Restarted the kernel via `systemctl restart kosmos-kernel`.
+- **Files changed:** (none — operational recovery)
+- **Related BUILD_LOG entry:** 2026-08-01 13:45 EDT

@@ -3182,3 +3182,13 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (DozerDbGraphBackend + InMemoryTemporalIndex + AmgGuardPolicy composition)
 - **PORTING_LEDGER / ADR updated:** — (ADR-008 already Ratified v25)
 - **Stop-condition status:** met — DozerDB reachable, kernel boots with dozerdb backend, memory writes survive restart, gnosis graph reads through the adapter
+
+## 2026-08-01 13:45 EDT — DozerDB end-to-end persistence proven
+
+- **Stage / plugin / port:** Stage 1.8 · MemoryPort · DozerDB adapter (ADR-008 · ADR-063)
+- **What changed:** After fixing PR #33 (factory now reuses kernel MemoryPort), a fresh Zetesis run ("what is dzogchen", trial `a5bca453...`, memory_event `e6046332-08a7-4fd6-9f7b-ca63de1910f7`, latency 218.5s) produced 4 nodes in DozerDB (1 SmokeTest baseline + 1 subject Entity + 1 object Entity + 1 MemoryEvent). Kernel restart preserved all 4. Written row confirmed via cypher: `predicate="zetesis.research.completed"`, `provenance="zetesis_research"`, object contains the full research answer body. Systemd-managed kernel restart is now data-safe under the ADR-008 backend.
+- **Files touched:**
+  - (none this entry — validation only)
+- **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (DozerDbGraphBackend + AmgGuardPolicy tiered + InMemoryTemporalIndex)
+- **PORTING_LEDGER / ADR updated:** — (DozerDB 5.26.27 already VENDORED at line 378; no change needed)
+- **Stop-condition status:** met — Stage 1.8 MemoryPort DozerDB backend is production-shape on Colossus (systemd-supervised kernel + Docker-supervised DozerDB + Zetesis writing through the shared kernel-owned adapter + writes surviving kernel restart)
