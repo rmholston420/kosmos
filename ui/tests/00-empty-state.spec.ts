@@ -20,12 +20,51 @@ test.describe("Empty kernel state", () => {
   });
 
   test("no console errors on cold load", async ({ page }) => {
-    const errors: string[] = [];
+    // Two-layer guard:
+    // (1) collect every JS console error (unhandled exceptions, React
+    //     escalated warnings, etc.) — these must always be zero.
+    // (2) collect every HTTP failure (>=400) hit during the cold load and
+    //     fail if any URL is not on a known-benign allowlist (favicon,
+    //     static-mount prefetches, background health polls that safely
+    //     degrade). This preserves the empty-state contract without
+    //     coupling to Chrome's "Failed to load resource" console text.
+    const jsErrors: string[] = [];
+    const failedResponses: { url: string; status: number }[] = [];
     page.on("console", (msg) => {
-      if (msg.type() === "error") errors.push(msg.text());
+      if (msg.type() !== "error") return;
+      const text = msg.text();
+      // Chrome logs every non-2xx as a generic "Failed to load resource"
+      // console error. Skip that specific browser-layer wrapper here —
+      // the HTTP-failure allowlist below handles it with more precision.
+      if (text.startsWith("Failed to load resource")) return;
+      jsErrors.push(text);
+    });
+    page.on("response", (res) => {
+      const s = res.status();
+      if (s < 400) return;
+      failedResponses.push({ url: res.url(), status: s });
     });
     await page.goto("/");
     await page.waitForLoadState("networkidle");
-    expect(errors, `console errors: ${errors.join(" | ")}`).toHaveLength(0);
+
+    const BENIGN_404 = [
+      /\/favicon\.ico$/,
+      /\/apple-touch-icon.*\.png$/,
+      /\/robots\.txt$/,
+    ];
+    const unexpected = failedResponses.filter(
+      (r) => !(r.status === 404 && BENIGN_404.some((re) => re.test(r.url)))
+    );
+
+    expect(
+      jsErrors,
+      `js console errors on cold load: ${jsErrors.join(" | ")}`
+    ).toHaveLength(0);
+    expect(
+      unexpected,
+      `unexpected HTTP failures on cold load: ${unexpected
+        .map((r) => `${r.status} ${r.url}`)
+        .join(", ")}`
+    ).toHaveLength(0);
   });
 });
