@@ -14,6 +14,7 @@ Requires Valkey up (event_bus + notification chain); on Colossus the
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any, Iterator
 
 import pytest
@@ -45,8 +46,13 @@ def approval_engine(client: TestClient):
 
 
 def _propose_pending(client: TestClient, engine, *, intention_id: str) -> str:
-    """Seed one HUMAN_REVIEW record via the live engine; return approval_id."""
-    return client.portal.call(
+    """Seed one HUMAN_REVIEW record via the live engine; return approval_id.
+
+    ``anyio.BlockingPortal.call`` does not accept keyword arguments, so
+    the coroutine + its bound kwargs are packaged with ``functools.partial``
+    and the portal drives it on the app's live event loop.
+    """
+    call = partial(
         engine.propose,
         intention_id,
         {"kind": "test.change", "payload": {"n": 1}},
@@ -54,6 +60,7 @@ def _propose_pending(client: TestClient, engine, *, intention_id: str) -> str:
         proposing_domain="tektos",
         diff_preview={"summary": "test-change"},
     )
+    return client.portal.call(call)
 
 
 # --------------------------------------------------------------------------
