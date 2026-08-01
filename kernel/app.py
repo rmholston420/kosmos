@@ -254,24 +254,19 @@ async def lifespan(app: FastAPI):
     # --- LLM (OllamaAdapter) --------------------------------------------------
     # Stage 6.5.6 addition (ADR-063): kernel-owned LLMPort shared by Tektos
     # and future plugins. Ollama endpoint + model overridable via env vars
-    # ``KOSMOS_OLLAMA_BASE_URL`` and ``KOSMOS_TEKTOS_MODEL``. Failure surfaces
-    # under ``registry.errors['llm']`` and cascades to Tektos boot below.
+    # ``KOSMOS_OLLAMA_BASE_URL`` (native Ollama HTTP API root, *not* the
+    # ``/v1`` OpenAI-compat prefix — adapter posts to ``/api/generate``,
+    # ``/api/chat``, ``/api/embed``, etc.) and ``KOSMOS_OLLAMA_DEFAULT_MODEL``.
+    # Failure surfaces under ``registry.errors['llm']`` and cascades to
+    # Tektos boot below.
     @_try("llm")
     def _boot_llm():
-        import os
-
         from adapters.llm.ollama.adapter import OllamaAdapter
 
-        return OllamaAdapter(
-            base_url=os.environ.get(
-                "KOSMOS_OLLAMA_BASE_URL",
-                "http://127.0.0.1:11434/v1",
-            ),
-            default_model=os.environ.get(
-                "KOSMOS_TEKTOS_MODEL",
-                "qwen2.5:32b-instruct-q4_K_M",
-            ),
-        )
+        # OllamaAdapter reads ``KOSMOS_OLLAMA_BASE_URL`` and
+        # ``KOSMOS_OLLAMA_DEFAULT_MODEL`` itself when constructor args
+        # are omitted, so pass through with no kwargs.
+        return OllamaAdapter()
 
     registry.llm = _boot_llm
 
@@ -310,11 +305,14 @@ async def lifespan(app: FastAPI):
             user = os.environ["KOSMOS_DOZERDB_USER"]
             password = os.environ["KOSMOS_DOZERDB_PASSWORD"]
             database = os.environ.get("KOSMOS_DOZERDB_DATABASE", "neo4j")
+            # Graphiti calls Ollama via the OpenAI-compat ``/v1`` prefix,
+            # not the native Ollama HTTP API root that ``OllamaAdapter``
+            # uses. Separate env var so the two callers stay independent.
             llm_url = os.environ.get(
-                "KOSMOS_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1"
+                "KOSMOS_GRAPHITI_LLM_URL", "http://127.0.0.1:11434/v1"
             )
             llm_model = os.environ.get(
-                "KOSMOS_TEKTOS_MODEL", "qwen2.5:32b-instruct-q4_K_M"
+                "KOSMOS_OLLAMA_DEFAULT_MODEL", "qwen2.5:32b-instruct-q4_K_M"
             )
             embed_model = os.environ.get(
                 "KOSMOS_EMBED_MODEL", "nomic-embed-text"

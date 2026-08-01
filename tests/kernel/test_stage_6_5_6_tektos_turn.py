@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 from kernel import app as kernel_app_module
 from kernel.app import app
 from plugins.tektos.agent import TektosAgent
+from ports.memory import MemoryEventId
 
 
 # --------------------------------------------------------------------------
@@ -86,33 +87,31 @@ class _FakeMemoryPort:
     events: list[dict[str, Any]] = field(default_factory=list)
     fail_write_with: Exception | None = None
 
-    async def write_event(
-        self,
-        subject: str,
-        predicate: str,
-        object: Any,
-        *,
-        as_of: datetime | None = None,
-        confidence: float,
-        provenance: str,
-        meta: dict[str, Any] | None = None,
-    ) -> str:
+    async def write_event(self, *args: Any, **kwargs: Any) -> MemoryEventId:
+        """Match the real port surface loosely so signature drift never
+        breaks the fake. Real signature (Stage 6.5.6):
+        ``write_event(subject, predicate, object, *, provenance,
+        confidence, source_citation=None, pii_tier='Public',
+        attributes=None) -> MemoryEventId``."""
         if self.fail_write_with is not None:
             raise self.fail_write_with
+        now = datetime.now(timezone.utc)
         event_id = f"evt-{len(self.events) + 1}"
         self.events.append(
             {
                 "id": event_id,
-                "subject": subject,
-                "predicate": predicate,
-                "object": object,
-                "as_of": as_of or datetime.now(timezone.utc),
-                "confidence": confidence,
-                "provenance": provenance,
-                "meta": meta or {},
+                "args": args,
+                "kwargs": kwargs,
+                # Convenience projections for the common fields.
+                "object": (args[2] if len(args) >= 3 else kwargs.get("object")),
+                "subject": (args[0] if len(args) >= 1 else kwargs.get("subject")),
+                "predicate": (args[1] if len(args) >= 2 else kwargs.get("predicate")),
+                "confidence": kwargs.get("confidence"),
+                "provenance": kwargs.get("provenance"),
+                "attributes": kwargs.get("attributes") or {},
             }
         )
-        return event_id
+        return MemoryEventId(id=event_id, written_at=now)
 
     async def query_temporal(
         self,
