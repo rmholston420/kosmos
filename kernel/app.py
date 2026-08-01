@@ -41,6 +41,14 @@ Kernel HTTP endpoints (6.5.5):
   the static ``ALL_CORPORA`` tuple (ADR-064).
 - ``GET /api/gnosis/event/{event_id}`` — single hit lookup by
   ``event_id`` via ``MemoryPort.query_temporal`` (ADR-064).
+- ``GET /api/ollama/status`` — top-bar model-swap indicator; passthrough
+  to Ollama ``/api/ps`` returning ``{model, size_vram, size_ram,
+  vram_capacity_bytes}`` (ADR-068 D1). VRAM capacity is Colossus-fixed
+  at 32 GiB (RTX 5090).
+- ``GET /api/praxis/constitution`` — read-only constitution summary
+  ``{version, sha256, ratified_at, title, article_count}`` (ADR-068 D2).
+- ``GET /api/praxis/apex/policies`` — enumeration of the nine spec §14
+  Tier-2 escalation triggers (ADR-068 D3).
 
 Boot env vars (ADR-064):
 
@@ -606,7 +614,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.5.8", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.5.9", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -1217,6 +1225,144 @@ async def gnosis_event(event_id: str) -> dict[str, Any]:
         if getattr(hit, "id", None) == event_id:
             return _gnosis_hit_to_dict(hit)
     raise HTTPException(404, detail=f"event {event_id!r} not found")
+
+
+# ---------------------------------------------------------------------------
+# Ollama status (ADR-068 D1) — passthrough to Ollama /api/ps for the top-bar
+# model-swap indicator. Hardcoded ``vram_capacity_bytes`` reflects Colossus's
+# RTX 5090 (32 GiB). Never fabricates a shape when Ollama is unreachable —
+# 502 with class-name preserved on transport failure so the UI can render a
+# degraded state instead of a fake reading.
+# ---------------------------------------------------------------------------
+
+
+_COLOSSUS_VRAM_CAPACITY_BYTES: int = 34_359_738_368  # 32 GiB, RTX 5090
+
+
+@app.get("/api/ollama/status")
+async def ollama_status() -> dict[str, Any]:
+    """Return the currently-loaded Ollama model + resident VRAM/RAM footprint.
+
+    Passthrough to Ollama ``GET /api/ps``. When no model is loaded (idle
+    Ollama), returns ``{model: None, size_vram: 0, size_ram: 0,
+    vram_capacity_bytes: <capacity>}``. When Ollama is unreachable, 502.
+    """
+    if registry.llm is None:
+        raise HTTPException(503, detail=registry.errors.get("llm"))
+
+    import httpx
+
+    base_url = getattr(registry.llm, "_base_url", "http://127.0.0.1:11434")
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(f"{base_url}/api/ps")
+            resp.raise_for_status()
+            payload = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    models = payload.get("models") or []
+    if not models:
+        return {
+            "model": None,
+            "size_vram": 0,
+            "size_ram": 0,
+            "vram_capacity_bytes": _COLOSSUS_VRAM_CAPACITY_BYTES,
+        }
+    m = models[0]
+    size_vram = int(m.get("size_vram") or 0)
+    size_total = int(m.get("size") or 0)
+    return {
+        "model": m.get("name") or m.get("model"),
+        "size_vram": size_vram,
+        "size_ram": max(size_total - size_vram, 0),
+        "vram_capacity_bytes": _COLOSSUS_VRAM_CAPACITY_BYTES,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Praxis constitution (ADR-068 D2) — read-only integrity anchor for the
+# GOVERNANCE panel. Lazily loads + verifies the constitution on first hit,
+# then caches on ``registry.praxis_constitution``. A tamper failure at read
+# time surfaces as 502 (never 500, never silently succeed).
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/praxis/constitution")
+def praxis_constitution() -> dict[str, Any]:
+    """Return the currently-loaded constitution artifact summary.
+
+    Response: ``{version, sha256, ratified_at, title, article_count}``.
+    ``sha256`` is over ``json_text`` (the byte sequence the signature was
+    computed against). ``article_count`` = ``len(payload.get('policies', {}))``
+    — at Stage 1.5 the genesis constitution ships zero policies; this is
+    the honest number, not a placeholder.
+    """
+    cached = getattr(registry, "praxis_constitution", None)
+    if cached is None:
+        try:
+            import hashlib
+
+            from plugins.praxis.constitution.loader import ConstitutionLoader
+
+            loader = ConstitutionLoader(verify_on_init=True)
+            artifact = loader.artifact
+            sha256 = hashlib.sha256(
+                artifact.json_text.encode("utf-8")
+            ).hexdigest()
+            payload = artifact.payload
+            cached = {
+                "version": artifact.version_number,
+                "sha256": sha256,
+                "ratified_at": payload.get("ratified_at"),
+                "title": payload.get("title"),
+                "article_count": len(payload.get("policies") or {}),
+            }
+            registry.praxis_constitution = cached
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                502, detail=f"{type(exc).__name__}: {exc}"
+            ) from exc
+    return cached
+
+
+# ---------------------------------------------------------------------------
+# Praxis APEX policies (ADR-068 D3) — read-only enumeration of the
+# kernel-wide Tier-2 triggers from spec §14 (``plugins.praxis.apex.models
+# .Trigger``). All triggers escalate to ``HUMAN_REQUIRED`` per ADR-033.
+# This is a static classification surface at Stage 1.5 (matches the fact
+# that ``EscalationPolicy`` is a pure classifier with no runtime state);
+# when APEX grows plugin-registered policies, this endpoint gains them
+# without a UI contract break.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/praxis/apex/policies")
+def praxis_apex_policies() -> list[dict[str, Any]]:
+    """Return the kernel-wide Tier-2 escalation policy set.
+
+    Response: ``list[{policy_id, name, tier, active_since}]`` sorted by
+    ``policy_id``. ``active_since`` is the constitution's ``ratified_at``
+    (all Tier-2 triggers are constitutional, ratified at genesis).
+    """
+    from plugins.praxis.apex.models import Trigger
+
+    constitution = praxis_constitution()  # reuses cache; may raise 502
+    active_since = constitution.get("ratified_at")
+    return sorted(
+        (
+            {
+                "policy_id": t.value,
+                "name": t.name.replace("_", " ").title(),
+                "tier": "HUMAN_REQUIRED",
+                "active_since": active_since,
+            }
+            for t in Trigger
+        ),
+        key=lambda p: p["policy_id"],
+    )
 
 
 # ---------------------------------------------------------------------------

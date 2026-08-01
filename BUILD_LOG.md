@@ -2376,3 +2376,18 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none (ADR is scope-only; port surface untouched).
 - **PORTING_LEDGER / ADR updated:** ADR-068 authored + indexed. PORTING_LEDGER unchanged this commit (Wave A commit will add `cmdk` VENDORED row; Wave D commit will add `cytoscape` VENDORED row).
 - **Stop-condition status:** met — ADR-068 lands as its own commit before Wave A code touches `kernel/app.py` or `ui/`.
+
+## 2026-08-01 06:35 EDT — ADR-068 Wave A backend deltas landed (kernel 6.5.9)
+
+- **Stage / plugin / port:** Stage 1.5 · kernel · 3 additive HTTP routes (no port change)
+- **What changed:** Landed the three backend deltas locked by ADR-068 as additive routes in `kernel/app.py`:
+  - **D1** `GET /api/ollama/status` — httpx passthrough to `${KOSMOS_OLLAMA_BASE_URL:-http://127.0.0.1:11434}/api/ps` returning `{model, size_vram, size_ram, vram_capacity_bytes}`. 32 GiB VRAM constant hardcoded for Colossus RTX 5090. 503 when `registry.llm is None`, 502 on transport failure (class-name preserved), idle-shape when no model loaded.
+  - **D2** `GET /api/praxis/constitution` — lazy-load + verify via `ConstitutionLoader(verify_on_init=True)`, then cache on `registry.praxis_constitution`. Returns `{version, sha256, ratified_at, title, article_count}` where sha256 is over `artifact.json_text`. 502 on tamper.
+  - **D3** `GET /api/praxis/apex/policies` — enumerates `plugins.praxis.apex.models.Trigger` (nine spec §14 Tier-2 triggers), each with `tier="HUMAN_REQUIRED"` and `active_since` = constitution's ratified_at. Sorted by policy_id.
+  - `FastAPI(version=)` bumped 6.5.8 → 6.5.9 (docstring header was already 6.5.9 from ADR-066, version string was overlooked at that lock-in).
+  - Kernel header route summary extended with the three new routes (ADR-068 D1/D2/D3).
+  - 11 new tests in `tests/kernel/test_stage_1_5_adr_068_backend_deltas.py` covering: D1 loaded-model / idle / 503 / 502; D2 verified-artifact / cache-hit / tamper-502; D3 nine-triggers / all-human-required / constitution-fail-cascades-502.
+- **Files touched:** `kernel/app.py` (header + 3 routes + version); `tests/kernel/test_stage_1_5_adr_068_backend_deltas.py` (new).
+- **Ports / adapters affected:** none — all three routes call existing subsystems (`registry.llm._base_url`, `ConstitutionLoader`, `Trigger` enum). ADR-007 respected (kernel imports `plugins.praxis.constitution.loader` + `plugins.praxis.apex.models` inside the route handlers; no cross-plugin import). Zero new pip dep (httpx already vendored via FastAPI's TestClient stack).
+- **PORTING_LEDGER / ADR updated:** none — ADR-068 already ratified in previous commit; no new vendored component.
+- **Stop-condition status:** met — user requested backend-only landing so Colossus can pull + run pytest before UI work begins. Wave A frontend blocked pending user green-light.
