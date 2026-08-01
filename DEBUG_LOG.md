@@ -425,3 +425,19 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:**
   - `kernel/app.py` (v1 → v2)
 - **Related BUILD_LOG entry:** 2026-08-01 01:12 EDT
+
+
+## 2026-08-01 01:20 EDT — /api/resources/balances 500: 'SqliteResourceAdapter' object has no attribute 'get_balance'
+
+- **Symptom:**
+  ```
+  File "/home/rmholston/dev/kosmos/kernel/app.py", line 250, in resource_balances
+      bal = await rp.get_balance(kind)
+                  ^^^^^^^^^^^^^^
+  AttributeError: 'SqliteResourceAdapter' object has no attribute 'get_balance'
+  ```
+- **Affected stage / plugin / port:** Stage 6.4 · Kernel · ResourcePort
+- **Root cause:** `ResourcePort` (`ports/resource.py`) exposes `can_allocate`, `allocate`, `replenish`, `priority_queue_position`, `enqueue`, `peek`, `dequeue`, `cancel`, `is_healthy`, `close` — **not** `get_balance`. The `get_balance` method lives on the `Storage` protocol (line 258 of `ports/resource.py`) and is implemented by `InMemoryStorage` / `AioSqliteStorage`. The kernel endpoint conflated the two.
+- **Fix applied:** Stash the storage instance on the adapter at boot (`adapter._kernel_storage = storage`), then read balances via `storage.get_balance(kind)` in the endpoint with try/except → None fallback. `_kernel_storage` attribute is kernel-private and does not modify the `ResourcePort` protocol.
+- **Files changed:** `kernel/app.py`
+- **Related BUILD_LOG entry:** 2026-08-01 01:22 EDT

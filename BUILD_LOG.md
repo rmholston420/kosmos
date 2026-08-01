@@ -1963,3 +1963,13 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** `FrontendContractPort`, `ApprovalResolverPort` (via `KernelChangeApprovalAdapter`), `ResourcePort` (via `SqliteResourceAdapter(InMemoryStorage)`), `NotificationPort`, `EventBusPort` (Valkey) — all composed at boot behind try/except.
 - **PORTING_LEDGER / ADR updated:** PORTING_LEDGER.md has the kernel entry.
 - **Stop-condition status:** in-progress — `python -c 'from kernel.app import app'` returns clean; uvicorn boot smoke pending post-pull on Colossus. See DEBUG_LOG entry 2026-08-01 01:05 EDT for the v1→v2 fix.
+
+
+## 2026-08-01 01:22 EDT — Kernel resource-balances endpoint bugfix (v2 → v2.1)
+
+- **Stage / plugin / port:** Stage 6.4 · Kernel · ResourcePort
+- **What changed:** `/api/resources/balances` was calling `rp.get_balance(kind)` — that method is on the `Storage` protocol, not `ResourcePort`. Fixed by stashing the `InMemoryStorage` instance on the adapter at boot (`adapter._kernel_storage = storage`) and reading balances via `storage.get_balance(kind)` in the endpoint. Storage returns `None` for unseeded kinds → endpoint emits `{"time": null, "money": null, ...}` cleanly.
+- **Files touched:** `kernel/app.py`
+- **Ports / adapters affected:** `ResourcePort` (endpoint plumbing only; port surface unchanged).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met — kernel boot degraded (Phrouros expected 503 until 6.5); 5/6 subsystems green; endpoints return valid JSON.

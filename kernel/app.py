@@ -100,7 +100,13 @@ async def lifespan(app: FastAPI):
             SqliteResourceAdapter,
         )
 
-        return SqliteResourceAdapter(storage=InMemoryStorage())
+        storage = InMemoryStorage()
+        adapter = SqliteResourceAdapter(storage=storage)
+        # Stash storage on the adapter so /api/resources/balances can
+        # read ResourceBalance rows directly (ResourcePort exposes no
+        # get_balance surface — that lives on the Storage protocol).
+        adapter._kernel_storage = storage  # type: ignore[attr-defined]
+        return adapter
 
     registry.resource = _boot_resource
 
@@ -245,10 +251,16 @@ async def resource_balances() -> dict[str, Any]:
         raise HTTPException(503, detail=registry.errors.get("resource"))
     from ports.resource import ResourceKind
 
+    storage = getattr(rp, "_kernel_storage", None)
     out: dict[str, Any] = {}
     for kind in ResourceKind:
-        bal = await rp.get_balance(kind)
-        out[kind.value if hasattr(kind, "value") else str(kind)] = (
+        bal = None
+        if storage is not None and hasattr(storage, "get_balance"):
+            try:
+                bal = await storage.get_balance(kind)
+            except Exception:
+                bal = None
+        out[kind.value] = (
             _dataclass_to_dict(bal) if bal is not None else None
         )
     return out
