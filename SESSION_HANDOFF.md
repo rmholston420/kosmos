@@ -1,33 +1,24 @@
-# Kosmos Session Handoff — 2026-08-01 17:14 EDT
+# Kosmos Session Handoff — 2026-08-01 17:24 EDT
 
 ## Current build-sequencing position
-- **Stage / phase:** Stage 3.13.2 (early landing of `SqliteStorage`, ADR-078)
-- **Plugin / kernel component:** `plugins.praxis.apex` · `Storage` protocol seam · `_boot_approval` switch
-- **Port(s) in progress:** none new — reused existing `plugins.praxis.apex.protocol.Storage`
+- **Stage / phase:** Stage 3.14a **LANDED** (SandboxProvider port + git-worktree adapter + bwrap boundary + systemd + contract tests). Stage 3.14b **QUEUED** (Tektos executor loop + endpoints + UI).
+- **Plugin / kernel component:** `ports.sandbox` (new port), `adapters.sandbox.gitworktree` (new adapter). Tektos executor plugin lands next.
+- **Port(s) in progress:** none — `SandboxProvider` is complete for 3.14a scope.
 
 ## Completed this session
-- Stage 3.13 fix (16:36 EDT DEBUG_LOG) — `/api/tektos/intention` now reads `registry.approval_gateway` (ApprovalGatewayPort) instead of `registry.approval` (ApprovalResolverPort). Pushed as `5f305a3`.
-- Stage 3.13.1 (16:50 EDT BUILD_LOG) — read-only plan detail: `GET /api/tektos/plan/{approval_id}` + rewritten `/tektos/detail` (record + PlanCard + proposal.md + tasks.md; approve/reject via `/api/approvals/{id}/*`; Execute + Diff disabled with "Stage 3.14" label) + systemd drop-in `10-tektos-intention-root.conf` for the scaffold write root + ADR-077 D2a/D2b. Pushed as `4b5ba2b`.
-- Colossus verified Stage 3.13 stop condition: APEX record `45099d54-...` visible via `/api/approvals?proposing_domain=tektos` with `HUMAN_REVIEW`/`PENDING`/`confidence=0.525`.
-- Diagnosed post-restart 404 on `/api/tektos/plan/45099d54-...`: root cause = `InMemoryStorage` wiped by kernel restart. Confirmed `SqliteStorage` was a stub in the same module; confirmed DozerDB is wired only as `MemoryPort`, not as APEX storage. Elected A1: land `SqliteStorage` now under ADR-078; defer DozerDB migration to Stage 5.
-- Stage 3.13.2 (17:12 EDT BUILD_LOG) — `SqliteStorage` implementation + opt-in boot switch + systemd drop-in `20-apex-db-path.conf` + parametrized contract tests + ADR-078.
+- Stage 3.13.2 (`ad8f384`←`d534e59`+`c4bbf20`) — APEX SqliteStorage early landing (ADR-078) + `_json_load` mappingproxy→dict fix. Approval durability verified on Colossus (detail page renders across kernel restart).
+- Stage 3.14a step 1 (`ad8f384`) — `ports/sandbox.py` (SandboxProvider Protocol + SandboxSpec/SandboxHandle/SandboxExecResult + errors + `SANDBOX_PROTOCOL_VERSION="2026-08-01"` + `PROTECTED_READONLY_PATHS`). ADR-079 written. ADR-039 amended with narrow lift (`WorktreeProvider`/Postgres TaskState/Bernstein Janitor spike remain deferred to Phase 4).
+- Stage 3.14a step 2 (pending push) — `GitWorktreeSandboxAdapter` with bubblewrap boundary (mount-ns read-only overlays, `--unshare-{net,pid,uts,ipc}`, `--die-with-parent`, boundary probe on `.git`), env-allowlist strip, APEX approval_id UUID-shape gate, systemd drop-in `30-tektos-sandbox-root.conf`, `PORTING_LEDGER` bubblewrap SYSTEM-BINARY entry, 21 contract tests (12 non-parametrized + 7×2 parametrized `bwrap`/`plain-unsafe` + 2 bwrap-only boundary tests) — all green locally.
 
 ## Remaining before current Definition of Done
-- User pulls, installs the new APEX systemd drop-in, restarts kernel:
-  ```
-  cd ~/dev/kosmos && git pull
-  sudo cp deploy/systemd/kosmos-kernel.service.d/20-apex-db-path.conf /etc/systemd/system/kosmos-kernel.service.d/
-  sudo systemctl daemon-reload && sudo systemctl restart kosmos-kernel && sleep 3
-  ```
-- Clean stale scaffold dirs from prior InMemory-only attempts:
-  ```
-  sudo rm -rf /var/lib/kosmos/tektos/intentions/*
-  ```
-- Submit a fresh intention on `/tektos`, note the new `approval_id`, verify `/tektos/detail?id=<new_id>` renders. Then restart the kernel a second time and re-open the same URL to confirm persistence.
-- Colossus gates on pull: full pytest (adds 21 new cases from the storage contract suite — 10 tests × 2 params + 1 sqlite-only durability test), Next.js build clean, playwright suite.
+- **Stage 3.14a DoD:** Fully met once step 2 is pushed. Deploy sequence: `git pull` + `sudo cp deploy/systemd/kosmos-kernel.service.d/30-tektos-sandbox-root.conf /etc/systemd/system/kosmos-kernel.service.d/` + `daemon-reload` + `restart kosmos-kernel`. Then `pytest adapters/sandbox/gitworktree/tests/ -q` on Colossus to confirm the bwrap tier is green with the real system binary and kernel-configured StateDirectory.
+- **Stage 3.14b (next slice, not started):** `plugins/tektos/executor/` — LLM execution loop (Ollama on Colossus, model TBD in 3.14b ADR), two-identity commits (`Tektos-Agent <rmholston420+tektos@users.noreply.github.com>` for LLM commits, existing user identity for approve/reject), `POST /api/tektos/plan/{approval_id}/execute`, `GET /api/tektos/plan/{approval_id}/diff`, UI `executeTektosPlan` + `getTektosDiff` in `ui/lib/kernel-client.ts`. Colossus-envelope guard (refuse launch if free VRAM < model requirement).
 
 ## Open questions / awaiting user answer
-- Stage 5 durable-wiring ADR M1 vs M2 (keep `SqliteStorage` vs migrate approvals to DozerDB) — deferred to Stage 5 per ADR-078, no action tonight.
+- None. 3.14b scope will restate at start of next session.
 
 ## Exact next action
-- On Colossus, run the pull + systemd install + restart block above, then submit a fresh intention on `/tektos` and confirm the detail page survives a second `sudo systemctl restart kosmos-kernel`.
+1. Push Stage 3.14a step 2 to `origin/stage-3-13-tektos-intention`.
+2. Deploy on Colossus (three-line block, next reply).
+3. Confirm `pytest adapters/sandbox/gitworktree/tests/ -q` green on Colossus (bwrap tier real-run smoke).
+4. Start Stage 3.14b: draft ADR-080 (executor scope + model choice + retry policy + Colossus resource envelope guard).

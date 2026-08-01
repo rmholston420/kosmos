@@ -374,6 +374,16 @@ into Kosmos beyond the existing memory adapter usage.
 - **ADR:** ADR-074
 - **Logged:** 2026-08-01 11:05 EDT
 
+#### bubblewrap (`bwrap`) — SYSTEM-BINARY
+- **Source:** [containers/bubblewrap](https://github.com/containers/bubblewrap)
+- **Commit / Version:** system-packaged `0.11.1` on Kubuntu 26.04
+- **License:** LGPL-2.0-or-later (system binary invoked as subprocess; no source copied or linked)
+- **Kosmos location:** `adapters/sandbox/gitworktree/adapter.py` (subprocess invocation only)
+- **Port(s):** `SandboxProvider`
+- **Modifications:** none — invoked as `bwrap --die-with-parent --unshare-{net,pid,uts,ipc} --ro-bind ... --bind <worktree> ... --chdir ... -- <argv>`
+- **ADR:** ADR-079 (chose bubblewrap over `python-landlock`: bwrap gives mount-namespace read-only overlays, seccomp, network unshare, and pid-namespace in one binary; §156 subprocess-boundary inheritance satisfied by namespace construction; zero new pip deps)
+- **Logged:** 2026-08-01 17:22 EDT
+
 ## Historical entries
 
 Full history through ADR-056 lives in `docs/adrs/README.md`. Notable

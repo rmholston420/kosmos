@@ -3484,3 +3484,19 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** New port `SandboxProvider`. No adapter yet (lands step 2). Consumed by Tektos executor at Stage 3.14b.
 - **PORTING_LEDGER / ADR updated:** ADR-079 proposed, ADR-039 amended. PORTING_LEDGER unchanged this step (bubblewrap is a system binary; ledger entry lands with the adapter in step 2).
 - **Stop-condition status:** Stage 3.14a step 1 met (port surface + governing ADRs land as one reviewable slice). Step 2 (git-worktree adapter + bwrap boundary + systemd + contract tests) is next.
+
+## 2026-08-01 17:24 EDT — Stage 3.14a step 2: GitWorktreeSandboxAdapter + bwrap boundary + contract tests
+
+- **Stage / plugin / port:** Stage 3.14a · `adapters.sandbox.gitworktree.GitWorktreeSandboxAdapter` · implements `ports.sandbox.SandboxProvider`
+- **What changed:** Landed the git-worktree adapter with bubblewrap boundary envelope. `create` resolves `base_ref` to a concrete SHA and adds a `git worktree` under `$KOSMOS_TEKTOS_SANDBOX_ROOT` (default `$XDG_STATE_HOME/kosmos/tektos/sandboxes`). `exec` refuses malformed `approval_id` (UUID-shape check only — is-it-APPROVED? is the Tektos executor's job at 3.14b, preserving ADR-037's propose-only surface), strips env to `env_allowlist`, and when `enforce_boundary=True` wraps the subprocess in `bwrap --die-with-parent --unshare-{net,pid,uts,ipc} --ro-bind ... --bind <worktree> --chdir ...` with a pre-exec boundary probe that raises `SandboxBoundaryError` if `.git` is writable from inside the namespace. Adapter construction refuses `enforce_boundary_default=False` unless `allow_unsafe=True` / `KOSMOS_SANDBOX_ALLOW_UNSAFE=1` is passed (ADR-079 belt-and-suspenders). Adapter is `SandboxProvider`-Protocol-conformant (`runtime_checkable`). `diff` is read-only (git-diff against `handle.base_ref`). `destroy` is idempotent-by-tolerance (missing worktree/branch never raises). `is_healthy` is non-throwing.
+- **Files touched:**
+  - `adapters/sandbox/__init__.py` (new)
+  - `adapters/sandbox/gitworktree/__init__.py` (new)
+  - `adapters/sandbox/gitworktree/adapter.py` (new)
+  - `adapters/sandbox/gitworktree/tests/__init__.py` (new)
+  - `adapters/sandbox/gitworktree/tests/test_gitworktree_adapter.py` (new — 21 contract tests)
+  - `deploy/systemd/kosmos-kernel.service.d/30-tektos-sandbox-root.conf` (new — `KOSMOS_TEKTOS_SANDBOX_ROOT`/`KOSMOS_SANDBOX_ENFORCE_BOUNDARY=1` + `StateDirectory=kosmos/tektos/sandboxes` 0750)
+  - `PORTING_LEDGER.md` (bubblewrap SYSTEM-BINARY entry appended, ADR-079)
+- **Ports / adapters affected:** `SandboxProvider` (port from step 1) now has its first adapter. No plugin-side wiring yet — Tektos executor consumes this at Stage 3.14b.
+- **PORTING_LEDGER / ADR updated:** bubblewrap SYSTEM-BINARY entry (ADR-079).
+- **Stop-condition status:** Stage 3.14a stop conditions met — port surface ratified (step 1), adapter lands with boundary + APEX-id gate + env-strip + read-only protected paths + contract-test parity across `bwrap` and `plain-unsafe` tiers (21/21 green locally: 12 non-parametrized + 7×2 parametrized + 2 bwrap-only boundary tests). Stage 3.14b (LLM execution loop + two-identity commits + `/execute` + `/diff` endpoints + UI wiring) is next.
