@@ -3341,3 +3341,17 @@ Landed ADR-076 §D5 provenance chain surface end-to-end.
   - `tests/integration/test_provenance_live.py` — 2 live-tier tests (unknown → 404/503, route registered in openapi)
 - **Decisions:** Option A across the board (fresh port-level dataclasses since ADR-076 D5 shape does NOT match gate/models.py; edges-in pseudo-cypher taught to both graph backends; wrap `event_id` `<code>` in `<Link>`; FastAPI default 404 body).
 - **Stop condition:** ADR-076 D5 DoD — route surface + UI page + deep-link + fast-tier tests all live in one branch. Live-tier Colossus verify pending.
+
+## 2026-08-01 15:05 EDT — Stage 1.6 Phase 3 D6.5 (Phrouros anomalies table)
+
+Landed the informal ADR-076 D6.5 anomalies UI on /observe.
+
+- **Stage/plugin/port:** Stage 1.6 Phase 3, UI (Phrouros surface)
+- **Files touched:**
+  - `ui/components/observe/PhrourosAnomaliesTable.tsx` — new (table + detector-filter chip + WS live-invalidate + flash highlight on new detection)
+  - `ui/app/observe/page.tsx` — mounts the anomalies section below JobPage
+  - `ui/tests/26-phrouros-anomalies.spec.ts` — 2 Playwright smokes (mount, terminal-state resolution)
+  - `tests/integration/test_phrouros_anomalies_live.py` — 3 live-tier tests (route in openapi, returns list or 503, WS topic advertised)
+- **Backend:** No changes. `GET /api/phrouros/anomalies` (kernel/app.py:2560) + `phrouros.anomaly.detected` on `/api/events/ws` (kernel/app.py:878) already live from Stage 2.4.
+- **UX:** Client subscribes to `/api/events/ws?types=phrouros.anomaly.detected`; each frame triggers a re-fetch of the canonical list and flashes the new row for 3s. Filter chip narrows by detector name. Refresh button forces manual reload.
+- **Stop condition:** D6.5 DoD — visible anomalies table on /observe with WS live-refresh + filter + degraded state for 503.

@@ -1,44 +1,36 @@
 # Session Handoff — Stage 1.6 Phase 3
 
 ## Current stage/plugin/port
-Stage 1.6 Phase 3 — kernel + memory port. Sequence: D4 (COMPLETE) → **D5 (CODE LANDED, verify pending)** → D6.5 → D6 → 3.12 real executor.
+Stage 1.6 Phase 3. Sequence: D4 ✅ → D5 ✅ → **D6.5 (CODE LANDED, verify pending)** → D6 → 3.12 real executor.
 
 ## Completed this session
-- **D4 live-tier bug fixed:** `DozerDbGraphBackend.query_cypher` now translates the `label:` and `contains:` pseudo-cypher shorthands to real Cypher (commit `31d593e`). Live-tier all 3 tests green on Colossus.
-- **D5 code landed** on `stage-1-6-p3-code`:
-  - Port: `ProvenanceLink`, `ProvenanceChain` dataclasses + `provenance_chain` method
-  - Adapter: BFS walk via new `edges_in:` pseudo-cypher (taught to both graph backends)
-  - Kernel: `GET /api/memory/provenance/{event_id}` (404 / 503 / 200 empty-predecessors semantics)
-  - UI: `/memory/provenance/[event_id]` page with confidence pill; search hits deep-link
-  - Tests: 5 fast-tier + 3 Playwright + 2 live-tier
-- **BUILD_LOG.md** appended with D5 entry.
+- **D4 fully closed** (all 3 tiers green including live).
+- **D5 fully closed** (fast-tier 11/11, Playwright 3/3, live-tier 2/2, UI build green). Query-parameter route `/memory/provenance?event=<id>` used to stay compatible with `output: 'export'`.
+- **D6.5 code landed:**
+  - `PhrourosAnomaliesTable` component (table, detector filter, WS live-invalidate on `phrouros.anomaly.detected`, flash highlight)
+  - Mounted on `/observe/page.tsx` below `JobPage`
+  - Backend untouched — `/api/phrouros/anomalies` and WS topic already live from Stage 2.4
+- BUILD_LOG appended.
 
-## Remaining before D5 DoD
+## Remaining before D6.5 DoD
 Colossus verify:
 ```bash
 cd ~/dev/kosmos
 git fetch origin stage-1-6-p3-code && git checkout stage-1-6-p3-code && git pull
-sudo systemctl restart kosmos-kernel
-sleep 3
-pytest adapters/memory/dozerdb/test_contract.py -k provenance -q
-(cd ui && npm run build && npx playwright test 25-memory-provenance)
-KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_provenance_live.py -q
+(cd ui && npm run build && npx playwright test 26-phrouros-anomalies)
+KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_phrouros_anomalies_live.py -q
 ```
 
 ## Open questions
-None. All 4 D5 ambiguities resolved with "make optimal choice":
-1. Fresh port-level dataclasses (gate/models.py has incompatible shape).
-2. Walk existing `:PROVENANCE_OF` edges; empty list when none. Edge-writing deferred.
-3. Wrap `event_id` code span in `<Link>`.
-4. FastAPI default `{"detail": ...}` for 404.
+None.
 
 ## Next action
-Once verify is green on Colossus, begin **D6.5 — Phrouros anomalies table on /observe**:
-- Replace placeholder in `ui/components/panels/GovernancePanel.tsx:108-109`
-- Backend `GET /api/phrouros/anomalies` + `phrouros.anomaly.detected` WS event already live on Colossus
-- UI: anomaly table + WS live-invalidate + filter by detector kind + toast on new arrival
+Once D6.5 verify is green, begin **D6 — AMG status route + pill** (ADR-076 §D6):
+- Backend: `GET /api/memory/amg/status` (kernel builds from `agent_memory_guard.__version__`, `AmgGuardPolicy._policy_preset`/`_policy.detectors` accessors, module-level `_verdict_counter`, D4's `list_quarantined(limit=0).total_count`)
+- Adapter: add public accessors on `AmgGuardPolicy`; new `total_count` field on `QuarantinedPage`
+- UI: header "AMG status" pill on `/memory` (color-coded by quarantined_count > 0)
 
 ## Git state
 - Branch: `stage-1-6-p3-code`
-- Latest commit (to be pushed): D5 code
-- Previous: `31d593e` (D4 pseudo-cypher fix), `c52be79` (D4), `30ade19` (D3 live green)
+- To be pushed: D6.5 code
+- Previous: `a9ed4fc` (D5 test cleanup), `3c1b45c` (D5 static-export refactor), `fee591a` (D5), `31d593e` (D4 pseudo-cypher fix), `c52be79` (D4)
