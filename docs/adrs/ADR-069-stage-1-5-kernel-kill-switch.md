@@ -1,6 +1,6 @@
 # ADR-069 — Stage 1.5 Kernel Kill-Switch (Soft Suspend/Resume)
 
-**Status:** Proposed
+**Status:** Ratified v25 (2026-08-01)
 **Lock-in phase:** Stage 1.5 · Wave C (GUI realization)
 **Supersedes:** —
 
