@@ -78,3 +78,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Attempted fixes:** none — held for ADR amendment.
 - **Next investigation:** at Stage 2 decide whether the per-kind accessor lives on `ResourcePort` (amend ADR-029) or the aggregate is the only sanctioned API.
 - **Related DEBUG_LOG search terms:** `ResourcePort`, `get_balance`, `resource balances`.
+
+### 2026-08-01 — GraphitiTemporalIndex init fails validation on KosmosGraphitiEmbedder
+
+- **Blocks:** no active work — semantic memory path (ADR-074 D3) works because it wires the EmbeddingsPort directly, bypassing Graphiti. This only affects the deprecated Graphiti temporal-index code path.
+- **Symptom:** kernel logs at UI request time print repeatedly:
+  ```
+  GraphitiTemporalIndex init failed: ValidationError: 1 validation error for GraphitiClients
+  embedder
+    Input should be an instance of EmbedderClient
+    input_type=KosmosGraphitiEmbedder
+  ```
+- **Attempted fixes:** none yet — surfaced by Stage 1.6 Phase 1 verify runs
+- **Next investigation:** `adapters/memory/dozerdb/kosmos_graphiti_embedder.py` (or wherever `KosmosGraphitiEmbedder` is defined) needs to subclass `graphiti_core.embedder.EmbedderClient` or the constructor wiring in `graphiti_temporal_index.py` should adapt to a duck-typed protocol. Also consider: ADR-073 marked GraphitiTemporalIndex path as deprecated — the correct fix may be to delete it entirely (hard-delete deferred per ADR-073 §Consequences).
+- **Related DEBUG_LOG search terms:** "GraphitiTemporalIndex", "EmbedderClient", "KosmosGraphitiEmbedder", "GraphitiClients validation"

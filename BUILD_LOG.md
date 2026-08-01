@@ -3047,3 +3047,12 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none
 - **PORTING_LEDGER / ADR updated:** —
 - **Stop-condition status:** met — hotfix only
+
+## 2026-08-01 11:34 EDT — PR #26 merged (graph limit hotfix) + known-issue filed
+
+- **Stage / plugin / port:** Stage 1.6 Phase 1 · Gnosis graph UI · UI-only
+- **What changed:** Merged PR #26 with `--admin --squash --delete-branch` at `0d2f48b`. Verified on Colossus: `/api/gnosis/graph/nodes?limit=100` and `edges?limit=100` now return 200 OK (previously 400). Playwright 3/3 pass. Also filed KNOWN_ISSUES entry for the `KosmosGraphitiEmbedder` validation error observed in kernel logs during graph render (deprecated Graphiti temporal-index code path per ADR-073; does not block Phase 1 semantic memory).
+- **Files touched:** merge only for #26 diff; KNOWN_ISSUES.md appended
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met
