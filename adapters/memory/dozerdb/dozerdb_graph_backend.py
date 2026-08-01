@@ -16,6 +16,7 @@ Key invariants (Kosmos custom instructions + ADR-023 rule 5):
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import uuid
@@ -29,6 +30,38 @@ log = logging.getLogger(__name__)
 # quoting; the adapter contract does not require full Unicode identifier
 # support and the tighter guard eliminates a large injection surface.
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _sanitize_props(props: dict[str, Any]) -> dict[str, Any]:
+    """Coerce values to Neo4j-storable primitives.
+
+    Neo4j (and DozerDB) node/edge properties must be primitives
+    (str, int, float, bool, bytes, None, datetime types) or
+    homogeneous arrays of primitives — nested maps and arrays of maps
+    are rejected at write time with ``Neo.ClientError.Statement.TypeError``.
+
+    This helper JSON-encodes any dict-valued property and any list that
+    contains a dict, leaving other values untouched. It is intentionally
+    conservative: we never mutate typing for values Neo4j accepts
+    natively.
+
+    ADR-063 note: added when the Tektos live smoke test surfaced a
+    nested-``attributes`` write failure. Consumers that want to query
+    inside encoded properties should read them back with
+    ``json.loads`` (or migrate to relationship-based storage in a
+    future ADR).
+    """
+    out: dict[str, Any] = {}
+    for key, value in props.items():
+        if isinstance(value, dict):
+            out[key] = json.dumps(value, default=str, sort_keys=True)
+        elif isinstance(value, list) and any(
+            isinstance(v, (dict, list)) for v in value
+        ):
+            out[key] = json.dumps(value, default=str)
+        else:
+            out[key] = value
+    return out
 
 
 def _validate_identifier(kind: str, value: str) -> None:
@@ -93,7 +126,7 @@ class DozerDbGraphBackend:
     async def add_node(self, label: str, props: dict[str, Any]) -> str:
         _validate_identifier("label", label)
         node_id = str(props.get("id") or uuid.uuid4())
-        merged = {**props, "id": node_id}
+        merged = _sanitize_props({**props, "id": node_id})
         cypher = f"CREATE (n:{label} $props) RETURN n.id AS id"
         rows = await self._run(cypher, {"props": merged})
         if not rows:
@@ -116,7 +149,11 @@ class DozerDbGraphBackend:
         )
         await self._run(
             cypher,
-            {"fid": from_id, "tid": to_id, "props": dict(props or {})},
+            {
+                "fid": from_id,
+                "tid": to_id,
+                "props": _sanitize_props(dict(props or {})),
+            },
         )
 
     async def query_cypher(
