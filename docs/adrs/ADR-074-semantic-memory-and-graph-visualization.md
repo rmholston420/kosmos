@@ -1,6 +1,6 @@
 # ADR-074 — Stage 1.6 Phase 1: Semantic Memory Surface + Graph Visualization Port
 
-**Status:** Proposed
+**Status:** Ratified v25
 **Lock-in phase:** Stage 1.6 · Phase 1
 **Supersedes:** —
 
