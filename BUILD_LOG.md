@@ -2071,3 +2071,16 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `EventBusPort` protocol and `EventEnvelope` untouched.
 - **PORTING_LEDGER / ADR updated:** ADR-061 new; PORTING_LEDGER unchanged.
 - **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
+
+## 2026-08-01 02:22 EDT — Stage 6.5.5 · Approval resolve endpoints (ADR-062)
+
+- **Stage / plugin / port:** Stage 6.5.5 · Kernel HTTP surface · ApprovalResolverPort (consumer side)
+- **What changed:** Added kernel-owned `POST /api/approvals/{approval_id}/approve` and `POST /api/approvals/{approval_id}/reject` over the existing `ApprovalResolverPort` (ADR-045). Approve accepts optional JSON body `{reason?, modifications?, resolved_by?}` — non-empty `modifications` object routes to `MODIFIED`, else `APPROVED`. Reject requires `{reason: non-empty str}` and optionally `{resolved_by?}`. Both return the updated `ApprovalRecord` via `_dataclass_to_dict` on success. Status codes: 200 success; 400 on validation failure (bad JSON body, non-string reason, reject-without-reason, `ValueError` from engine); 404 on `ApprovalNotFoundError`; 409 on `InvalidTransitionError`; 503 when subsystem down; 500 otherwise. Praxis APEX exception classes are matched by name (`type(exc).__name__`) to avoid importing `plugins.praxis.apex.errors` from the kernel (ADR-007). `kernel/app.py` version 6.5.4 → 6.5.5.
+- **Files touched:**
+  - `kernel/app.py` (added `_resolve_error_status`, `_read_optional_json`, `approval_approve`, `approval_reject` routes; version bump; docstring update)
+  - `docs/adrs/ADR-062-stage-6-5-5-approval-resolve-endpoints.md` (new)
+  - `docs/adrs/README.md` (row inserted before ADR-061)
+  - `tests/kernel/test_stage_6_5_5_approval_resolve_endpoints.py` (new)
+- **Ports / adapters affected:** none — zero new port surface; zero new file under `adapters/`. `ApprovalResolverPort` protocol untouched.
+- **PORTING_LEDGER / ADR updated:** ADR-062 new; PORTING_LEDGER unchanged.
+- **Stop-condition status:** in-progress — PR opened, awaiting Colossus green.
