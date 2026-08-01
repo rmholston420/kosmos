@@ -1,17 +1,19 @@
-// ADR-077 Stage 3.13.1 — /tektos/detail read surface smokes.
+// ADR-077 Stage 3.13.1 + Stage 3.14b step 3 (ADR-080) — /tektos/detail smokes.
 //
 // Approve/Reject route through /api/approvals/{id}/{approve,reject}
-// (kernelClient.resolveApproval); Execute + Show Diff are disabled and
-// labeled "Stage 3.14". Backend integration coverage lives in
-// tests/kernel/test_stage_3_13_1_tektos_plan_detail.py.
+// (kernelClient.resolveApproval); Execute + Show Diff route through the
+// Stage 3.14b endpoints (kernelClient.executeTektosPlan / getTektosDiff).
+// Backend integration coverage lives in
+// tests/kernel/test_stage_3_13_1_tektos_plan_detail.py and
+// plugins/tektos/executor/tests/test_endpoint_stubs.py.
 //
 // These smokes intentionally do not seed an APEX record — they assert
 // the page shape when the id points at a missing approval (error state)
-// and that the disabled 3.14 buttons render.
+// and that the wired buttons render in the correct enabled/disabled state.
 
 import { test, expect } from "@playwright/test";
 
-test.describe("Tektos plan detail (Stage 3.13.1, ADR-077)", () => {
+test.describe("Tektos plan detail (Stage 3.13.1 + 3.14b step 3)", () => {
   test("missing ?id= shows error", async ({ page }) => {
     await page.goto("/tektos/detail");
     await expect(page.getByTestId("tektos-plan-error")).toBeVisible();

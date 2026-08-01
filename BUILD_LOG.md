@@ -3603,3 +3603,20 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** `SandboxProvider` (via `GitWorktreeSandboxAdapter`), `LLMPort`, `MemoryPort`, `ApprovalResolverPort` — all composed in the endpoint layer per ADR-080.
 - **PORTING_LEDGER / ADR updated:** — (no new vendored code; ADR-080 endpoint composition contract honored)
 - **Stop-condition status:** met for endpoint wiring — 96/96 executor+openspec tests green (was 93+30, now +5 new endpoint tests replacing 2 stubs = +3 net). Happy-path 200 test deferred pending `files_changed` type contract fix (logged in KNOWN_ISSUES.md).
+
+## 2026-08-01 18:57 EDT — Stage 3.14b step 3: UI wiring for /execute + /diff (ADR-080)
+
+- **Stage / plugin / port:** Stage 3.14b · Tektos executor · UI (Next.js kernel client + /tektos/detail page)
+- **What changed:**
+  - `ui/lib/kernel-client.ts`: added `TektosPlanResult` union + `TektosExecutionResult` + `TektosDiffResult` interfaces mirroring the ADR-080 endpoint shapes (`{execution_id, tasks_attempted, tasks_succeeded, tasks_failed, final_status, change_id, commit_shas}` and `{diff, base_ref, task_count}`); rewired `executeTektosPlan` and `getTektosDiff` return types. Legacy `DiffRender`/`ExecutionResult` interfaces kept (unreferenced elsewhere) with a comment.
+  - `ui/app/tektos/detail/page.tsx`: dropped the "Stage 3.14" disabled placeholders. Execute button unlocks when `status ∈ {APPROVED, MODIFIED}`; on click POSTs `/execute` and renders an `Execution result` panel (execution_id, final_status, tasks succeeded/attempted/failed, change_id, commit SHAs). Show Diff button unlocks after execute completes this session (avoids guaranteed 404 round-trip); on click GETs `/diff` and renders a `Worktree diff` panel (base_ref, task_count, diff body). 404 from `/diff` surfaces as "no diff cached — execute the plan first" via `KernelHttpError.status` check.
+  - `ui/tests/03-tektos-plan-workflow.spec.ts`: rewrote the seeded-approval smoke test for the new response shape (execution_id/final_status/commit_shas replace diff_sha256). Both Execute and Show Diff assert disabled-before-approval; Show Diff asserts disabled-until-execute; Show Diff asserts enabled after execute; execution_id regex matches `<seedId>::…`; final_status matches `SUCCEEDED|PARTIAL|FAILED`; diff base_ref non-empty.
+  - `ui/tests/29-tektos-plan-detail.spec.ts`: updated header comments to reflect ADR-080 wiring (no behavioral test changes — the two existing missing/unknown-id smokes remain valid).
+- **Files touched:**
+  - `ui/lib/kernel-client.ts`
+  - `ui/app/tektos/detail/page.tsx`
+  - `ui/tests/03-tektos-plan-workflow.spec.ts`
+  - `ui/tests/29-tektos-plan-detail.spec.ts`
+- **Ports / adapters affected:** none (UI-layer wiring only; consumes existing kernel HTTP endpoints).
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met for UI wiring — new test IDs `tektos-exec-{id,final-status,tasks-succeeded,tasks-attempted,tasks-failed,commit-count,commit-list}` and `tektos-diff-{base-ref,task-count,body}` render; disabled/enabled gating matches the state machine. Colossus verification pending: `cd ui && pnpm install && pnpm build && pnpm test:e2e -- 29-tektos-plan-detail.spec.ts` (03 smoke needs `KOSMOS_SEED_APPROVAL_ID` + running kernel with `_boot_tektos_sandbox` succeeded).

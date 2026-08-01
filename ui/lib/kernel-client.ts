@@ -37,6 +37,26 @@ export interface AnomalyRecord {
   allocation_id: string | null; queued_request_id: string | null;
 }
 
+// Stage 3.14b step 2e (ADR-080). Mirrors POST /api/tektos/plan/{approval_id}/execute.
+export type TektosPlanResult = "SUCCEEDED" | "PARTIAL" | "FAILED";
+export interface TektosExecutionResult {
+  execution_id: string;
+  tasks_attempted: number;
+  tasks_succeeded: number;
+  tasks_failed: number;
+  final_status: TektosPlanResult;
+  change_id: string;
+  commit_shas: string[];
+}
+// Stage 3.14b step 2e (ADR-080). Mirrors GET /api/tektos/plan/{approval_id}/diff.
+export interface TektosDiffResult {
+  diff: string;
+  base_ref: string;
+  task_count: number;
+}
+
+// Legacy shapes retained for pre-3.14b callers; new call sites should use
+// TektosExecutionResult + TektosDiffResult.
 export interface DiffRender { approval_id: string; change_id: string; body: string; diff_sha256: string; }
 export interface ExecutionResult { approval_id: string; change_id: string; before: string; after: string; diff_sha256: string; }
 
@@ -168,14 +188,18 @@ export const kernelClient = {
   getPlanDetail: (approvalId: string) =>
     getJSON<TektosPlanDetail>(`/api/tektos/plan/${approvalId}`),
 
-  // ADR-067 D4: Tektos plan approve/execute/diff routes still deferred to
-  // Stage 3.14. Approval resolution today routes through the existing
+  // ADR-067 D4: Tektos plan approve routes through the existing
   // /api/approvals/{id}/{approve,reject} surface — see resolveApproval above.
   approveTektosPlan: (approvalId: string) =>
     postJSON<ApprovalRecord>(`/api/tektos/plan/${approvalId}/approve`, {}),
+  // Stage 3.14b step 2e (ADR-080). Kernel composes TektosExecutorLoop under
+  // ColossusResourceGuard and returns the execution summary; the worktree
+  // diff is snapshotted before destroy and cached by approval_id so /diff
+  // is a pure cache read.
   executeTektosPlan: (approvalId: string) =>
-    postJSON<ExecutionResult>(`/api/tektos/plan/${approvalId}/execute`, {}),
-  getTektosDiff: (approvalId: string) => getJSON<DiffRender>(`/api/tektos/plan/${approvalId}/diff`),
+    postJSON<TektosExecutionResult>(`/api/tektos/plan/${approvalId}/execute`, {}),
+  getTektosDiff: (approvalId: string) =>
+    getJSON<TektosDiffResult>(`/api/tektos/plan/${approvalId}/diff`),
 
   listAnomalies: () => getJSON<AnomalyRecord[]>("/api/phrouros/anomalies"),
 

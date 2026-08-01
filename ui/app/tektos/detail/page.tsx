@@ -4,15 +4,22 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   kernelClient,
+  KernelHttpError,
   type ApprovalRecord,
+  type TektosDiffResult,
+  type TektosExecutionResult,
   type TektosPlanDetail,
 } from "../../../lib/kernel-client";
 
 // Stage 3.13.1 (ADR-077). Read-only detail page for a scaffolded Tektos plan.
 // Renders the APEX ApprovalRecord + the scaffolded proposal.md + tasks.md.
 // Approve/Reject route through the existing /api/approvals/{id}/{approve,reject}
-// surface (kernelClient.resolveApproval). Execute + Diff are disabled — the
-// sandboxed executor lands in Stage 3.14.
+// surface (kernelClient.resolveApproval).
+//
+// Stage 3.14b step 3 (ADR-080). Execute + Show Diff wired to the kernel-
+// composed TektosExecutorLoop. Execute unlocks post-approval; Show Diff
+// unlocks after a successful execute (the kernel snapshots the diff before
+// tearing the worktree down and caches it by approval_id).
 
 function DetailInner() {
   const searchParams = useSearchParams();
@@ -22,6 +29,8 @@ function DetailInner() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [execResult, setExecResult] = useState<TektosExecutionResult | null>(null);
+  const [diffResult, setDiffResult] = useState<TektosDiffResult | null>(null);
 
   useEffect(() => {
     if (!approvalId) {
@@ -48,6 +57,39 @@ function DetailInner() {
       setDetail({ ...detail, approval: updated });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onExecute() {
+    if (!detail) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await kernelClient.executeTektosPlan(detail.approval.approval_id);
+      setExecResult(r);
+      setDiffResult(null); // stale on repeat execute
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onShowDiff() {
+    if (!detail) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await kernelClient.getTektosDiff(detail.approval.approval_id);
+      setDiffResult(r);
+    } catch (e) {
+      if (e instanceof KernelHttpError && e.status === 404) {
+        setError("no diff cached \u2014 execute the plan first");
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -93,6 +135,13 @@ function DetailInner() {
 
   const rec = detail.approval;
   const pending = rec.status === "PENDING";
+  const approved = rec.status === "APPROVED" || rec.status === "MODIFIED";
+  const canExecute = approved && !busy;
+  // Show Diff is enabled once we have a cached diff (either from a prior
+  // execute in this session or if the server returns a 200 on GET). We
+  // gate the initial click on "executed at least once this session" to
+  // avoid a guaranteed 404 round-trip.
+  const canShowDiff = approved && (execResult !== null || diffResult !== null) && !busy;
 
   return (
     <main data-testid="tektos-plan-detail" style={{ padding: "1rem" }}>
@@ -198,20 +247,109 @@ function DetailInner() {
           style={{ marginLeft: "0.5rem", padding: "0.25rem", width: "20rem" }}
         />
         <p style={{ fontSize: "0.85rem", opacity: 0.7, marginTop: "0.5rem" }}>
-          Execute + Diff land with Stage 3.14 (sandboxed <code>git worktree</code> executor + <code>git apply</code>).
+          Execute runs the plan inside a bwrap-boundaried <code>git worktree</code> under
+          ColossusResourceGuard; Show Diff reads the cached snapshot taken before the
+          worktree was torn down (ADR-080).
         </p>
-        <button data-testid="tektos-plan-execute" disabled title="Stage 3.14">
-          Execute (Stage 3.14)
+        <button
+          data-testid="tektos-plan-execute"
+          onClick={onExecute}
+          disabled={!canExecute}
+          title={approved ? "Run the executor loop" : "Approve the plan first"}
+        >
+          Execute
         </button>
         <button
           data-testid="tektos-plan-show-diff"
-          disabled
-          title="Stage 3.14"
+          onClick={onShowDiff}
+          disabled={!canShowDiff}
+          title={
+            execResult !== null || diffResult !== null
+              ? "Show the cached worktree diff"
+              : "Execute the plan first"
+          }
           style={{ marginLeft: "0.5rem" }}
         >
-          Show Diff (Stage 3.14)
+          Show Diff
         </button>
       </section>
+
+      {execResult && (
+        <section
+          data-testid="tektos-exec-result"
+          style={{
+            padding: "0.75rem",
+            border: "1px solid var(--border, #586e75)",
+            borderRadius: "4px",
+            margin: "1rem 0",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Execution result</h2>
+          <ul style={{ margin: 0 }}>
+            <li>
+              execution_id: <code data-testid="tektos-exec-id">{execResult.execution_id}</code>
+            </li>
+            <li>
+              final_status:{" "}
+              <span data-testid="tektos-exec-final-status">{execResult.final_status}</span>
+            </li>
+            <li>
+              tasks:{" "}
+              <span data-testid="tektos-exec-tasks-succeeded">{execResult.tasks_succeeded}</span>{" "}
+              /{" "}
+              <span data-testid="tektos-exec-tasks-attempted">{execResult.tasks_attempted}</span>{" "}
+              succeeded (<span data-testid="tektos-exec-tasks-failed">{execResult.tasks_failed}</span>{" "}
+              failed)
+            </li>
+            <li>
+              change_id: <code>{execResult.change_id}</code>
+            </li>
+            <li>
+              commits (<span data-testid="tektos-exec-commit-count">{execResult.commit_shas.length}</span>):
+              <ul data-testid="tektos-exec-commit-list" style={{ margin: 0 }}>
+                {execResult.commit_shas.map((sha) => (
+                  <li key={sha}>
+                    <code style={{ fontSize: "0.85rem" }}>{sha}</code>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          </ul>
+        </section>
+      )}
+
+      {diffResult && (
+        <section
+          data-testid="tektos-diff-render"
+          style={{
+            padding: "0.75rem",
+            border: "1px solid var(--border, #586e75)",
+            borderRadius: "4px",
+            margin: "1rem 0",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Worktree diff</h2>
+          <p style={{ fontSize: "0.85rem", opacity: 0.7 }}>
+            base_ref: <code data-testid="tektos-diff-base-ref">{diffResult.base_ref}</code>{" "}
+            · task_count:{" "}
+            <span data-testid="tektos-diff-task-count">{diffResult.task_count}</span>
+          </p>
+          <pre
+            data-testid="tektos-diff-body"
+            style={{
+              whiteSpace: "pre-wrap",
+              padding: "0.75rem",
+              border: "1px solid var(--border, #586e75)",
+              borderRadius: "4px",
+              maxHeight: "24rem",
+              overflow: "auto",
+              fontSize: "0.85rem",
+            }}
+          >
+            {diffResult.diff || "(empty diff)"}
+          </pre>
+        </section>
+      )}
 
       <section data-testid="tektos-plan-proposal" style={{ marginTop: "1.5rem" }}>
         <h2>proposal.md</h2>
