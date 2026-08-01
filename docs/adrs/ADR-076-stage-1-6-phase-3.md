@@ -115,17 +115,27 @@ zero-hit query, and error block shows on forced 400 (invalid `min_score`).
 
 ### D3 — Zetesis→semantic end-to-end round-trip test
 
-New Playwright test `ui/tests/24-zetesis-semantic-roundtrip.spec.ts`:
+> **AMENDMENT (2026-08-01 EDT):** shipped as **pytest live-tier**
+> (`tests/integration/test_zetesis_semantic_roundtrip_live.py`), not
+> Playwright — the 100–220 s Zetesis latency is a poor fit for the
+> Playwright suite's fast-tier expectations and env-gated pytest matches
+> the D1 pattern. The kernel fan-out at `kernel/app.py:604` now writes
+> `attributes["corpus_name"] = "zetesis-reports"` so the ADR-074 D2
+> collection contract (`kosmos-memory-{corpus}`) lands Zetesis reports in
+> their own Qdrant collection. Runtime behavior is otherwise unchanged.
 
-1. Trigger a Zetesis research completion via existing test hook.
+1. Trigger a Zetesis research completion by POSTing to the real
+   `/api/zetesis/research` endpoint (no mocks; the test is env-gated).
 2. Poll `POST /api/memory/search-semantic` with `corpus:
    "zetesis-reports"` and a query drawn from the report body until a hit
-   surfaces or 10 seconds elapse.
+   surfaces or 60 seconds elapse (accounts for embedding + Qdrant
+   propagation latency after Zetesis returns).
 3. Assert the hit's `provenance` matches the ADR-075 D3 fan-out contract
-   (`"zetesis.event_bus"`) and `confidence === 1.0`.
+   (`"zetesis.event_bus"`) and `confidence == 1.0`.
 
 This test runs only under the live tier (`KOSMOS_STAGE_16_LIVE=1`) —
-degraded-mode Qdrant cannot serve the round-trip.
+degraded-mode Qdrant cannot serve the round-trip. It also requires a
+running kernel on 127.0.0.1:8000 (`KOSMOS_KERNEL_URL` overrides).
 
 ### D4 — Quarantine surface: port + routes + UI
 

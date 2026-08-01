@@ -3236,3 +3236,22 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none — UI-only slice; kernel routes unchanged.
 - **PORTING_LEDGER / ADR updated:** — (ADR-076 D2 scope; no new vendored code)
 - **Stop-condition status:** in-progress — D2 committed on `stage-1-6-p3-code`; awaiting `pnpm playwright test tests/23-memory-search-polish.spec.ts` on Colossus. Waves D3–D7 to follow on the same branch.
+
+## 2026-08-01 14:35 EDT — Stage 1.6 Phase 3 · D3 Zetesis→semantic round-trip + kernel corpus assignment
+
+- **Stage / plugin / port:** Stage 1.6 Phase 3 · MemoryPort · DozerDbMemoryAdapter (semantic path) + kernel Zetesis fan-out (ADR-076 D3 · ADR-075 D3)
+- **What changed:**
+  - `kernel/app.py`: the `_drain_zetesis_reports` fan-out now stamps every write with `attributes["corpus_name"] = "zetesis-reports"` so DozerDbMemoryAdapter routes the write into the dedicated Qdrant collection `kosmos-memory-zetesis-reports` (ADR-074 D2 collection contract). Predicate/subject/object/provenance/confidence unchanged. Kernel restart required to pick up the amendment.
+  - `docs/adrs/ADR-076-stage-1-6-phase-3.md`: appended a `STATUS AMENDMENT (2026-08-01 EDT)` block under §D3 documenting the pytest-live rehoming (Playwright poorly suited to the 100–220 s Zetesis latency) and the kernel corpus assignment; polling deadline raised to 60 s to account for the async fan-out + embed + upsert path.
+  - `tests/integration/test_zetesis_semantic_roundtrip_live.py`: new env-gated live-tier test suite. Two async tests:
+    - `test_zetesis_report_lands_in_zetesis_reports_corpus`: POSTs `/api/zetesis/research`, parses the SSE completed frame, polls `/api/memory/search-semantic` with `corpus="zetesis-reports"` and probe `"dzogchen"` for up to 60 s, asserts a hit with `payload.predicate=="zetesis.research.completed"`, `provenance="zetesis.event_bus"`, `confidence==1.0`, `corpus=="zetesis-reports"`, and `score >= 0.5`.
+    - `test_zetesis_reports_corpus_isolated_from_default`: probes the `default` corpus for the same query and asserts NO Zetesis-fan-out hit surfaces — locks the corpus-lane isolation so a future accidental removal of `corpus_name` gets caught by CI on Colossus.
+  - Test uses `httpx.Client` (already a project dep) with 300 s Zetesis timeout, and skips clearly when any of kernel/Qdrant/DozerDB/Ollama are unreachable via TCP precheck.
+- **Files touched:**
+  - kernel/app.py
+  - docs/adrs/ADR-076-stage-1-6-phase-3.md
+  - tests/integration/test_zetesis_semantic_roundtrip_live.py (new)
+  - BUILD_LOG.md
+- **Ports / adapters affected:** MemoryPort · DozerDbMemoryAdapter (semantic path); no port contract change — attribute routing already supported at adapters/memory/dozerdb/adapter.py:421.
+- **PORTING_LEDGER / ADR updated:** — (no vendored change); ADR-076 D3 amended in place with 2026-08-01 STATUS AMENDMENT block.
+- **Stop-condition status:** in-progress — D3 committed on `stage-1-6-p3-code`; fast tier: 2 skipped clean. Live run pending on Colossus (`sudo systemctl restart kosmos-kernel` to load the fan-out amendment, then `KOSMOS_STAGE_16_LIVE=1 pytest tests/integration/test_zetesis_semantic_roundtrip_live.py -v`). D4–D7 to follow.

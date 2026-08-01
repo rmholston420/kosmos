@@ -593,6 +593,14 @@ async def lifespan(app: FastAPI):
                             )
                             if not summary:
                                 continue
+                            # ADR-076 D3: fan-out lands in the dedicated
+                            # ``zetesis-reports`` corpus so per-corpus
+                            # semantic queries + UI facet counts (ADR-074
+                            # D2 collection contract ``kosmos-memory-{corpus}``)
+                            # attribute Zetesis writes to their own lane.
+                            # DozerDbMemoryAdapter routes the corpus via
+                            # ``attributes["corpus_name"]`` (see
+                            # adapters/memory/dozerdb/adapter.py:421).
                             await registry.memory.write_event(
                                 subject=f"zetesis.report:{report_id}",
                                 predicate="zetesis.research.completed",
@@ -602,6 +610,7 @@ async def lifespan(app: FastAPI):
                                 attributes={
                                     "report_id": report_id,
                                     "kind": "zetesis.report",
+                                    "corpus_name": "zetesis-reports",
                                 },
                             )
                         except Exception as exc:  # noqa: BLE001
