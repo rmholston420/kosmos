@@ -685,3 +685,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Seed ``os.environ.setdefault("OPENAI_API_KEY", "ollama")`` at ``plugins/zetesis/research/odr.py`` module import. ``setdefault`` (not assignment) so a real key set elsewhere in the process is not clobbered. The four ``api_key`` model_config slots stay in place — they are correct-shape config and future-proof if ODR upstream ever reads them.
 - **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
 - **Supersedes:** 2026-08-01 12:19 EDT
+
+## 2026-08-01 12:31 EDT — Zetesis research 401 from api.openai.com after OPENAI_API_KEY seed: base_url dropped by LangChain configurable_fields
+
+- **Symptom:** After hotfix commit 86de862 seeded ``OPENAI_API_KEY=ollama``, Zetesis Research surfaces ``AuthenticationError: Error code: 401 - Incorrect API key provided: ollama. You can find your API key at https://platform.openai.com/account/api-keys``. Real HTTP round-trip to hosted OpenAI — no local Ollama traffic on 127.0.0.1:11434.
+- **Affected stage / plugin / port:** Stage 1.6 Phase 2 runtime · Zetesis plugin · ``plugins/zetesis/research/odr.py`` + ``vendor/adr_010/open_deep_research/src/open_deep_research/deep_researcher.py`` + LangChain ``init_chat_model`` bind path
+- **Root cause:** ODR upstream (vendor commit d337ae3) declares ``configurable_model = init_chat_model(configurable_fields=("model", "max_tokens", "api_key"))``. ``base_url`` is not in the whitelist tuple, so LangChain's ``configurable_model.with_config({"model": ..., "base_url": ...})`` silently drops the ``base_url`` field. The bound OpenAI client then falls back to reading ``OPENAI_BASE_URL`` from env; if unset, it hits the SDK default ``https://api.openai.com/v1``. Colossus had no ``OPENAI_BASE_URL`` exported, so Ollama's local endpoint was never reached — the sentinel ``api_key="ollama"`` was accepted by client construction but rejected by hosted OpenAI at auth.
+- **Fix applied:** ``os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")`` seed alongside the API key seed at ``plugins/zetesis/research/odr.py`` module import. Both use ``setdefault`` so an operator running a mixed local + hosted setup (with ``export OPENAI_BASE_URL=https://api.openai.com/v1``) is not overridden.
+- **Files changed:** plugins/zetesis/research/odr.py; plugins/zetesis/research/tests/test_prompts.py
+- **Supersedes:** 2026-08-01 12:26 EDT

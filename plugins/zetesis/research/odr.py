@@ -26,18 +26,24 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-# Local-first Ollama sentinel for OpenAI SDK. ODR's ``get_api_key_for_model``
-# (vendor/adr_010/open_deep_research/src/open_deep_research/utils.py:892)
-# reads ``OPENAI_API_KEY`` straight from ``os.getenv`` for any ``openai:``
-# prefixed model tag, then hands it to LangChain's ``init_chat_model``.
-# The OpenAI SDK's ``AsyncOpenAI`` client raises ``OpenAIError: Missing
-# credentials`` at construction time when ``api_key`` is ``None``/empty,
-# even when ``base_url`` targets Ollama's openai-compat endpoint that
-# ignores auth. Colossus is a local-first workstation with no
-# ``OPENAI_API_KEY`` set. Seed a sentinel here at import time so the SDK
-# accepts the client. We only set it if the operator has not already set
-# one (e.g. a mixed local + hosted setup elsewhere in the process).
+# Local-first Ollama env seeds for OpenAI SDK. ODR upstream (d337ae3) only
+# declares ``configurable_fields=("model", "max_tokens", "api_key")`` on
+# ``init_chat_model`` — ``base_url`` is *not* in that tuple, so LangChain's
+# ``with_config(model_config)`` silently drops any ``base_url`` we put on
+# ``research_model_config``/``summarization_model_config``/etc. The OpenAI
+# SDK therefore has to source both ``api_key`` and ``base_url`` from env:
+#   - ``get_api_key_for_model`` at ``vendor/adr_010/.../utils.py:892``
+#     reads ``OPENAI_API_KEY`` from ``os.getenv``.
+#   - ``openai.OpenAI.__init__`` reads ``OPENAI_BASE_URL`` from
+#     ``os.environ`` when no ``base_url`` kwarg is passed.
+#
+# Colossus is local-first with neither exported. Seed sentinels here at
+# module import so ``AsyncOpenAI`` (a) accepts client construction and
+# (b) targets Ollama at ``127.0.0.1:11434/v1`` instead of
+# ``https://api.openai.com/v1``. ``setdefault`` preserves any real value an
+# operator has set elsewhere in the process (mixed local + hosted setup).
 os.environ.setdefault("OPENAI_API_KEY", "ollama")
+os.environ.setdefault("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")
 
 from ops.benchmarks.adr_010.metrics import TrialMetrics  # noqa: E402
 from . import (  # noqa: E402
