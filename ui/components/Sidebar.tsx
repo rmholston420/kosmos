@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import type { Route } from "../lib/kernel-client";
 
 // /gnosis and /zetesis are statically appended -- neither has a
@@ -23,9 +24,9 @@ export default function Sidebar({ routes }: { routes: Route[] }) {
         <ul>
           {allRoutes.map((r) => (
             <li key={r.path}>
-              <a data-testid={`route-${r.path}`} href={r.path}>
+              <Link data-testid={`route-${r.path}`} href={r.path}>
                 {r.label}
-              </a>
+              </Link>
             </li>
           ))}
         </ul>

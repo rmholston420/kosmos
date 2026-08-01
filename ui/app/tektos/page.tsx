@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { kernelClient, type ApprovalRecord } from "../../lib/kernel-client";
 
 export default function TektosIndex() {
@@ -18,9 +19,9 @@ export default function TektosIndex() {
         <ul data-testid="tektos-index-list">
           {records.map((r) => (
             <li key={r.approval_id}>
-              <a data-testid={`tektos-index-link-${r.approval_id}`} href={`/tektos/detail?id=${encodeURIComponent(r.approval_id)}`}>
+              <Link data-testid={`tektos-index-link-${r.approval_id}`} href={`/tektos/detail?id=${encodeURIComponent(r.approval_id)}`}>
                 {r.intention_id}
-              </a>
+              </Link>
             </li>
           ))}
         </ul>

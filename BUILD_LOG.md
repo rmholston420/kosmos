@@ -2298,3 +2298,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** none.
 - **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run.
+
+## 2026-08-01 05:16 EDT — Stage 1 · GUI shell fixup #4 — serve static export from kernel root, drop Playwright webServer
+
+- **Stage / plugin / port:** Stage 1 · GUI shell · kernel same-origin mount.
+- **What changed:**
+  - Kept `output: "export"` in `ui/next.config.js`; added `trailingSlash: true` for static-export directory-index compatibility; removed the earlier `basePath` attempt.
+  - Added a `StaticFiles` mount at kernel root `/` in `kernel/app.py` (module-scope, idempotent-by-name, silent skip when `ui/out/` is absent). Mounted last so `/api/*`, `/health`, `/openapi.json`, `/docs`, `/gnosis-gate`, `/tektos-ui` retain first-match priority.
+  - Switched internal navigation to `next/link` in `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/components/Sidebar.tsx` for consistent Next.js routing.
+  - Rewrote `ui/playwright.config.ts`: dropped the `webServer` block entirely (kernel serves the UI now), pointed `baseURL` at `http://127.0.0.1:8000`.
+  - Playwright run order on Colossus is now: `cd ui && npx next build` (emits `ui/out/`) → kernel already running under uvicorn on 8000 → `cd ui && npx playwright test`.
+- **Files touched:** `ui/next.config.js`, `ui/playwright.config.ts`, `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/components/Sidebar.tsx`, `kernel/app.py`, `BUILD_LOG.md`, `DEBUG_LOG.md`.
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** ADR-067 stays as-is (kernel is the same-origin host; this is the runtime consequence of "UI targets `/api/*` directly").
+- **Stop-condition status:** in-progress — awaiting Colossus `next build` + Playwright run against running kernel.

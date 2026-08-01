@@ -550,3 +550,12 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Fix applied:** Replaced both dynamic-segment routes with static routes that read the identifier from a query string via `useSearchParams()`. Wrapped the `useSearchParams()`-using tree in `<Suspense>` per Next 16 static-export contract. Updated internal link generators and Playwright tests to point at the new URLs.
 - **Files changed:** `ui/app/gnosis/[corpusName]/page.tsx` (removed), `ui/app/tektos/[approvalId]/page.tsx` (removed), `ui/app/gnosis/detail/page.tsx` (new), `ui/app/tektos/detail/page.tsx` (new), `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/tests/03-tektos-plan-workflow.spec.ts`, `ui/tests/07-gnosis-gate.spec.ts`.
 - **Related BUILD_LOG entry:** 2026-08-01 05:13 EDT.
+
+## 2026-08-01 05:16 EDT — Playwright `webServer` fails: `next start does not work with output: export`
+
+- **Symptom:** `[WebServer] Error: "next start" does not work with "output: export" configuration. Use "npx serve@latest out" instead. Process from config.webServer was not able to start. Exit code: 1.`
+- **Affected stage / plugin / port:** Stage 1 · GUI shell.
+- **Root cause:** With `output: "export"` the built artifact is a static `out/` directory. `next start` is a SSR server and refuses to serve it. Even a static file server (`serve out`) would put the UI on a different origin than the kernel's `/api/*`, breaking client fetches and requiring CORS.
+- **Fix applied:** Mounted `ui/out/` on the FastAPI kernel at root path `/` via `StaticFiles(html=True)`, so UI and API share origin `http://127.0.0.1:8000`. Removed the Playwright `webServer` block; `baseURL` now points at the kernel port. Build order: `next build` → uvicorn (already running) picks up `ui/out/` via idempotent module-scope mount check → `playwright test`.
+- **Files changed:** `ui/next.config.js`, `ui/playwright.config.ts`, `ui/app/gnosis/page.tsx`, `ui/app/tektos/page.tsx`, `ui/components/Sidebar.tsx`, `kernel/app.py`.
+- **Related BUILD_LOG entry:** 2026-08-01 05:16 EDT.

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { gnosisGateClient } from "../../lib/kernel-client";
 
 type Corpus = {
@@ -59,9 +60,9 @@ export default function GnosisIndex() {
             {corpora.map((c) => (
               <tr data-testid={"gnosis-corpus-row-" + c.name} key={c.name}>
                 <td>
-                  <a data-testid={"gnosis-corpus-link-" + c.name} href={"/gnosis/detail?corpus=" + encodeURIComponent(c.name)}>
+                  <Link data-testid={"gnosis-corpus-link-" + c.name} href={"/gnosis/detail?corpus=" + encodeURIComponent(c.name)}>
                     {c.name}
-                  </a>
+                  </Link>
                 </td>
                 <td data-testid={"gnosis-corpus-facts-" + c.name}>{c.n_facts}</td>
                 <td data-testid={"gnosis-corpus-edges-" + c.name}>{c.n_edges}</td>
