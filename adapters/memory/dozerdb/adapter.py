@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, Protocol, runtime_checkable
 
+from ports.embeddings import EmbeddingsPort
 from ports.memory import (
     MemoryEventId,
     MemoryHit,
@@ -39,6 +40,9 @@ from ports.memory import (
     MemoryWriteBlocked,
     validate_zero_trust_write,
 )
+from ports.vector import VectorPort
+
+from .semantic_memory_path import SemanticMemoryPath
 
 __all__ = [
     "AlwaysBlockAmgPolicy",
@@ -317,10 +321,24 @@ class DozerDbMemoryAdapter:
         graph: GraphBackend,
         amg: AmgPolicy,
         temporal: TemporalIndex,
+        embeddings: EmbeddingsPort | None = None,
+        vector: VectorPort | None = None,
+        default_corpus: str | None = None,
     ) -> None:
         self._graph = graph
         self._amg = amg
         self._temporal = temporal
+        # ADR-074 D3: optional semantic memory lane. Constructed only
+        # when BOTH ports are wired. When absent, ``search_semantic``
+        # degrades to an empty list and ``write_event`` skips the
+        # embed+upsert side effect.
+        self._semantic: SemanticMemoryPath | None = None
+        if embeddings is not None and vector is not None:
+            self._semantic = SemanticMemoryPath(
+                embeddings=embeddings,
+                vector=vector,
+            )
+        self._default_corpus = default_corpus
         self._state = _AdapterOptions()
 
     # ── writes ──────────────────────────────────────────────────────────
@@ -396,6 +414,21 @@ class DozerDbMemoryAdapter:
         # 4. Temporal index registration.
         await self._temporal.record_event(event_id, payload, as_of=written_at)
 
+        # 5. Semantic memory lane (ADR-074 D3). Optional side effect;
+        #    failures are logged but do not affect the primary write.
+        #    Corpus resolution: attributes["corpus_name"] > default_corpus.
+        if self._semantic is not None:
+            corpus = (
+                (attributes or {}).get("corpus_name")
+                or self._default_corpus
+            )
+            await self._semantic.embed_and_upsert(
+                event_id,
+                payload,
+                corpus=corpus,
+                as_of=written_at,
+            )
+
         return MemoryEventId(id=event_id, written_at=written_at)
 
     async def link_entities(
@@ -469,6 +502,29 @@ class DozerDbMemoryAdapter:
     ) -> list[MemoryHit]:
         return await self._temporal.query_temporal(
             cypher_or_query, as_of=as_of, limit=limit
+        )
+
+    async def search_semantic(
+        self,
+        query: str,
+        *,
+        corpus: str | None = None,
+        limit: int = 20,
+        min_score: float = 0.0,
+    ) -> list[MemoryHit]:
+        """Semantic retrieval via EmbeddingsPort + VectorPort (ADR-074 D1).
+
+        Degrades to an empty list when the semantic lane is unwired
+        (either dependency ``None`` at construction time).
+        """
+        if self._semantic is None:
+            return []
+        resolved_corpus = corpus or self._default_corpus
+        return await self._semantic.semantic_lookup(
+            query,
+            corpus=resolved_corpus,
+            limit=limit,
+            min_score=min_score,
         )
 
     # ── lifecycle ───────────────────────────────────────────────────────

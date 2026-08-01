@@ -103,6 +103,14 @@ class _BootRegistry:
         # from ``self.llm`` so chat-only backends (e.g. llama-swap) don't
         # have to satisfy an embeddings surface. Populated by ``_boot_embeddings``.
         self.embeddings: Any = None
+        # Stage 1.6 Phase 1 (ADR-074 D2): kernel-owned VectorPort. Booted
+        # alongside ``self.embeddings`` and passed together into
+        # ``_boot_memory`` so the DozerDB adapter can compose them into
+        # its semantic memory lane. When ``vector`` is None (env-gated,
+        # or Qdrant unreachable) the memory adapter's ``search_semantic``
+        # degrades to an empty list; the graph + temporal paths are
+        # unaffected.
+        self.vector: Any = None
         self.tektos: Any = None
         self.tektos_agent: Any = None
         self.tektos_agent_lock: Any = None
@@ -356,6 +364,31 @@ async def lifespan(app: FastAPI):
 
     registry.embeddings = _boot_embeddings
 
+    # --- Vector (QdrantVectorAdapter) ---------------------------------------
+    # Stage 1.6 Phase 1 addition (ADR-074 D2): kernel-owned VectorPort.
+    # Env overrides: ``KOSMOS_QDRANT_URL`` (default ``http://127.0.0.1:6333``)
+    # and ``KOSMOS_VECTOR_ENABLED`` (default ``"1"``; set to ``"0"`` to
+    # skip vector boot entirely — the memory adapter's ``search_semantic``
+    # then degrades gracefully to an empty list). Failure surfaces under
+    # ``registry.errors['vector']``.
+    @_try("vector")
+    def _boot_vector():
+        import os
+
+        if os.environ.get("KOSMOS_VECTOR_ENABLED", "1") != "1":
+            return None
+        from adapters.vector.qdrant.adapter import QdrantVectorAdapter
+        from adapters.vector.qdrant.real_backend import RealQdrantBackend
+
+        url = os.environ.get(
+            "KOSMOS_QDRANT_URL", "http://127.0.0.1:6333"
+        )
+        api_key = os.environ.get("KOSMOS_QDRANT_API_KEY") or None
+        backend = RealQdrantBackend(url=url, api_key=api_key)
+        return QdrantVectorAdapter(backend=backend)
+
+    registry.vector = _boot_vector
+
     # --- Memory (DozerDbMemoryAdapter, env-gated backends) --------------------
     # Stage 6.5.6 addition (ADR-063): kernel-owned MemoryPort shared by
     # Tektos and future plugins.
@@ -431,13 +464,27 @@ async def lifespan(app: FastAPI):
                 embeddings=registry.embeddings,
             )
             amg = AmgGuardPolicy(policy_preset="tiered")
-            return DozerDbMemoryAdapter(graph=graph, amg=amg, temporal=temporal)
+            # ADR-074 D3: pass EmbeddingsPort + VectorPort so the
+            # adapter can compose them into its semantic memory lane.
+            # Both may be ``None`` — the adapter degrades gracefully.
+            return DozerDbMemoryAdapter(
+                graph=graph,
+                amg=amg,
+                temporal=temporal,
+                embeddings=registry.embeddings,
+                vector=registry.vector,
+            )
 
         # Default: in-memory (CI / test / cold-start safe).
+        # ADR-074 D3: even the in-memory backend receives the semantic
+        # lane deps when they've booted, so operators can exercise
+        # ``search_semantic`` against Qdrant without spinning DozerDB.
         return DozerDbMemoryAdapter(
             graph=InMemoryGraphBackend(),
             amg=NoOpAmgPolicy(),
             temporal=InMemoryTemporalIndex(),
+            embeddings=registry.embeddings,
+            vector=registry.vector,
         )
 
     registry.memory = _boot_memory
@@ -726,7 +773,7 @@ async def lifespan(app: FastAPI):
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Kosmos Kernel", version="6.10.0", lifespan=lifespan)
+app = FastAPI(title="Kosmos Kernel", version="6.11.0", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
