@@ -534,6 +534,7 @@ async def lifespan(app: FastAPI):
                 event_bus=registry.event_bus,
                 resource=registry.resource,
                 notification=registry.notification,
+                memory=registry.memory,
             )
             await plugin.start()
             registry.zetesis = plugin
