@@ -3500,3 +3500,13 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** `SandboxProvider` (port from step 1) now has its first adapter. No plugin-side wiring yet — Tektos executor consumes this at Stage 3.14b.
 - **PORTING_LEDGER / ADR updated:** bubblewrap SYSTEM-BINARY entry (ADR-079).
 - **Stop-condition status:** Stage 3.14a stop conditions met — port surface ratified (step 1), adapter lands with boundary + APEX-id gate + env-strip + read-only protected paths + contract-test parity across `bwrap` and `plain-unsafe` tiers (21/21 green locally: 12 non-parametrized + 7×2 parametrized + 2 bwrap-only boundary tests). Stage 3.14b (LLM execution loop + two-identity commits + `/execute` + `/diff` endpoints + UI wiring) is next.
+
+## 2026-08-01 17:29 EDT — Stage 3.14b step 0: ADR-080 scope lock (executor loop + model + retry + guard)
+
+- **Stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` (planned) · consumes `SandboxProvider` (ADR-079) + `LLMPort` + `MemoryPort` + `ApprovalResolverPort` + `TraceFeedPort`
+- **What changed:** Wrote ADR-080 locking Stage 3.14b scope before any code lands. Locked decisions: model = `qwen2.5-coder:32b` (Q4_K_M, ~20 GB VRAM at 8 k context, best per-turn code quality in the Colossus envelope); retry policy = 2 attempts per task with self-correction on `git apply --check` failure (confidence 1.0/0.5/0.0 mapping); Colossus resource guard = VRAM ≥ 22 000 MiB free AND RAM ≥ 8 GiB available, HTTP 503 refusal, `nvidia-smi` + `/proc/meminfo` queries; two-identity commit config = LLM commits authored `Tektos-Agent <rmholston420+tektos@users.noreply.github.com>` per-commit via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` env (does not mutate `.git/config`); endpoints = `POST /api/tektos/plan/{approval_id}/execute` and `GET /api/tektos/plan/{approval_id}/diff`; MemoryPort event shape = `tektos.executor.task_attempted` per attempt + `tektos.executor.plan_completed` per plan, both with `provenance="tektos_executor"`; ADR-007 AST guard on executor imports.
+- **Files touched:**
+  - `docs/adrs/ADR-080-stage-3-14b-tektos-executor.md` (new — 283 lines)
+- **Ports / adapters affected:** No new port. Executor is a plugin, not a port.
+- **PORTING_LEDGER / ADR updated:** ADR-080 proposed. `qwen2.5-coder:32b` is an operational Ollama pull, not a vendored source component — no ledger entry.
+- **Stop-condition status:** Scope locked. Implementation slices next: step 1 (package scaffold + policy constants + endpoint stubs + ADR-007 AST guard test), step 2 (LLM loop + `git apply` + two-identity commits + resource guard + contract tests), step 3 (UI wiring + Playwright smoke).
