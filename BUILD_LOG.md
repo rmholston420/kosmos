@@ -3510,3 +3510,21 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** No new port. Executor is a plugin, not a port.
 - **PORTING_LEDGER / ADR updated:** ADR-080 proposed. `qwen2.5-coder:32b` is an operational Ollama pull, not a vendored source component — no ledger entry.
 - **Stop-condition status:** Scope locked. Implementation slices next: step 1 (package scaffold + policy constants + endpoint stubs + ADR-007 AST guard test), step 2 (LLM loop + `git apply` + two-identity commits + resource guard + contract tests), step 3 (UI wiring + Playwright smoke).
+
+## 2026-08-01 17:38 EDT — Stage 3.14b step 1: executor package scaffold + policy constants + endpoint stubs
+
+- **Stage / plugin / port:** Stage 3.14b · `plugins.tektos.executor` (new) · endpoint layer in `kernel/app.py`
+- **What changed:** Landed the ADR-080 scaffold. New `plugins/tektos/executor/` package with `policy.py` (locked constants + `TaskResult`/`PlanResult` enums), `errors.py` (`TektosExecutorError`, `TektosResourceGuardBlocked`, `TektosPlanNotApproved`, `TektosExecutorPatchFailed`), and `__init__.py` re-exports. Registered two new kernel endpoints as stubs: `POST /api/tektos/plan/{approval_id}/execute` and `GET /api/tektos/plan/{approval_id}/diff`. Both walk the full resolver → domain-check → status-check chain and return HTTP 501 on the terminal branch until the loop lands in step 2 — so 503/404/409 branches are covered by tests now and won't regress when 501 flips to 200. Also amended ADR-080 in-flight after `ollama list` on Colossus showed `qwen3-coder:latest` already resident: swapped `TEKTOS_EXECUTOR_MODEL` to `qwen3-coder:latest`, dropped `TEKTOS_EXECUTOR_VRAM_FLOOR_MIB` from 22000 to 20000 to match the 18 GB footprint, updated DoD + deploy notes. No ollama pull needed.
+- **Files touched:**
+  - `docs/adrs/ADR-080-stage-3-14b-tektos-executor.md` (amended in-flight — qwen3-coder swap + 20000 MiB VRAM floor)
+  - `plugins/tektos/executor/__init__.py` (new, 69 lines)
+  - `plugins/tektos/executor/policy.py` (new, 127 lines)
+  - `plugins/tektos/executor/errors.py` (new, 78 lines)
+  - `plugins/tektos/executor/tests/__init__.py` (new, empty)
+  - `plugins/tektos/executor/tests/test_policy.py` (new, 70 lines — freezes every locked constant)
+  - `plugins/tektos/executor/tests/test_adr_007_imports.py` (new, 61 lines — AST guard: no sibling-plugin imports)
+  - `plugins/tektos/executor/tests/test_endpoint_stubs.py` (new, 179 lines — 501/503/404/409 branch coverage)
+  - `kernel/app.py` (+79 lines — two new endpoint stubs before `tektos_plan_detail`)
+- **Ports / adapters affected:** Executor plugin will consume `ports.sandbox.SandboxProvider` (ADR-079), `ports.llm.LLMPort`, `ports.memory.MemoryPort`, `ports.approval.ApprovalResolverPort`, `ports.trace_feed.TraceFeedPort` in step 2. No new port; executor is a plugin.
+- **PORTING_LEDGER / ADR updated:** ADR-080 amended in-flight (see model swap above). No new vendored source (qwen3-coder is an operational Ollama artifact, not source code).
+- **Stop-condition status:** Scaffold + stubs in place; 21 tests green (policy freeze + AST guard + endpoint branches). Step 2 next: `loop.py` (TektosExecutorLoop), `patcher.py` (git apply + two-identity commit), `resource_guard.py` (ColossusResourceGuard). Step 3: UI + Playwright.

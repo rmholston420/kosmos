@@ -1422,6 +1422,87 @@ _TEKTOS_INTENTION_ID_PREFIX = "tektos.plan."
 _MAX_CHANGE_FILE_BYTES = 128 * 1024  # 128 KiB — scaffolded files are tiny
 
 
+@app.post("/api/tektos/plan/{approval_id}/execute")
+async def tektos_plan_execute(approval_id: str) -> dict[str, Any]:
+    """Execute an APPROVED Tektos plan against a fresh sandbox worktree.
+
+    Stage 3.14b step 1 stub — returns HTTP 501 until the executor loop
+    lands in step 2 (ADR-080). Endpoint shape is locked so the UI can
+    wire against it now:
+
+    * 501 (this step) — endpoint registered; loop not implemented.
+    * 503 — approval resolver unavailable (matches plan_detail).
+    * 404 — approval not found, or record is not a Tektos plan.
+    * 409 — approval status is not APPROVED
+           (raises :class:`plugins.tektos.executor.TektosPlanNotApproved`).
+    * 503 (post-step-1) — resource guard blocked.
+    * 200 — on success, `{execution_id, tasks_attempted, tasks_succeeded,
+            tasks_failed, final_status, change_id}`.
+    """
+    resolver = registry.approval
+    if resolver is None:
+        raise HTTPException(503, detail=registry.errors.get("approval"))
+    try:
+        record = await resolver.get_by_id(approval_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, detail=str(exc)) from exc
+    if record.proposing_domain != "tektos":
+        raise HTTPException(
+            404,
+            detail=(
+                f"approval {approval_id!r} is not a Tektos plan "
+                f"(proposing_domain={record.proposing_domain!r})"
+            ),
+        )
+    from ports.approval import ApprovalStatus
+    if record.status is not ApprovalStatus.APPROVED:
+        raise HTTPException(
+            409,
+            detail=(
+                f"approval {approval_id!r} is not APPROVED "
+                f"(status={record.status.value})"
+            ),
+        )
+    raise HTTPException(
+        501,
+        detail="Tektos executor loop not implemented yet (Stage 3.14b step 2).",
+    )
+
+
+@app.get("/api/tektos/plan/{approval_id}/diff")
+async def tektos_plan_diff(approval_id: str) -> dict[str, Any]:
+    """Return the accumulated worktree diff for an executed plan.
+
+    Stage 3.14b step 1 stub — returns HTTP 501 until the sandbox is
+    wired in step 2 (ADR-080). Endpoint shape is locked:
+
+    * 501 (this step) — endpoint registered; sandbox lookup not
+           implemented.
+    * 503 — approval resolver unavailable.
+    * 404 — approval not found, or not a Tektos plan.
+    * 200 — `{diff, base_ref, task_count}`.
+    """
+    resolver = registry.approval
+    if resolver is None:
+        raise HTTPException(503, detail=registry.errors.get("approval"))
+    try:
+        record = await resolver.get_by_id(approval_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, detail=str(exc)) from exc
+    if record.proposing_domain != "tektos":
+        raise HTTPException(
+            404,
+            detail=(
+                f"approval {approval_id!r} is not a Tektos plan "
+                f"(proposing_domain={record.proposing_domain!r})"
+            ),
+        )
+    raise HTTPException(
+        501,
+        detail="Tektos executor diff endpoint not implemented yet (Stage 3.14b step 2).",
+    )
+
+
 @app.get("/api/tektos/plan/{approval_id}")
 async def tektos_plan_detail(approval_id: str) -> dict[str, Any]:
     """Return APEX record + change dir files for one Tektos plan.

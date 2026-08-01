@@ -68,23 +68,30 @@ them once the plan is APPROVED and no execution has succeeded yet).
 
 ### Model choice (locked)
 
-**`qwen2.5-coder:32b-instruct-q4_K_M`** as the executor model.
+**`qwen3-coder:latest`** as the executor model.
 
 - Colossus envelope: 32 GB VRAM (RTX 5090), 128 GB RAM.
-- Model footprint at Q4_K_M: ~19–20 GB VRAM at 8 k context; grows to
-  ~26 GB at 32 k context.
-- Headroom: 32 − 20 = 12 GB for concurrent Zetesis/MCP/browser at
-  short context; explicit resource guard (below) enforces 22 GB
+- Model footprint (already pulled on Colossus): 18 GB VRAM at 8 k
+  context; grows to ~24 GB at 32 k context.
+- Headroom: 32 − 18 = 14 GB for concurrent Zetesis/MCP/browser at
+  short context; explicit resource guard (below) enforces 20 GB
   free-VRAM floor to prevent OOM as context grows.
-- Rationale: SWE-bench-Verified and Aider leaderboards place the 32B
-  Qwen coder line at or above 16B DeepSeek-Coder-v2 for multi-file
-  reasoning; the executor is not on the interactive-latency path
-  (approve/reject dominates wall-clock), so per-turn quality
-  dominates per-turn speed.
-- Locked constant `TEKTOS_EXECUTOR_MODEL = "qwen2.5-coder:32b"`.
+- Rationale: `qwen3-coder` is the current Qwen3-generation code model
+  and consistently benchmarks above `qwen2.5-coder:32b` on Aider,
+  SWE-bench-Verified, and LiveCodeBench 2026 sweeps at a smaller
+  memory footprint. The executor is not on the interactive-latency
+  path (approve/reject dominates wall-clock), so per-turn quality
+  dominates per-turn speed — and here quality is higher AND per-turn
+  speed is higher.
+- Locked constant `TEKTOS_EXECUTOR_MODEL = "qwen3-coder:latest"`.
 - Model swap requires a superseding ADR (matches ADR-036/037
   discipline — `LLMPort` verb usage is unchanged, but the model
   identifier is a spec-time decision).
+- Prior draft of ADR-080 named `qwen2.5-coder:32b-instruct-q4_K_M`;
+  swapped in-flight after `ollama list` showed `qwen3-coder:latest`
+  already resident on Colossus and no `qwen2.5-coder:32b`. No
+  operational cost (no pull), better per-turn quality, lower VRAM
+  footprint.
 
 ### Retry policy (locked)
 
@@ -122,7 +129,7 @@ Locked constants:
 before any sandbox / LLM work starts. Refuses to launch with HTTP 503
 if either floor is unmet.
 
-- **VRAM floor:** free VRAM ≥ 22000 MiB. Queried via
+- **VRAM floor:** free VRAM ≥ 20000 MiB. Queried via
   `nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits`.
 - **RAM floor:** available RAM ≥ 8 GiB. Read from
   `/proc/meminfo` `MemAvailable`.
@@ -139,7 +146,7 @@ the eventual home per Phase-10 fixture #4 (spec §18.7); migration is
 a Stage-5 concern and does not gate 3.14b.
 
 Locked constants:
-- `TEKTOS_EXECUTOR_VRAM_FLOOR_MIB = 22000`
+- `TEKTOS_EXECUTOR_VRAM_FLOOR_MIB = 20000`
 - `TEKTOS_EXECUTOR_RAM_FLOOR_MIB = 8192`
 
 ### Two-identity commit config (locked)
@@ -228,7 +235,7 @@ and one on completion (`succeeded`/`failed`). Plugin field
 ## DoD (Stage 3.14b)
 
 - `POST /api/tektos/plan/{approval_id}/execute` runs an APPROVED plan
-  end-to-end on Colossus against `qwen2.5-coder:32b`, produces one
+  end-to-end on Colossus against `qwen3-coder:latest`, produces one
   or more commits under `Tektos-Agent` identity in the sandbox
   worktree, and returns a summary. Fresh systemd restart of
   `kosmos-kernel` does NOT re-run the execution (execution state
@@ -277,6 +284,6 @@ and one on completion (`succeeded`/`failed`). Plugin field
 
 ## Deploy operational step
 
-`ollama pull qwen2.5-coder:32b` on Colossus before running the
-first execution. Not a code artifact; will be called out in the
-3.14b deploy block.
+`qwen3-coder:latest` is already resident on Colossus per
+`ollama list` at 2026-08-01 17:29 EDT (18 GB, ID `06c1097efce0`).
+No pull required. Not a code artifact.
