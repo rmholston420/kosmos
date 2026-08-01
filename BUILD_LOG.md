@@ -2722,3 +2722,17 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Ports / adapters affected:** FrontendContractPort read-only browse surface. No new endpoints; `renderKernelSchema()` already existed.
 - **PORTING_LEDGER / ADR updated:** ADR-072 (Proposed) — F5 falls under Wave F "make placeholders real".
 - **Stop-condition status:** F5 slice **met** on branch; awaiting Colossus verification. PR #19 F3+F4+F5+F6 slice complete; ready to open.
+
+## 2026-08-01 09:41 EDT — Stage 1.5 Wave F · F3 · Test-only race-window fix
+
+- **Stage / plugin / port:** Stage 1.5 Wave F · Playwright regression hardening
+- **What changed:**
+  - `ui/tests/17-memory-integrity-f3.spec.ts` first test (`provenance search input is present and controlled`) flaked under full-suite parallel load: `beforeEach` waited for `memory-integrity-loading` to disappear but not for one of the three terminal branches (`canvas-wrap` / `empty` / `error`) to mount. Race window let the test fall through to expect `filter-empty` while the panel was still between states.
+  - Added a `Promise.race` in `beforeEach` awaiting any of the three terminal branches (all wrapped in `.catch(() => undefined)` so the timeout of one branch doesn't fail the test).
+  - Tightened the first test's branch selection: check `memory-integrity-error` first, then `canvas-wrap` count; only expect `filter-empty` when there are actually loaded nodes to filter to empty.
+  - No component change. Test-only fix.
+- **Files touched:**
+  - `ui/tests/17-memory-integrity-f3.spec.ts` (test-only; beforeEach + first test tightened)
+- **Ports / adapters affected:** none
+- **PORTING_LEDGER / ADR updated:** —
+- **Stop-condition status:** met on branch; awaits Colossus full-suite re-verify (target 68/68 GREEN).

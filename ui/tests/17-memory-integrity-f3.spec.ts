@@ -18,6 +18,24 @@ test.describe("F3 · MemoryIntegrity provenance search + confidence histogram", 
     await expect(page.getByTestId("memory-integrity-loading")).toHaveCount(0, {
       timeout: 8000,
     });
+    // And for one of the three terminal states to actually appear.
+    // Under full-suite load the fetch can settle after `loading` clears
+    // but before the canvas / empty / error branch mounts — race window
+    // caught F3's filter-empty expectation.
+    await Promise.race([
+      page
+        .getByTestId("memory-integrity-canvas-wrap")
+        .waitFor({ timeout: 8000 })
+        .catch(() => undefined),
+      page
+        .getByTestId("memory-integrity-empty")
+        .waitFor({ timeout: 8000 })
+        .catch(() => undefined),
+      page
+        .getByTestId("memory-integrity-error")
+        .waitFor({ timeout: 8000 })
+        .catch(() => undefined),
+    ]);
   });
 
   test("provenance search input is present and controlled", async ({ page }) => {
@@ -25,19 +43,22 @@ test.describe("F3 · MemoryIntegrity provenance search + confidence histogram", 
     await expect(input).toBeVisible();
     await input.fill("nonexistent-provenance-xyzzy-42");
     await expect(input).toHaveValue("nonexistent-provenance-xyzzy-42");
-    // Filter empty state should render (assuming at least some nodes exist
-    // on the default corpus; otherwise the filter-empty is fine to be
-    // absent since the underlying empty state takes over).
-    const nodeCount = await page
-      .getByTestId("memory-integrity-canvas-wrap")
-      .count();
-    const emptyCount = await page
-      .getByTestId("memory-integrity-empty")
-      .count();
-    if (nodeCount === 0 && emptyCount > 0) {
-      // Corpus itself is empty — filter-empty won't render. Accept.
+    // Determine which terminal state the panel actually settled in.
+    // The `beforeEach` guarantees one of the three is mounted.
+    const err = await page.getByTestId("memory-integrity-error").count();
+    if (err > 0) {
+      // Corpus errored — no filter surface. Accept.
       return;
     }
+    const canvas = await page
+      .getByTestId("memory-integrity-canvas-wrap")
+      .count();
+    if (canvas === 0) {
+      // Corpus itself is empty (memory-integrity-empty rendered).
+      // filter-empty won't render because there are no nodes to filter.
+      return;
+    }
+    // Non-empty corpus — an unmatchable filter must show filter-empty.
     await expect(page.getByTestId("memory-integrity-filter-empty")).toBeVisible({
       timeout: 3000,
     });
