@@ -923,3 +923,23 @@ Entry format per `kosmos-log-maintenance` skill:
 - **Files changed:** ui/tests/16-zetesis-completes.spec.ts
 - **Related BUILD_LOG entry:** 2026-08-01 19:53 EDT
 - **Follow-up (out of scope):** ADR-056 §D3 no-op guard not honoring `query_vector=[]` — file to KNOWN_ISSUES.md.
+
+## 2026-08-01 20:04 EDT — ui spec 08 confirmed passing after test.setTimeout fix
+
+- **Symptom:** `08-zetesis-research.spec.ts:27` failing with `Test timeout of 30000ms exceeded` (as documented in DEBUG_LOG 2026-08-01 19:45 EDT).
+- **Affected stage / plugin / port:** Stage 6.3 · zetesis (test-only).
+- **Root cause:** Playwright default 30s per-test cap (see 19:45 EDT entry).
+- **Fix applied:** `test.setTimeout(660_000)` added in the 19:45 EDT commit.
+- **Verification:** Spec 08 passed in the 2026-08-01 20:00 EDT full spec sweep (`101 passed → 102 passed`; spec 08 no longer in failure list). Removing corresponding KNOWN_ISSUES entry.
+- **Files changed:** KNOWN_ISSUES.md (deletion of resolved entry).
+- **Related BUILD_LOG entry:** 2026-08-01 19:45 EDT (original fix); 2026-08-01 20:04 EDT (this closing entry).
+
+## 2026-08-01 20:04 EDT — ui spec 20 confirmed passing after .first() fix
+
+- **Symptom:** `20-gnosis-graph-viz.spec.ts:26` failing with `strict mode violation: getByTestId('graph-stats').or(getByTestId('graph-empty')) resolved to 2 elements` (as documented in DEBUG_LOG 2026-08-01 19:40 EDT).
+- **Affected stage / plugin / port:** Stage 3 · UI · gnosis graph viz (test-only).
+- **Root cause:** Empty-corpus state renders both `graph-empty` banner and `graph-stats` footer; Playwright's strict-mode rejects unions matching >1 element.
+- **Fix applied:** `.first()` on both `stats.or(empty)` asserts in the 19:40 EDT commit.
+- **Verification:** Spec 20 passed in the 2026-08-01 19:45 EDT full spec sweep (dropped from failure list `5 failed → 4 failed`; `100 passed → 101 passed`).
+- **Files changed:** ui/tests/20-gnosis-graph-viz.spec.ts (in 19:40 EDT commit).
+- **Related BUILD_LOG entry:** 2026-08-01 19:40 EDT (fix); 2026-08-01 20:04 EDT (this closing entry).

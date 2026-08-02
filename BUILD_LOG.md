@@ -3691,3 +3691,12 @@ Landed ADR-076 D6.
 - **Ports / adapters affected:** none.
 - **PORTING_LEDGER / ADR updated:** —.
 - **Stop-condition status:** met (raised timeouts unblock spec 16; separate ADR-056 §D3 no-op guard bug logged to KNOWN_ISSUES for backend follow-up).
+
+## 2026-08-01 20:04 EDT — Session wrap: Stage 3.14b step 3 closed + UI test hygiene sweep
+
+- **Stage / plugin / port:** session close · Stage 3.14b step 3 (DONE) · post-stage UI test hygiene
+- **What changed:** Confirmed spec 08 + spec 20 pass; spec 16 is now flaky-under-load (passes on retry) instead of hard-failing; 4 → 2 remaining known-issue test flakes (spec 01 sidebar, spec 24 quarantine). New ADR-056 §D3 backend concern (no-op guard not honoring empty query_vector) filed to KNOWN_ISSUES for a future session. DEBUG_LOG closes for spec 08 and spec 20 recorded; KNOWN_ISSUES entry for spec 08 removed; KNOWN_ISSUES entry for spec 16 rewritten to reflect current flaky-not-broken state.
+- **Files touched:** BUILD_LOG.md, DEBUG_LOG.md, KNOWN_ISSUES.md, SESSION_HANDOFF.md
+- **Ports / adapters affected:** none.
+- **PORTING_LEDGER / ADR updated:** —.
+- **Stop-condition status:** MET for Stage 3.14b step 3. Session ending; next session reads SESSION_HANDOFF first and confirms the next spec entry.

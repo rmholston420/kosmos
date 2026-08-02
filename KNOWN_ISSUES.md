@@ -102,21 +102,13 @@ Use the `kosmos-log-maintenance` Perplexity Computer skill.
 - **Next investigation:** inspect `ui/lib/registry.ts` (or wherever `sidebar-plugins` is populated) — the live-registry merge with static fallbacks must be either (a) filtering out `/zetesis` and `/gnosis` entries, or (b) racing with data that hasn't loaded by first paint. Verify against `/api/kernel/schema` payload at test-run time.
 - **Related DEBUG_LOG search terms:** "sidebar-plugins", "static fallback", "route manifest", "de-dupes"
 
-### 2026-08-01 — ui spec 08: zetesis-research surface never reaches report/error state
+### 2026-08-01 — ui spec 16: F6 zetesis SSE occasionally exceeds 180s (now flaky, not hard-failing)
 
-- **Blocks:** no blockers (test-only)
-- **Symptom:** `08-zetesis-research.spec.ts:27` — submitting a query, expect `zetesis-report | zetesis-report-error | zetesis-error` to be visible within 600s. Neither locator appears; Playwright's own per-test 30s timeout expires first, so the 600s wait is truncated. Retry #1 same behavior.
-- **Attempted fixes:** none this session.
-- **Next investigation:** (a) confirm the per-test timeout is actually 30s vs the intended 600s — likely a `test.setTimeout()` missing at the top of the test, similar to spec 03's fix; (b) if the timeout is raised, verify Ollama is warm and the ODR pipeline emits a terminal SSE event. Compare against spec 16 which asserts on the raw SSE stream.
-- **Related DEBUG_LOG search terms:** "zetesis-report", "zetesis-report-error", "600_000", "test.setTimeout"
-
-### 2026-08-01 — ui spec 16: F6 zetesis SSE POST context disposed before completed event
-
-- **Blocks:** no blockers (test-only; SSE lifecycle)
-- **Symptom:** `16-zetesis-completes.spec.ts:27` — `request.post('/api/zetesis/research', ...)` returns 200 with `content-type: text/event-stream; charset=utf-8`, then Playwright throws `apiRequestContext.post: Request context disposed.` at the 30s per-test timeout. The completed event never arrives before the request context is torn down.
-- **Attempted fixes:** none this session.
-- **Next investigation:** two paths — (a) same missing `test.setTimeout(90_000)` pattern as spec 08 (Playwright kills the request context at the per-test cap regardless of the individual request timeout); (b) actual ODR/SSE hang on the kernel side never emitting `event: completed`. Instrument by dropping SSE stream to disk during the test and checking last-event-received timestamps.
-- **Related DEBUG_LOG search terms:** "apiRequestContext", "request context disposed", "text/event-stream", "zetesis SSE"
+- **Blocks:** no blockers (test-only; SSE tail latency)
+- **Symptom:** After the timeout hygiene fixes (see DEBUG_LOG 2026-08-01 19:45 EDT and 19:53 EDT), spec 16 no longer hard-fails on the 30s Playwright cap or the 90s ceiling. It now runs the request under a 180s cap + 210s test budget and passes on retry #1 ("1 flaky" in the report at 2026-08-01 20:00 EDT). The direct curl p50 is ~88s but the tail extends past 180s under Ollama warmup / concurrent GPU load.
+- **Attempted fixes:** timeout hygiene fixes 2026-08-01 19:45 EDT and 19:53 EDT.
+- **Next investigation:** two paths — (a) fix the underlying ADR-056 §D3 no-op guard (separate entry below) so the smoke query does not run a full ODR trial — that should collapse latency from ~88s p50 to sub-second; (b) if the pipeline must remain real, raise the request timeout again (e.g. 300s) but that only masks the real fix (a).
+- **Related DEBUG_LOG search terms:** "apiRequestContext", "text/event-stream", "zetesis SSE", "latency_seconds", "ADR-056 §D3"
 
 ### 2026-08-01 — ui spec 24: memory-quarantine review initial state resolves to none of {list, empty, degraded, error}
 
