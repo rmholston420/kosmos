@@ -26,8 +26,11 @@ Read path:
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -38,11 +41,33 @@ from ports.memory import (
     MemoryHit,
     MemoryPort,
     MemoryWriteBlocked,
+    QuarantinedEntry,
+    QuarantinedPage,
     validate_zero_trust_write,
 )
 from ports.vector import VectorPort
 
 from .semantic_memory_path import SemanticMemoryPath
+
+# ADR-076 D6 — process-lifetime verdict counter. Reset only on kernel restart.
+# Keys are AmgVerdict decision strings: "allow" | "redact" | "quarantine" |
+# "block". Read by the /api/memory/amg/status route.
+_verdict_counter: Counter[str] = Counter()
+
+
+def reset_verdict_counter() -> None:
+    """Reset the module-level verdict counter. Test-only."""
+    _verdict_counter.clear()
+
+
+def get_verdict_counts() -> dict[str, int]:
+    """Return a snapshot of verdict counts. Always includes all four keys."""
+    return {
+        "allow": int(_verdict_counter.get("allow", 0)),
+        "redact": int(_verdict_counter.get("redact", 0)),
+        "quarantine": int(_verdict_counter.get("quarantine", 0)),
+        "block": int(_verdict_counter.get("block", 0)),
+    }
 
 __all__ = [
     "AlwaysBlockAmgPolicy",
@@ -194,6 +219,23 @@ class InMemoryGraphBackend:
         if needle.startswith("contains:"):
             frag = needle.split(":", 1)[1].strip().lower()
             return [n for n in self._nodes.values() if frag in str(n).lower()]
+        # ADR-076 D5: incoming-edges lookup.
+        # "edges_in:<node_id>:<rel_type>" -> list of predecessor nodes
+        # (dict) each carrying an ``_edge_kind`` synthetic key holding the
+        # edge's ``kind`` prop (or empty string when unset).
+        if needle.startswith("edges_in:"):
+            _, node_id, rel_type = needle.split(":", 2)
+            out: list[dict[str, Any]] = []
+            for e in self._edges:
+                if e["to"] != node_id or e["rel_type"] != rel_type:
+                    continue
+                pred = self._nodes.get(e["from"])
+                if pred is None:
+                    continue
+                merged = dict(pred)
+                merged["_edge_kind"] = str(e["props"].get("kind", ""))
+                out.append(merged)
+            return out
         return list(self._nodes.values())
 
     async def delete_node(self, node_id: str) -> None:
@@ -371,6 +413,9 @@ class DozerDbMemoryAdapter:
 
         # 2. Agent Memory Guard policy layer.
         verdict = self._amg.evaluate(payload)
+        # ADR-076 D6 — record the verdict for /api/memory/amg/status. Count
+        # every decision (allow/redact/quarantine/block).
+        _verdict_counter[verdict.decision] += 1
         if verdict.decision == "block":
             raise MemoryWriteBlocked(verdict.reason or "AMG blocked write")
         if verdict.decision == "redact" and verdict.redacted_payload is not None:
@@ -490,6 +535,285 @@ class DozerDbMemoryAdapter:
         # Quarantined writes are NOT indexed in Graphiti — they are not
         # semantic memory until reviewed and promoted (spec §115).
         return MemoryEventId(id=event_id, written_at=written_at)
+
+    # ── quarantine review (ADR-076 D4) ──────────────────────────────────
+    #
+    # Uses ``query_cypher("label:Quarantined")`` — the minimum common
+    # subset both ``InMemoryGraphBackend`` and ``DozerDbGraphBackend``
+    # honour. All since/limit/cursor filtering happens in Python because
+    # the quarantine lane is a human-review queue: volume is bounded to
+    # what a reviewer can process, not millions of rows.
+
+    @staticmethod
+    def _encode_cursor(quarantined_at: str, event_id: str) -> str:
+        raw = json.dumps({"q": quarantined_at, "i": event_id}, sort_keys=True)
+        return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii")
+
+    @staticmethod
+    def _decode_cursor(cursor: str) -> tuple[str, str]:
+        try:
+            raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+            obj = json.loads(raw)
+            return str(obj["q"]), str(obj["i"])
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"invalid quarantine cursor: {exc}") from exc
+
+    async def list_quarantined(
+        self,
+        *,
+        since: str | None = None,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> QuarantinedPage:
+        # ADR-076 D6: limit=0 is a valid "count-only" mode used by the AMG
+        # status route. Otherwise limit must be in [1, 100].
+        if not isinstance(limit, int) or limit < 0 or limit > 100:
+            raise ValueError(
+                f"list_quarantined limit must be int in [0, 100], got {limit!r}"
+            )
+
+        rows = await self._graph.query_cypher("label:Quarantined")
+
+        # ADR-076 D4 compensating-delete: filter :Quarantined rows whose id
+        # already exists as a promoted :MemoryEvent (write landed, delete
+        # pending). Prevents duplicate display of promoted-but-not-swept rows.
+        events = await self._graph.query_cypher("label:MemoryEvent")
+        promoted_original_ids: set[str] = set()
+        for e in events:
+            attrs = e.get("attributes") if isinstance(e, dict) else None
+            if isinstance(attrs, dict):
+                oid = attrs.get("original_event_id")
+                if isinstance(oid, str) and oid:
+                    promoted_original_ids.add(oid)
+
+        entries: list[tuple[str, str, QuarantinedEntry]] = []
+        for r in rows:
+            qid = str(r.get("id") or "")
+            if not qid or qid in promoted_original_ids:
+                continue
+            qat = str(r.get("written_at") or "")
+            if since is not None and qat < since:
+                continue
+            try:
+                qat_dt = datetime.fromisoformat(qat)
+            except ValueError:
+                continue
+            payload_raw = r.get("quarantined_payload")
+            if not isinstance(payload_raw, dict):
+                payload_raw = {}
+            conf_raw = r.get("confidence")
+            try:
+                conf = float(conf_raw) if conf_raw is not None else 0.0
+            except (TypeError, ValueError):
+                conf = 0.0
+            entries.append(
+                (
+                    qat,
+                    qid,
+                    QuarantinedEntry(
+                        event_id=qid,
+                        payload=dict(payload_raw),
+                        reason=str(r.get("reason") or ""),
+                        provenance=str(r.get("provenance") or ""),
+                        confidence=conf,
+                        quarantined_at=qat_dt,
+                    ),
+                )
+            )
+
+        # Newest-first; ties broken by id lex.
+        entries.sort(key=lambda t: (t[0], t[1]), reverse=True)
+
+        if cursor is not None:
+            cq, ci = self._decode_cursor(cursor)
+            entries = [t for t in entries if (t[0], t[1]) < (cq, ci)]
+
+        total_count = len(entries)
+        page = entries[:limit] if limit > 0 else []
+        next_cursor: str | None = None
+        if limit > 0 and len(entries) > limit and page:
+            last_q, last_i, _ = page[-1]
+            next_cursor = self._encode_cursor(last_q, last_i)
+
+        return QuarantinedPage(
+            entries=[e for _, _, e in page],
+            next_cursor=next_cursor,
+            total_count=total_count,
+        )
+
+    async def _load_quarantined_row(self, event_id: str) -> dict[str, Any]:
+        rows = await self._graph.query_cypher("label:Quarantined")
+        for r in rows:
+            if str(r.get("id") or "") == event_id:
+                return r
+        raise ValueError(f"quarantine entry not found: event_id={event_id!r}")
+
+    async def approve_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> MemoryEventId:
+        if not isinstance(reviewer, str) or not reviewer:
+            raise ValueError("approve_quarantined requires non-empty reviewer")
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("approve_quarantined requires non-empty reason")
+
+        eid = event_id.id if isinstance(event_id, MemoryEventId) else str(event_id)
+        row = await self._load_quarantined_row(eid)
+
+        payload = row.get("quarantined_payload")
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"quarantine entry {eid!r} has malformed payload; cannot promote"
+            )
+
+        original_conf_raw = row.get("confidence")
+        try:
+            original_conf = float(original_conf_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"quarantine entry {eid!r} has malformed confidence; cannot promote"
+            ) from exc
+
+        subject = str(payload.get("subject", eid))
+        predicate = str(payload.get("predicate", "quarantine.promoted"))
+        obj = str(payload.get("object", json.dumps(payload, sort_keys=True)))
+
+        attributes = dict(payload.get("attributes") or {})
+        attributes["promoted_from_quarantine"] = True
+        attributes["promotion_reviewer"] = reviewer
+        attributes["promotion_reason"] = reason
+        attributes["original_event_id"] = eid
+
+        promoted = await self.write_event(
+            subject,
+            predicate,
+            obj,
+            provenance=f"quarantine.approved:{reviewer}",
+            confidence=original_conf,
+            source_citation=payload.get("source_citation"),
+            pii_tier=str(payload.get("pii_tier", "Public")),
+            attributes=attributes,
+        )
+
+        try:
+            await self._graph.delete_node(eid)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "quarantine approve: promotion succeeded but delete failed; "
+                "list_quarantined will filter via tombstone. event_id=%r err=%s",
+                eid,
+                exc,
+            )
+
+        return promoted
+
+    async def reject_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> None:
+        if not isinstance(reviewer, str) or not reviewer:
+            raise ValueError("reject_quarantined requires non-empty reviewer")
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("reject_quarantined requires non-empty reason")
+
+        eid = event_id.id if isinstance(event_id, MemoryEventId) else str(event_id)
+        await self._load_quarantined_row(eid)
+        await self._graph.delete_node(eid)
+
+    # ── ADR-076 D5: provenance chain ────────────────────────────────────
+
+    async def provenance_chain(
+        self,
+        event_id: str,
+        *,
+        max_depth: int = 10,
+    ) -> "ProvenanceChain":
+        from ports.memory import ProvenanceChain, ProvenanceLink
+
+        if not isinstance(event_id, str) or not event_id:
+            raise ValueError("provenance_chain requires non-empty event_id")
+        if not isinstance(max_depth, int) or max_depth < 0:
+            raise ValueError("provenance_chain requires max_depth >= 0")
+
+        # Load the root :MemoryEvent node.
+        events = await self._graph.query_cypher("label:MemoryEvent")
+        root: dict[str, Any] | None = None
+        for n in events:
+            if n.get("id") == event_id:
+                root = n
+                break
+        if root is None:
+            raise LookupError(f"MemoryEvent not found: {event_id!r}")
+
+        def _ts(node: dict[str, Any]) -> datetime:
+            raw = node.get("as_of") or node.get("written_at") or node.get("timestamp")
+            if isinstance(raw, datetime):
+                return raw
+            if isinstance(raw, str):
+                try:
+                    return datetime.fromisoformat(raw)
+                except ValueError:
+                    pass
+            return datetime.fromtimestamp(0, tz=timezone.utc)
+
+        def _source(node: dict[str, Any]) -> str:
+            return str(node.get("provenance") or node.get("source") or "")
+
+        def _conf(node: dict[str, Any]) -> float:
+            raw = node.get("confidence")
+            try:
+                return float(raw) if raw is not None else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        predecessors: list[ProvenanceLink] = []
+        if max_depth == 0:
+            return ProvenanceChain(
+                event_id=event_id,
+                source=_source(root),
+                timestamp=_ts(root),
+                confidence=_conf(root),
+                predecessors=predecessors,
+            )
+
+        # BFS one hop at a time via edges_in pseudo-cypher.
+        seen: set[str] = {event_id}
+        frontier: list[tuple[str, int]] = [(event_id, 0)]
+        while frontier:
+            node_id, depth = frontier.pop(0)
+            if depth >= max_depth:
+                continue
+            preds = await self._graph.query_cypher(
+                f"edges_in:{node_id}:PROVENANCE_OF"
+            )
+            for p in preds:
+                pid = str(p.get("id") or "")
+                if not pid or pid in seen:
+                    continue
+                seen.add(pid)
+                predecessors.append(
+                    ProvenanceLink(
+                        event_id=pid,
+                        source=_source(p),
+                        edge_kind=str(p.get("_edge_kind") or ""),
+                        depth=depth + 1,
+                    )
+                )
+                frontier.append((pid, depth + 1))
+
+        return ProvenanceChain(
+            event_id=event_id,
+            source=_source(root),
+            timestamp=_ts(root),
+            confidence=_conf(root),
+            predecessors=predecessors,
+        )
 
     # ── reads ───────────────────────────────────────────────────────────
 

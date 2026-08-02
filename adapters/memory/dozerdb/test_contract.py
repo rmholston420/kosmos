@@ -440,3 +440,312 @@ async def test_close_swallows_backend_close_errors() -> None:
     )
     await adapter.close()  # must not raise
     assert any("boom" in e for e in adapter._state.close_errors_swallowed)  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# ADR-076 D4 — quarantine review (list / approve / reject).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_returns_written_row() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    await adapter.write_event("s", "p", "o", provenance="test", confidence=0.5)
+    page = await adapter.list_quarantined()
+    assert len(page.entries) == 1
+    assert page.next_cursor is None
+    e = page.entries[0]
+    assert e.provenance == "test"
+    assert e.confidence == 0.5
+    assert e.payload["subject"] == "s"
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_rejects_bad_limit() -> None:
+    adapter = _fresh_adapter()
+    # ADR-076 D6: limit=0 is now valid (count-only). Only negative and
+    # >100 remain rejected.
+    with pytest.raises(ValueError):
+        await adapter.list_quarantined(limit=-1)
+    with pytest.raises(ValueError):
+        await adapter.list_quarantined(limit=101)
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_since_filter() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    await adapter.write_event("s", "p", "o", provenance="p", confidence=0.5)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    page = await adapter.list_quarantined(since=future)
+    assert page.entries == []
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_cursor_pagination() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    for i in range(3):
+        await adapter.write_event(
+            f"s{i}", "p", "o", provenance="test", confidence=0.5
+        )
+    page1 = await adapter.list_quarantined(limit=2)
+    assert len(page1.entries) == 2
+    assert page1.next_cursor is not None
+    page2 = await adapter.list_quarantined(limit=2, cursor=page1.next_cursor)
+    assert len(page2.entries) == 1
+    # No overlap between pages.
+    ids1 = {e.event_id for e in page1.entries}
+    ids2 = {e.event_id for e in page2.entries}
+    assert ids1.isdisjoint(ids2)
+
+
+@pytest.mark.asyncio
+async def test_approve_quarantined_promotes_and_removes_row() -> None:
+    graph = InMemoryGraphBackend()
+    quar = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    written = await quar.write_event(
+        "subj", "pred", "obj", provenance="orig", confidence=0.7
+    )
+    promoter = _fresh_adapter(graph=graph, amg=NoOpAmgPolicy())
+    promoted = await promoter.approve_quarantined(
+        written, reviewer="rmholston420", reason="verified"
+    )
+    assert promoted.id != written.id
+    # Quarantined row is gone.
+    page = await promoter.list_quarantined()
+    assert page.entries == []
+    # Promoted row lives in :MemoryEvent.
+    events = await graph.query_cypher("label:MemoryEvent")
+    assert any(e.get("id") == promoted.id for e in events)
+
+
+@pytest.mark.asyncio
+async def test_approve_quarantined_rejects_empty_reviewer_or_reason() -> None:
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    written = await adapter.write_event(
+        "s", "p", "o", provenance="p", confidence=0.5
+    )
+    with pytest.raises(ValueError):
+        await adapter.approve_quarantined(written, reviewer="", reason="ok")
+    with pytest.raises(ValueError):
+        await adapter.approve_quarantined(written, reviewer="me", reason="")
+
+
+@pytest.mark.asyncio
+async def test_reject_quarantined_deletes_row() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph, amg=AlwaysQuarantineAmgPolicy())
+    written = await adapter.write_event(
+        "s", "p", "o", provenance="test", confidence=0.5
+    )
+    await adapter.reject_quarantined(
+        written, reviewer="rmholston420", reason="malformed"
+    )
+    page = await adapter.list_quarantined()
+    assert page.entries == []
+
+
+@pytest.mark.asyncio
+async def test_reject_quarantined_missing_raises() -> None:
+    adapter = _fresh_adapter()
+    from ports.memory import MemoryEventId
+
+    handle = MemoryEventId(
+        id="does-not-exist", written_at=datetime.now(timezone.utc)
+    )
+    with pytest.raises(ValueError):
+        await adapter.reject_quarantined(
+            handle, reviewer="me", reason="test"
+        )
+
+
+# ── ADR-076 D5: provenance chain ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_unknown_raises_lookup() -> None:
+    adapter = _fresh_adapter()
+    with pytest.raises(LookupError):
+        await adapter.provenance_chain("does-not-exist")
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_no_predecessors_returns_empty_list() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph)
+    written = await adapter.write_event(
+        "s", "p", "o", provenance="unit-test", confidence=0.75
+    )
+    chain = await adapter.provenance_chain(written.id)
+    assert chain.event_id == written.id
+    assert chain.source == "unit-test"
+    assert chain.confidence == 0.75
+    assert chain.predecessors == []
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_walks_two_hop_chain() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph)
+    root = await adapter.write_event(
+        "root", "p", "o", provenance="root-src", confidence=0.95
+    )
+    mid = await adapter.write_event(
+        "mid", "p", "o", provenance="mid-src", confidence=0.6
+    )
+    tail = await adapter.write_event(
+        "tail", "p", "o", provenance="tail-src", confidence=0.4
+    )
+    # Wire :PROVENANCE_OF edges: root <- mid <- tail
+    await graph.add_edge(mid.id, root.id, "PROVENANCE_OF", {"kind": "derives_from"})
+    await graph.add_edge(tail.id, mid.id, "PROVENANCE_OF", {"kind": "cites"})
+
+    chain = await adapter.provenance_chain(root.id)
+    assert chain.event_id == root.id
+    ids = [p.event_id for p in chain.predecessors]
+    assert mid.id in ids
+    assert tail.id in ids
+    depths = {p.event_id: p.depth for p in chain.predecessors}
+    assert depths[mid.id] == 1
+    assert depths[tail.id] == 2
+    kinds = {p.event_id: p.edge_kind for p in chain.predecessors}
+    assert kinds[mid.id] == "derives_from"
+    assert kinds[tail.id] == "cites"
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_respects_max_depth() -> None:
+    graph = InMemoryGraphBackend()
+    adapter = _fresh_adapter(graph=graph)
+    a = await adapter.write_event("a", "p", "o", provenance="src", confidence=0.5)
+    b = await adapter.write_event("b", "p", "o", provenance="src", confidence=0.5)
+    c = await adapter.write_event("c", "p", "o", provenance="src", confidence=0.5)
+    await graph.add_edge(b.id, a.id, "PROVENANCE_OF", {"kind": "x"})
+    await graph.add_edge(c.id, b.id, "PROVENANCE_OF", {"kind": "y"})
+
+    chain = await adapter.provenance_chain(a.id, max_depth=1)
+    ids = [p.event_id for p in chain.predecessors]
+    assert b.id in ids
+    assert c.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_provenance_chain_bad_input_raises() -> None:
+    adapter = _fresh_adapter()
+    with pytest.raises(ValueError):
+        await adapter.provenance_chain("")
+    with pytest.raises(ValueError):
+        await adapter.provenance_chain("x", max_depth=-1)
+
+
+# ── ADR-076 D6 — verdict counter + count-only limit=0 ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_limit_zero_returns_total_count_only() -> None:
+    """ADR-076 D6: limit=0 is valid; returns empty entries + total_count."""
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    # Write three events; all get quarantined.
+    for i in range(3):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    page = await adapter.list_quarantined(limit=0)
+    assert page.entries == []
+    assert page.next_cursor is None
+    assert page.total_count == 3
+
+
+@pytest.mark.asyncio
+async def test_list_quarantined_page_reports_total_count() -> None:
+    """ADR-076 D6: even paginated calls report the full total_count."""
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    for i in range(5):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    page = await adapter.list_quarantined(limit=2)
+    assert len(page.entries) == 2
+    assert page.total_count == 5
+    assert page.next_cursor is not None
+
+
+@pytest.mark.asyncio
+async def test_verdict_counter_increments_on_write() -> None:
+    """ADR-076 D6: write_event records verdict decisions in the counter."""
+    from adapters.memory.dozerdb.adapter import (
+        get_verdict_counts,
+        reset_verdict_counter,
+    )
+
+    reset_verdict_counter()
+    adapter = _fresh_adapter(amg=NoOpAmgPolicy())
+    for i in range(4):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    counts = get_verdict_counts()
+    assert counts["allow"] == 4
+    assert counts["quarantine"] == 0
+    assert counts["block"] == 0
+
+
+@pytest.mark.asyncio
+async def test_verdict_counter_records_quarantine_decisions() -> None:
+    """ADR-076 D6: quarantine verdicts increment the quarantine counter."""
+    from adapters.memory.dozerdb.adapter import (
+        get_verdict_counts,
+        reset_verdict_counter,
+    )
+
+    reset_verdict_counter()
+    adapter = _fresh_adapter(amg=AlwaysQuarantineAmgPolicy())
+    for i in range(3):
+        await adapter.write_event(
+            f"subj-{i}",
+            "predicate",
+            f"obj-{i}",
+            provenance="test",
+            confidence=0.5,
+        )
+    counts = get_verdict_counts()
+    assert counts["quarantine"] == 3
+    assert counts["allow"] == 0
+
+
+@pytest.mark.asyncio
+async def test_verdict_counter_records_block_and_raises() -> None:
+    """ADR-076 D6: block verdict still counts even when the write raises."""
+    from adapters.memory.dozerdb.adapter import (
+        get_verdict_counts,
+        reset_verdict_counter,
+    )
+
+    reset_verdict_counter()
+    adapter = _fresh_adapter(amg=AlwaysBlockAmgPolicy())
+    for i in range(2):
+        with pytest.raises(MemoryWriteBlocked):
+            await adapter.write_event(
+                f"subj-{i}",
+                "predicate",
+                f"obj-{i}",
+                provenance="test",
+                confidence=0.5,
+            )
+    counts = get_verdict_counts()
+    assert counts["block"] == 2
+    assert counts["allow"] == 0

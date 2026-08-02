@@ -161,6 +161,43 @@ class DozerDbGraphBackend:
         cypher: str,
         params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        # Behavior-parity with InMemoryGraphBackend: honor two pseudo-Cypher
+        # shorthands used by DozerDbMemoryAdapter (ADR-076 D4):
+        #   "label:<Label>"        -> MATCH (n:<Label>) RETURN n
+        #   "contains:<substring>" -> MATCH (n) WHERE any prop CONTAINS <s>
+        # Real Cypher passes through unchanged.
+        stripped = cypher.strip()
+        if stripped.startswith("label:"):
+            label = stripped.split(":", 1)[1].strip()
+            if not label.isidentifier():
+                raise ValueError(f"invalid label in pseudo-cypher: {label!r}")
+            real = f"MATCH (n:`{label}`) RETURN n"
+            rows = await self._run(real, params or {})
+            return [dict(r["n"]) if hasattr(r["n"], "items") else r["n"] for r in rows]
+        if stripped.startswith("contains:"):
+            substr = stripped.split(":", 1)[1]
+            real = (
+                "MATCH (n) WHERE any(k IN keys(n) WHERE toString(n[k]) "
+                "CONTAINS $substr) RETURN n"
+            )
+            rows = await self._run(real, {"substr": substr, **(params or {})})
+            return [dict(r["n"]) if hasattr(r["n"], "items") else r["n"] for r in rows]
+        if stripped.startswith("edges_in:"):
+            _, node_id, rel_type = stripped.split(":", 2)
+            if not rel_type.replace("_", "").isalnum():
+                raise ValueError(f"invalid rel_type in pseudo-cypher: {rel_type!r}")
+            real = (
+                f"MATCH (pred)-[r:`{rel_type}`]->(n {{id: $nid}}) "
+                "RETURN pred, r.kind AS edge_kind"
+            )
+            rows = await self._run(real, {"nid": node_id, **(params or {})})
+            out: list[dict[str, Any]] = []
+            for r in rows:
+                pred = r["pred"]
+                merged = dict(pred) if hasattr(pred, "items") else dict(pred or {})
+                merged["_edge_kind"] = str(r.get("edge_kind") or "")
+                out.append(merged)
+            return out
         return await self._run(cypher, params or {})
 
     async def delete_node(self, node_id: str) -> None:

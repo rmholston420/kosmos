@@ -599,6 +599,18 @@ class ZetesisPlugin:
             )
 
             # 8. Completed event.
+            #
+            # ADR-076 D3 fix (2026-08-01 EDT): include ``answer`` and
+            # ``report_id`` in the payload so the kernel-owned
+            # ``_drain_zetesis_reports`` fan-out (kernel/app.py:596-615)
+            # can actually write a second, ``provenance="zetesis.event_bus"``
+            # + ``confidence=1.0`` memory event into the dedicated
+            # ``zetesis-reports`` corpus. Before this fix the fan-out
+            # was unreachable dead code: the drain looks for
+            # ``payload.get("summary") or payload.get("answer") or
+            # payload.get("question")``, none of which the payload
+            # carried, so the guard at ``if not summary: continue``
+            # silently skipped every write.
             completed_env = EventEnvelope(
                 producer_plugin=ZETESIS_PLUGIN_NAME,
                 event_type=ZETESIS_RESEARCH_EVENT_COMPLETED,
@@ -609,6 +621,9 @@ class ZetesisPlugin:
                     "latency_seconds": metrics.latency_seconds,
                     "source_diversity": metrics.source_diversity,
                     "memory_event_id": memory_event_id_str,
+                    # ADR-076 D3 fan-out prerequisites:
+                    "answer": metrics.final_answer or "",
+                    "report_id": memory_event_id_str or trial_id,
                 },
             )
             await self.event_bus.publish(completed_env)

@@ -18,7 +18,7 @@ Canonical pattern (matches ADR-022/023/024/025/026):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from numbers import Real
 from typing import Any, Protocol, runtime_checkable
@@ -29,6 +29,8 @@ __all__ = [
     "MemoryPort",
     "MemoryWriteBlocked",
     "MEMORY_REQUIRED_FIELDS",
+    "QuarantinedEntry",
+    "QuarantinedPage",
     "validate_zero_trust_write",
 ]
 
@@ -60,6 +62,73 @@ class MemoryHit:
     payload: dict[str, Any]
     score: float | None = None
     as_of: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantinedEntry:
+    """One row of a :Quarantined lane listing (ADR-076 D4).
+
+    Immutable snapshot of a quarantined write awaiting Tier-1/Tier-2 review.
+    ``event_id`` is the id assigned by ``quarantine_write``. ``payload`` is
+    the original untrusted payload verbatim. ``reason`` is the AMG (or caller-
+    supplied) rationale for routing to the quarantine lane.
+    """
+
+    event_id: str
+    payload: dict[str, Any]
+    reason: str
+    provenance: str
+    confidence: float
+    quarantined_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantinedPage:
+    """Paginated result of ``MemoryPort.list_quarantined`` (ADR-076 D4).
+
+    ``next_cursor`` is opaque to callers — the adapter that produced it is
+    the only component that can decode it. ``None`` means no more pages.
+
+    ``total_count`` (ADR-076 D6) is the total number of currently-quarantined
+    events after compensating-delete filtering, independent of ``limit`` and
+    ``cursor``. Always populated (adapters must count the full set).
+    """
+
+    entries: list[QuarantinedEntry]
+    next_cursor: str | None
+    total_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ProvenanceLink:
+    """One `:PROVENANCE_OF` edge (ADR-076 D5).
+
+    Points at a predecessor ``:MemoryEvent``. ``edge_kind`` is the
+    literal value stored on the edge (e.g. ``"derives_from"``,
+    ``"cites"``). Depth is 1-based hops from the root event.
+    """
+
+    event_id: str
+    source: str
+    edge_kind: str
+    depth: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProvenanceChain:
+    """Full provenance chain rooted at ``event_id`` (ADR-076 D5).
+
+    ``predecessors`` is depth-ordered (nearest first), bounded by
+    ``MemoryPort.provenance_chain(max_depth=...)`` (default 10, mirrors
+    ADR-075 D4's ``MAX_PAGES = 10`` philosophy). Empty list is valid
+    and means "the event exists but has no recorded predecessors".
+    """
+
+    event_id: str
+    source: str
+    timestamp: datetime
+    confidence: float
+    predecessors: list[ProvenanceLink] = field(default_factory=list)
 
 
 class MemoryWriteBlocked(RuntimeError):
@@ -195,6 +264,68 @@ class MemoryPort(Protocol):
         """
         ...
 
+    async def list_quarantined(
+        self,
+        *,
+        since: str | None = None,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> QuarantinedPage:
+        """List :Quarantined lane entries awaiting review (ADR-076 D4).
+
+        ``since`` filters entries with ``quarantined_at >= since`` (ISO-8601).
+        ``limit`` caps returned rows. Valid range is ``[0, 100]``; ``limit=0``
+        is a count-only mode used by the AMG status route (ADR-076 D6) — the
+        returned page has ``entries=[]`` and ``next_cursor=None`` but
+        ``total_count`` is populated. ``cursor`` is an opaque token returned
+        by a previous call; pass it back to fetch the next page.
+
+        Entries already promoted via ``approve_quarantined`` MUST be filtered
+        out even if the compensating delete has not landed yet — the adapter
+        is responsible for enforcing this invariant (ADR-076 D4 compensating-
+        delete atomicity model).
+        """
+        ...
+
+    async def approve_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> MemoryEventId:
+        """Promote a quarantined entry into durable memory (ADR-076 D4).
+
+        Re-runs the original payload through ``write_event`` with
+        ``provenance="quarantine.approved:<reviewer>"`` and the original
+        write's confidence preserved. On write success, deletes the
+        ``:Quarantined`` node. Returns the newly-minted ``MemoryEventId``
+        of the promoted event.
+
+        Raises:
+            ValueError: port-level zero-trust guard failed or unknown event_id.
+            MemoryWriteBlocked: AMG returned `block` during promotion.
+        """
+        ...
+
+    async def reject_quarantined(
+        self,
+        event_id: MemoryEventId,
+        *,
+        reviewer: str,
+        reason: str,
+    ) -> None:
+        """Reject a quarantined entry (ADR-076 D4).
+
+        Deletes the ``:Quarantined`` node. The audit event
+        (``memory.quarantine.rejected``) is published by the kernel route,
+        not the adapter, to keep adapter DI narrow (ADR-076 D4 decision).
+
+        Raises:
+            ValueError: unknown event_id.
+        """
+        ...
+
     async def search_semantic(
         self,
         query: str,
@@ -219,6 +350,23 @@ class MemoryPort(Protocol):
         ``EmbeddingsPort`` or ``VectorPort`` is not booted; they MUST
         NOT swallow port-level guard failures (``ValueError`` is
         re-raised so callers see the bug immediately).
+        """
+        ...
+
+    # ── ADR-076 D5: provenance chain ────────────────────────────────────
+
+    async def provenance_chain(
+        self,
+        event_id: str,
+        *,
+        max_depth: int = 10,
+    ) -> "ProvenanceChain":
+        """Walk `:PROVENANCE_OF` edges up to ``max_depth`` hops.
+
+        Raises ``LookupError`` when ``event_id`` is not a known
+        ``:MemoryEvent`` node (kernel maps to 404). Returns a chain
+        with empty ``predecessors`` when the event exists but has no
+        provenance edges.
         """
         ...
 

@@ -157,6 +157,44 @@ class AmgGuardPolicy:
         self._guard = MemoryGuard(policy=policy)
         return self._guard
 
+    # ── ADR-076 D6 accessors (read-only, no state mutation) ─────────────────
+
+    @property
+    def policy_preset(self) -> str:
+        """The active policy preset name ("tiered" | "strict" | ...).
+
+        Returns ``"custom-yaml"`` when constructed from a YAML file.
+        """
+        if self._policy_yaml_path is not None:
+            return "custom-yaml"
+        return self._policy_preset
+
+    def active_detectors(self) -> list[str]:
+        """List of detector names from AMG's own detector registry.
+
+        Wraps ``guard._policy.detectors.keys()`` — sourced from AMG, not
+        hard-coded. Returns ``[]`` if the guard has not been built yet or
+        if AMG's policy shape lacks a ``detectors`` mapping.
+        """
+        try:
+            guard = self._ensure_guard()
+        except Exception:  # noqa: BLE001
+            return []
+        policy = getattr(guard, "_policy", None) or getattr(guard, "policy", None)
+        if policy is None:
+            return []
+        detectors = getattr(policy, "detectors", None)
+        if detectors is None:
+            return []
+        try:
+            keys = list(detectors.keys())
+        except AttributeError:
+            try:
+                keys = [str(d) for d in detectors]
+            except TypeError:
+                return []
+        return [str(k) for k in keys]
+
     @staticmethod
     def _payload_to_kv(payload: dict[str, Any]) -> tuple[str, str]:
         """Map a MemoryPort payload to an AMG (key, value) pair.

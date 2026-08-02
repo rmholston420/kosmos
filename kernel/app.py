@@ -593,6 +593,22 @@ async def lifespan(app: FastAPI):
                             )
                             if not summary:
                                 continue
+                            # ADR-076 D3: fan-out lands in the dedicated
+                            # ``zetesis-reports`` corpus so per-corpus
+                            # semantic queries + UI facet counts (ADR-074
+                            # D2 collection contract ``kosmos-memory-{corpus}``)
+                            # attribute Zetesis writes to their own lane.
+                            # DozerDbMemoryAdapter routes the corpus via
+                            # ``attributes["corpus_name"]`` (see
+                            # adapters/memory/dozerdb/adapter.py:421).
+                            # ADR-076 D3 fix: propagate ``trial_id`` from
+                            # the completed event payload into the fan-out
+                            # event's attributes so live-tier tests can
+                            # fingerprint the exact write this run
+                            # produced (needed for corpus-isolation
+                            # assertions against a live Qdrant that may
+                            # hold older leaked events).
+                            trial_id_attr = str(payload.get("trial_id") or "")
                             await registry.memory.write_event(
                                 subject=f"zetesis.report:{report_id}",
                                 predicate="zetesis.research.completed",
@@ -601,7 +617,9 @@ async def lifespan(app: FastAPI):
                                 confidence=1.0,
                                 attributes={
                                     "report_id": report_id,
+                                    "trial_id": trial_id_attr,
                                     "kind": "zetesis.report",
+                                    "corpus_name": "zetesis-reports",
                                 },
                             )
                         except Exception as exc:  # noqa: BLE001
@@ -2180,6 +2198,223 @@ async def memory_search_semantic(
 
 
 # ---------------------------------------------------------------------------
+# Kernel identity (ADR-076 D4) — reviewer identity source for the quarantine
+# UI. Kosmos is single-user local-first; the operator is read from
+# ``KOSMOS_OPERATOR`` (default: ``rmholston420``). Read-only, never 503.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/kernel/identity")
+async def kernel_identity() -> dict[str, Any]:
+    """Return the current signed-in operator (ADR-076 D4).
+
+    Kosmos is a single-user system; the operator is set by ``KOSMOS_OPERATOR``
+    at kernel boot (defaults to ``rmholston420``, matching the git identity
+    used across the workstation).
+    """
+    import os as _os
+
+    return {"reviewer": _os.environ.get("KOSMOS_OPERATOR", "rmholston420")}
+
+
+# ---------------------------------------------------------------------------
+# Memory quarantine review (ADR-076 D4) — list / approve / reject the
+# :Quarantined lane. Degrades to 200 ``{"entries": [], "degraded": true}``
+# when ``registry.memory`` is None, matching the ADR-075 D2 pattern.
+# ---------------------------------------------------------------------------
+
+
+class _QuarantineReviewBody(BaseModel):
+    """Request body for approve/reject routes (ADR-076 D4)."""
+
+    reviewer: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+
+
+@app.get("/api/memory/quarantined")
+async def memory_quarantined_list(
+    since: str | None = None,
+    limit: int = 100,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """List :Quarantined lane entries awaiting review (ADR-076 D4).
+
+    Query params: ``since`` (ISO-8601), ``limit`` (1-100), ``cursor`` (opaque).
+    Degrades to 200 with empty ``entries`` when memory is not booted.
+    """
+    if not isinstance(limit, int) or limit < 1 or limit > 100:
+        raise HTTPException(422, detail="limit must be int in [1, 100]")
+
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        return {
+            "entries": [],
+            "next_cursor": None,
+            "degraded": True,
+            "reason": registry.errors.get("memory") or "memory unavailable",
+        }
+
+    try:
+        page = await memory.list_quarantined(
+            since=since, limit=limit, cursor=cursor
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {
+        "entries": [
+            {
+                "event_id": e.event_id,
+                "payload": e.payload,
+                "reason": e.reason,
+                "provenance": e.provenance,
+                "confidence": e.confidence,
+                "quarantined_at": e.quarantined_at.isoformat(),
+            }
+            for e in page.entries
+        ],
+        "next_cursor": page.next_cursor,
+        "degraded": False,
+    }
+
+
+@app.post("/api/memory/quarantined/{event_id}/approve")
+async def memory_quarantined_approve(
+    event_id: str,
+    body: _QuarantineReviewBody,
+) -> dict[str, Any]:
+    """Promote a :Quarantined entry into durable memory (ADR-076 D4).
+
+    Re-runs the original payload through ``write_event`` under
+    ``provenance=quarantine.approved:<reviewer>`` with the original
+    confidence preserved, then deletes the :Quarantined node.
+    """
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        raise HTTPException(503, detail="memory unavailable")
+
+    from ports.memory import MemoryEventId
+    from datetime import datetime as _dt, timezone as _tz
+
+    handle = MemoryEventId(id=event_id, written_at=_dt.now(_tz.utc))
+    try:
+        promoted = await memory.approve_quarantined(
+            handle, reviewer=body.reviewer, reason=body.reason
+        )
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    await _publish_kernel_event(
+        "memory.quarantine.approved",
+        {
+            "original_event_id": event_id,
+            "promoted_event_id": promoted.id,
+            "reviewer": body.reviewer,
+            "reason": body.reason,
+        },
+    )
+
+    return {
+        "status": "approved",
+        "original_event_id": event_id,
+        "promoted_event_id": promoted.id,
+        "promoted_at": promoted.written_at.isoformat(),
+    }
+
+
+@app.post("/api/memory/quarantined/{event_id}/reject")
+async def memory_quarantined_reject(
+    event_id: str,
+    body: _QuarantineReviewBody,
+) -> dict[str, Any]:
+    """Reject a :Quarantined entry (ADR-076 D4).
+
+    Deletes the :Quarantined node and publishes
+    ``memory.quarantine.rejected`` for audit.
+    """
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        raise HTTPException(503, detail="memory unavailable")
+
+    from ports.memory import MemoryEventId
+    from datetime import datetime as _dt, timezone as _tz
+
+    handle = MemoryEventId(id=event_id, written_at=_dt.now(_tz.utc))
+    try:
+        await memory.reject_quarantined(
+            handle, reviewer=body.reviewer, reason=body.reason
+        )
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    await _publish_kernel_event(
+        "memory.quarantine.rejected",
+        {
+            "event_id": event_id,
+            "reviewer": body.reviewer,
+            "reason": body.reason,
+        },
+    )
+
+    return {"status": "rejected", "event_id": event_id}
+
+
+# ---------------------------------------------------------------------------
+# ADR-076 D5 — Provenance chain surface.
+# GET /api/memory/provenance/{event_id} — walks :PROVENANCE_OF up to
+# MAX_DEPTH = 10 hops. 404 unknown, 200 with empty predecessors when known
+# but no chain, 503 when memory unavailable.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/memory/provenance/{event_id}")
+async def memory_provenance(event_id: str) -> dict[str, Any]:
+    """Return the ADR-076 D5 provenance chain for ``event_id``."""
+    memory = getattr(registry, "memory", None)
+    if memory is None:
+        raise HTTPException(503, detail="memory unavailable")
+
+    try:
+        chain = await memory.provenance_chain(event_id, max_depth=10)
+    except LookupError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            502, detail=f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+    return {
+        "event_id": chain.event_id,
+        "source": chain.source,
+        "timestamp": chain.timestamp.isoformat(),
+        "confidence": chain.confidence,
+        "predecessors": [
+            {
+                "event_id": p.event_id,
+                "source": p.source,
+                "edge_kind": p.edge_kind,
+                "depth": p.depth,
+            }
+            for p in chain.predecessors
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Ollama status (ADR-068 D1) — passthrough to Ollama /api/ps for the top-bar
 # model-swap indicator. Hardcoded ``vram_capacity_bytes`` reflects Colossus's
 # RTX 5090 (32 GiB). Never fabricates a shape when Ollama is unreachable —
@@ -2327,6 +2562,71 @@ def phrouros_anomalies() -> list[dict[str, Any]]:
     if registry.phrouros is None:
         raise HTTPException(503, detail=registry.errors.get("phrouros"))
     return [_dataclass_to_dict(r) for r in registry.phrouros.list_records()]
+
+
+# ---------------------------------------------------------------------------
+# ADR-076 D6 — AMG status
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/memory/amg/status")
+async def memory_amg_status() -> dict[str, Any]:
+    """AMG status snapshot (ADR-076 D6).
+
+    Returns package version, active policy preset, detector list, verdict
+    counter, and current quarantined-count. 503 when AMG import/boot
+    failed (never happens on Colossus; guard preserves boot-safety).
+    """
+    if registry.memory is None:
+        raise HTTPException(503, detail="memory subsystem is None")
+
+    # Late imports so we can degrade gracefully if AMG is missing.
+    try:
+        import agent_memory_guard as amg_pkg
+
+        version = str(getattr(amg_pkg, "__version__", "") or "unknown")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            503,
+            detail=f"agent_memory_guard unavailable: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    from adapters.memory.dozerdb.adapter import get_verdict_counts
+
+    amg_policy = getattr(registry.memory, "_amg", None)
+    policy_preset = "unknown"
+    active_detectors: list[str] = []
+    if amg_policy is not None:
+        policy_preset = str(
+            getattr(amg_policy, "policy_preset", None) or "unknown"
+        )
+        get_active = getattr(amg_policy, "active_detectors", None)
+        if callable(get_active):
+            try:
+                active_detectors = list(get_active())
+            except Exception:  # noqa: BLE001
+                active_detectors = []
+
+    verdict_counts = get_verdict_counts()
+
+    # Quarantined count via port surface (D4's list_quarantined + D6's
+    # count-only mode). Never fabricate on adapter error.
+    try:
+        page = await registry.memory.list_quarantined(limit=0)
+        quarantined_count = int(getattr(page, "total_count", 0))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            503,
+            detail=f"list_quarantined failed: {type(exc).__name__}: {exc}",
+        ) from exc
+
+    return {
+        "version": version,
+        "policy_preset": policy_preset,
+        "active_detectors": active_detectors,
+        "verdict_counts": verdict_counts,
+        "quarantined_count": quarantined_count,
+    }
 
 
 # ---------------------------------------------------------------------------
