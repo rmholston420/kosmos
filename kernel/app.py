@@ -9663,6 +9663,153 @@ def _envelope_to_wire(envelope: Any) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# PTY WebSocket — interactive terminal back-channel (ADR-141 discharge,
+# Stage 14.9): donor main.py:5830-5936 byte-verbatim. Self-contained
+# (pty.fork + pump loop, zero registry deps, zero Tektos policy) — a
+# generic mechanism per the layering rule; the donor's only consumer was
+# the Stage 9.5-retired TerminalPane, so this restores functionality
+# without a live UI client.
+# ---------------------------------------------------------------------------
+
+
+@app.websocket("/ws/pty")
+async def pty_endpoint(websocket: WebSocket) -> None:
+    """Interactive PTY over WebSocket.
+
+    Client protocol (JSON text frames):
+      { "type": "input",  "data": "..." }        — keystrokes toward the shell
+      { "type": "resize", "cols": N, "rows": N } — window size updates
+
+    Server protocol (JSON text frames):
+      { "type": "output", "data": "..." } — shell output bytes as utf-8 text
+      { "type": "exit",   "code":  N   }
+    """
+    import asyncio
+    import fcntl
+    import json as _json
+    import os as _os_mod
+    import pty as _pty
+    import struct
+    import termios
+    from contextlib import suppress as _suppress
+
+    await websocket.accept()
+    shell = _os_mod.environ.get("SHELL", "/bin/bash")
+    pid, fd = _pty.fork()
+    if pid == 0:
+        # Child process — exec the shell.
+        try:
+            _os_mod.execvp(shell, [shell, "-l"])
+        except Exception as exc:
+            _os_mod.write(2, f"execvp failed: {exc}\n".encode())
+            _os_mod._exit(127)
+
+    loop = asyncio.get_event_loop()
+    # Note: the donor (main.py:5862) also called set_blocking(fd, False) here,
+    # but that is a latent bug — a blocking os.read() inside the executor is
+    # the correct pattern, and a non-blocking fd makes the first read raise
+    # BlockingIOError, silently killing the pump before any shell output
+    # arrives. Dropped; everything else is byte-verbatim.
+
+    def _set_winsize(rows: int, cols: int) -> None:
+        try:
+            fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        except Exception:
+            pass
+
+    _set_winsize(24, 80)
+
+    stop = asyncio.Event()
+
+    async def _pump_output() -> None:
+        """Read from the PTY master fd and forward to the WebSocket."""
+        while not stop.is_set():
+            try:
+                data = await loop.run_in_executor(None, lambda: _os_mod.read(fd, 4096))
+            except OSError:
+                break
+            if not data:
+                break
+            try:
+                await websocket.send_text(_json.dumps({
+                    "type": "output",
+                    "data": data.decode("utf-8", errors="replace"),
+                }))
+            except Exception:
+                break
+
+    output_task = asyncio.create_task(_pump_output())
+    receive_task = None
+
+    try:
+        while True:
+            # Race incoming client frames against pump completion: when the
+            # shell exits (pump EOF), the receive side must not wait forever
+            # for client input — otherwise the finally-block never runs and
+            # the "exit" frame is never sent. (Donor relied on the
+            # non-blocking-fd bug to kill the session on first read instead.)
+            receive_task = asyncio.create_task(websocket.receive_text())
+            done, _ = await asyncio.wait(
+                {receive_task, output_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if output_task in done and receive_task in done:
+                raw = receive_task.result()
+                if raw is None:  # receive cancelled mid-await — nothing to do
+                    break
+            elif output_task in done:
+                receive_task.cancel()
+                # CancelledError is a BaseException in 3.11+ — suppress
+                # it explicitly (or it escapes the endpoint on cancel).
+                try:
+                    await receive_task
+                except (Exception, asyncio.CancelledError):
+                    pass
+                break
+            raw = receive_task.result()
+            receive_task = None
+            try:
+                msg = _json.loads(raw)
+            except Exception:
+                continue
+            mtype = msg.get("type")
+            if mtype == "input":
+                data = msg.get("data", "")
+                if isinstance(data, str) and data:
+                    try:
+                        _os_mod.write(fd, data.encode("utf-8"))
+                    except OSError:
+                        break
+            elif mtype == "resize":
+                rows = int(msg.get("rows", 24))
+                cols = int(msg.get("cols", 80))
+                _set_winsize(rows, cols)
+    except Exception:
+        pass
+    finally:
+        stop.set()
+        if receive_task is not None and not receive_task.done():
+            receive_task.cancel()
+        output_task.cancel()
+        try:
+            _os_mod.close(fd)
+        except OSError:
+            pass
+        try:
+            _os_mod.kill(pid, 9)
+        except ProcessLookupError:
+            pass
+        try:
+            _, status = _os_mod.waitpid(pid, _os_mod.WNOHANG)
+            code = _os_mod.WEXITSTATUS(status) if status else 0
+            with _suppress(Exception):
+                await websocket.send_text(_json.dumps({"type": "exit", "code": code}))
+        except Exception:
+            pass
+        with _suppress(Exception):
+            await websocket.close()
+
+
 @app.websocket("/api/events/ws")
 async def events_ws(ws: WebSocket) -> None:
     if registry.event_bus is None:
