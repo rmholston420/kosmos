@@ -375,6 +375,18 @@ class _BootRegistry:
         # The executor (donor _skill_executor): steps → kernel tool
         # dispatch via registry.tektos_tools.
         self.tektos_skill_executor: Any = None
+        # ADR-141 inference/metrics discharge (2026-09-26, post-freeze ADR):
+        # kernel-owned InferenceEngineMonitor (kernel/inference_engine.py) —
+        # the donor runtime/inference_engine.py substrate (Prometheus
+        # /metrics parser + /health discovery + nvidia-smi + system RAM +
+        # optimization recommendations). Generic inference-infrastructure
+        # observability → kernel (same class as telemetry/metabolism). The
+        # instance table is derived from the kernel's own ADR-132 env at
+        # build time (no stale donor topology). Boots unconditionally (the
+        # donor booted it unconditionally, main.py:1412). Consumed by
+        # GET /api/inference/metrics; call sites tolerate ``None`` (route
+        # degrades to ``monitor_not_initialized``).
+        self.inference_monitor: Any = None
         # ADR-141 Stage 13.11: donor VisionClient (OpenAI-compatible
         # /chat/completions vision transport — Qwen3-VL lane). Generic
         # substrate → kernel/vision_client.py; the kernel's
@@ -2118,6 +2130,40 @@ async def lifespan(app: FastAPI):
         )
         return manager
 
+    @ _try("inference_monitor")
+    def _boot_inference_monitor():
+        import os as _os
+
+        # ADR-141 inference/metrics discharge (2026-09-26, post-freeze
+        # ADR): donor boot (main.py:1411-1417) constructed
+        # InferenceEngineMonitor() unconditionally and awaited start()
+        # NON-FATAL (failure → _inference_monitor = None, routes degrade
+        # to monitor_not_initialized). Kernel-honest equivalent: the
+        # instance table is built from the kernel's own ADR-132 env at
+        # boot (build_known_instances() — the same env the LLM adapters
+        # read, so the monitor can never reference a lane the kernel
+        # can't reach; the donor's hardcoded KNOWN_INSTANCES table was
+        # stale Tektos topology and is not carried over). Sibling gate
+        # KOSMOS_INFERENCE_MONITOR (default on, donor had none — its
+        # monitor always existed; the gate is a kernel-side parity
+        # escape hatch alongside 13.9/13.10/13.11/13.12).
+        if _os.environ.get("KOSMOS_INFERENCE_MONITOR", "on").lower() not in ("on", "true", "1"):
+            return None
+        from kernel.inference_engine import InferenceEngineMonitor, build_known_instances
+
+        monitor = InferenceEngineMonitor(instances=build_known_instances())
+        # Donor `await _inference_monitor.start()` (opens the httpx
+        # client). The _try boot fn executes sync inside the async
+        # lifespan, so start() is scheduled on the running loop
+        # fire-and-forget (same pattern as the skills/db boot fns).
+        asyncio.get_running_loop().create_task(monitor.start())
+        logger.info(
+            "kosmos.inference_monitor: wired (ADR-141 inference/metrics "
+            "discharge); instances=%s",
+            ",".join(monitor.instances),
+        )
+        return monitor
+
     @ _try("tektos_voice")
     def _boot_tektos_voice():
         import os as _os
@@ -2180,6 +2226,7 @@ async def lifespan(app: FastAPI):
     registry.tektos_skills = _boot_tektos_skills
     # (tektos_skill_executor is set inside _boot_tektos_skills, alongside
     # tektos_skills, since it shares the tool-registry seam.)
+    registry.inference_monitor = _boot_inference_monitor
     registry.tektos_voice = _boot_tektos_voice
     registry.tektos_orchestrator = _boot_tektos_orchestrator
 
@@ -2674,6 +2721,16 @@ async def lifespan(app: FastAPI):
     if _skills is not None:
         try:
             _skills.registry.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ADR-141 inference/metrics: stop the InferenceEngineMonitor (close its
+    # httpx client) before teardown. Donor let it die with the process; we
+    # stop it cleanly (the substrate has an explicit async stop()).
+    _inference_monitor = getattr(registry, "inference_monitor", None)
+    if _inference_monitor is not None:
+        try:
+            await _inference_monitor.stop()
         except Exception:  # noqa: BLE001
             pass
 
@@ -4426,6 +4483,51 @@ async def inference_status() -> dict[str, Any]:
     except Exception:  # noqa: BLE001 — lane down is a degraded reading, not a 500
         pass
     return out
+
+
+@app.get("/api/inference/metrics")
+async def inference_metrics() -> dict[str, Any]:
+    """Aggregate inference-engine metrics from the active llama.cpp lanes.
+
+    ADR-141 inference/metrics discharge: byte-verbatim donor route
+    (main.py:4515-4546), now over the kernel-owned InferenceEngineMonitor
+    (``registry.inference_monitor``). Returns a flat dict shaped for the
+    frontend InferencePanel; keys are optional and only populated when the
+    monitor is up. Degrades to ``monitor_not_initialized`` /
+    ``no_active_instances`` / ``collection_failed`` exactly as the donor.
+    """
+    monitor = registry.inference_monitor
+    if monitor is None:
+        return {
+            "total_tokens": 0,
+            "tokens_per_second": 0.0,
+            "cache_hit_rate": 0.0,
+            "avg_prompt_latency": 0.0,
+            "avg_generation_latency": 0.0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "status": "monitor_not_initialized",
+        }
+    try:
+        state = await monitor.collect_all_metrics()
+        instances = list(state.instances.values())
+        if not instances:
+            return {"total_tokens": 0, "status": "no_active_instances"}
+        tps = sum(m.predicted_tokens_seconds for m in instances) / len(instances)
+        prompt_lat = sum(m.avg_prompt_latency_ms for m in instances) / len(instances)
+        gen_lat = sum(m.avg_generation_latency_ms for m in instances) / len(instances)
+        return {
+            "total_tokens": int(state.total_tokens_processed),
+            "tokens_per_second": round(tps, 2),
+            "cache_hit_rate": round(state.avg_cache_hit_rate, 3),
+            "avg_prompt_latency": round(prompt_lat, 2),
+            "avg_generation_latency": round(gen_lat, 2),
+            "prompt_tokens": int(sum(m.prompt_tokens_total for m in instances)),
+            "completion_tokens": int(sum(m.tokens_predicted_total for m in instances)),
+            "instances": len(instances),
+        }
+    except Exception as exc:  # noqa: BLE001 — donor parity
+        return {"error": str(exc), "status": "collection_failed"}
 
 
 @app.get("/api/thermal/status")
