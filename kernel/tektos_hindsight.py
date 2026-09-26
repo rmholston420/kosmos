@@ -72,6 +72,56 @@ async def get_experiences(
 
 
 # ── Write leg (ADR-143 T3 / S5a): the learning substrate's dual-persist ──────
+# ── and the ADR-141 discharge (Stage 14.8): the donor's wire-verbatim
+#    POST /api/hindsight/{retain,recall,reflect} action routes ────────────────
+
+
+def recall(query: str, *, limit: int = 5) -> dict[str, Any]:
+    """Donor ``HindsightClient.recall`` — full dict (not the sliced list).
+
+    Donor fidelity: the v1 ``RecallRequest`` has no ``limit`` field — the
+    server's default result set is sliced client-side to ``limit``; an
+    empty/whitespace query is sent as the neutral sentinel ``"tektos"``
+    (v1 rejects empty queries with 422). SYNC on purpose, mirroring the
+    donor's sync client (the route hops to a thread with
+    ``asyncio.to_thread``).
+    """
+    import httpx
+
+    sent_query = query if query and query.strip() else "tektos"
+    path = f"/v1/{_profile()}/banks/{_bank_id()}/memories/recall"
+    with httpx.Client(timeout=5.0) as client:
+        response = client.post(
+            f"{_base_url()}{path}", json={"query": sent_query}
+        )
+        response.raise_for_status()
+        data = response.json()
+    if isinstance(data, dict) and isinstance(data.get("results"), list):
+        data["results"] = data["results"][:limit]
+    return data
+
+
+def reflect(question: str, *, max_tokens: int = 1000) -> dict[str, Any]:
+    """Donor ``HindsightClient.reflect`` — synthesized reasoning.
+
+    Donor fidelity: ``max_tokens`` maps onto the v1 ``budget`` parameter
+    (``low`` ≤ 1000, ``medium`` above) and a v1 ``text`` answer is
+    normalized onto ``answer`` for callers. SYNC on purpose (donor's sync
+    client); the route hops to a thread with ``asyncio.to_thread``.
+    """
+    import httpx
+
+    budget = "low" if max_tokens <= 1000 else "medium"
+    path = f"/v1/{_profile()}/banks/{_bank_id()}/reflect"
+    with httpx.Client(timeout=120.0) as client:
+        response = client.post(
+            f"{_base_url()}{path}", json={"query": question, "budget": budget}
+        )
+        response.raise_for_status()
+        data = response.json()
+    if isinstance(data, dict) and "answer" not in data and "text" in data:
+        data["answer"] = data.get("text")
+    return data
 
 
 def retain(
@@ -101,7 +151,7 @@ def retain(
     if tags is not None:
         item["tags"] = tags
     path = f"/v1/{_profile()}/banks/{_bank_id()}/memories"
-    with httpx.Client(timeout=5.0) as client:
+    with httpx.Client(timeout=30.0) as client:  # donor HindsightConfig.timeout default
         response = client.post(f"{_base_url()}{path}", json={"items": [item]})
         response.raise_for_status()
         return response.json()

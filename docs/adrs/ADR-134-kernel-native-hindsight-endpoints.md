@@ -52,11 +52,24 @@ is drop-in compatible — no parse/render change):
 
 ## Honest limits
 
-- The donor also exposed `POST /api/hindsight/{retain,recall,reflect}` —
+- ~~The donor also exposed `POST /api/hindsight/{retain,recall,reflect}` —
   write/action endpoints. The panels tab is GET-only (the page mutates
   nothing), so the kernel split lands the read paths only; retain/
   reflect stay on the standalone engine until a kernel consumer needs
-  them (the module's `_recall` is reusable for that).
+  them (the module's `_recall` is reusable for that).~~
+  **RESOLVED (Stage 14.8, 2026-09-26, ADR-141 discharge):** all three
+  action routes are now kernel-native — `POST /api/hindsight/{retain,
+  recall, reflect}` in `kernel/app.py` (wire-verbatim donor
+  main.py:5479/5494/5506, donor degrade contract: 503 "daemon
+  unreachable" / 500 detail), backed by donor-faithful sync legs
+  `kernel/tektos_hindsight.recall()` (full-dict, client-side limit
+  slice, `"tektos"` empty-query sentinel) and `reflect()` (v1
+  `budget` mapping, `text`→`answer` normalization); `retain()` already
+  existed (ADR-143 learning substrate). Routes hop to a thread via
+  `asyncio.to_thread` (donor client is sync). `retain` timeout bumped
+  5 s → 30 s (donor `HindsightConfig.timeout` default — live retains run
+  LLM extraction, >5 s). Live-verified :8000 against the real daemon
+  :9178 (retain 200 + recall read-back + reflect 200).
 - Hindsight daemon reachability is probed per-request (2 s timeout on
   status, 5 s on recall) — no cached health, matching the ADR-117 probe.
 - Profile/bank identity is env-configured (`KOSMOS_HINDSIGHT_PROFILE` /

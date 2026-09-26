@@ -8947,6 +8947,82 @@ async def tektos_hindsight_experiences(
         )
 
 
+@app.post("/api/hindsight/retain")
+async def tektos_hindsight_retain(payload: dict[str, Any]) -> dict[str, Any]:
+    """Store a fact to Hindsight — donor wire-verbatim (main.py:5479).
+
+    ADR-141 discharge (Stage 14.8): the donor's write/action leg.
+    503 + detail when the daemon is unreachable (the donor's
+    ``not_initialized`` degrade); other errors → 500 with detail.
+    """
+    import asyncio
+    import httpx
+
+    from kernel import tektos_hindsight
+
+    try:
+        return await asyncio.to_thread(
+            tektos_hindsight.retain,
+            payload.get("content", ""),
+            context=payload.get("context", ""),
+            tags=payload.get("tags", []),
+        )
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            503, f"hindsight daemon unreachable: {type(exc).__name__}"
+        )
+    except Exception as exc:  # noqa: BLE001 — donor returns 500 detail
+        raise HTTPException(500, str(exc)[:200])
+
+
+@app.post("/api/hindsight/recall")
+async def tektos_hindsight_recall(payload: dict[str, Any]) -> dict[str, Any]:
+    """Search Hindsight for relevant memories — donor wire-verbatim
+    (main.py:5494). Same degrade contract as retain.
+    """
+    import asyncio
+    import httpx
+
+    from kernel import tektos_hindsight
+
+    try:
+        return await asyncio.to_thread(
+            tektos_hindsight.recall,
+            payload.get("query", ""),
+            limit=payload.get("limit", 5),
+        )
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            503, f"hindsight daemon unreachable: {type(exc).__name__}"
+        )
+    except Exception as exc:  # noqa: BLE001 — donor returns 500 detail
+        raise HTTPException(500, str(exc)[:200])
+
+
+@app.post("/api/hindsight/reflect")
+async def tektos_hindsight_reflect(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get synthesized reasoning from Hindsight — donor wire-verbatim
+    (main.py:5506). Same degrade contract as retain.
+    """
+    import asyncio
+    import httpx
+
+    from kernel import tektos_hindsight
+
+    try:
+        return await asyncio.to_thread(
+            tektos_hindsight.reflect,
+            payload.get("question", ""),
+            max_tokens=payload.get("max_tokens", 1000),
+        )
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            503, f"hindsight daemon unreachable: {type(exc).__name__}"
+        )
+    except Exception as exc:  # noqa: BLE001 — donor returns 500 detail
+        raise HTTPException(500, str(exc)[:200])
+
+
 @app.post("/api/prompt/sse")
 async def tektos_prompt_sse(payload: dict[str, Any]) -> StreamingResponse:
     """Run a prompt as a Tektos turn and stream OpenAI chunk frames (ADR-132 slice G).
