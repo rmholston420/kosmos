@@ -42,6 +42,10 @@ from .policy import (
     TEKTOS_UI_ROUTE_LAZY_MODULE,
     TEKTOS_UI_ROUTE_PATH,
     TEKTOS_UI_SUCCESS_CONFIDENCE,
+    TEKTOS_ULTIMA_ROUTE_ICON,
+    TEKTOS_ULTIMA_ROUTE_LABEL,
+    TEKTOS_ULTIMA_ROUTE_LAZY_MODULE,
+    TEKTOS_ULTIMA_ROUTE_PATH,
     confidence_for_ui_event,
 )
 from .server import TEKTOS_UI_PROPOSING_DOMAIN, build_tektos_ui_app
@@ -79,6 +83,10 @@ __all__ = [
     "TEKTOS_UI_ROUTE_LAZY_MODULE",
     "TEKTOS_UI_ROUTE_PATH",
     "TEKTOS_UI_SUCCESS_CONFIDENCE",
+    "TEKTOS_ULTIMA_ROUTE_ICON",
+    "TEKTOS_ULTIMA_ROUTE_LABEL",
+    "TEKTOS_ULTIMA_ROUTE_LAZY_MODULE",
+    "TEKTOS_ULTIMA_ROUTE_PATH",
     "build_tektos_ui_app",
     "compute_diff_sha256",
     "confidence_for_ui_event",

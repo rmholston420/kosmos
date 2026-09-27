@@ -34,6 +34,10 @@ __all__ = [
     "TEKTOS_UI_ROUTE_LAZY_MODULE",
     "TEKTOS_UI_ROUTE_PATH",
     "TEKTOS_UI_SUCCESS_CONFIDENCE",
+    "TEKTOS_ULTIMA_ROUTE_ICON",
+    "TEKTOS_ULTIMA_ROUTE_LABEL",
+    "TEKTOS_ULTIMA_ROUTE_LAZY_MODULE",
+    "TEKTOS_ULTIMA_ROUTE_PATH",
     "confidence_for_ui_event",
 ]
 
@@ -138,6 +142,21 @@ mount point for the HTMX dashboard's index route."""
 TEKTOS_UI_ROUTE_LABEL: str = "Tektos"
 TEKTOS_UI_ROUTE_ICON: str = "\U0001f4d0"  # 📐
 TEKTOS_UI_ROUTE_LAZY_MODULE: str = "tektos/pages/DashboardPage"
+
+# Second published route: the native Tektos-Ultima dashboard (Stage 9.5
+# absorbed the retired :5556 standalone frontend into /tektos-ultima —
+# dashboard + /sessions + /ops + /panels). Publishing it through
+# FrontendContractPort is what makes the shell sidebar surface it; before
+# this the page tree had zero inbound links and was reachable only by
+# typing the URL. The contract validator (ports/frontend_contract.py)
+# rejects routes with an empty lazy_module, so — exactly like the existing
+# /tektos route — a namespace identifier is carried. It is not consumed at
+# runtime: the sidebar renders registry routes as plain <Link> entries,
+# and /tektos-ultima is a static Next.js page.
+TEKTOS_ULTIMA_ROUTE_PATH: str = "/tektos-ultima"
+TEKTOS_ULTIMA_ROUTE_LABEL: str = "Tektos-Ultima"
+TEKTOS_ULTIMA_ROUTE_ICON: str = "\U0001f916"  # 🤖
+TEKTOS_ULTIMA_ROUTE_LAZY_MODULE: str = "tektos/pages/TektosUltimaDashboard"
 
 
 # ── Vendored HTMX identity ────────────────────────────────────────────────

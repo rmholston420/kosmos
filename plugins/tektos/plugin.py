@@ -46,6 +46,10 @@ from .ui.policy import (
     TEKTOS_UI_ROUTE_LABEL,
     TEKTOS_UI_ROUTE_LAZY_MODULE,
     TEKTOS_UI_ROUTE_PATH,
+    TEKTOS_ULTIMA_ROUTE_ICON,
+    TEKTOS_ULTIMA_ROUTE_LABEL,
+    TEKTOS_ULTIMA_ROUTE_LAZY_MODULE,
+    TEKTOS_ULTIMA_ROUTE_PATH,
 )
 
 __all__ = [
@@ -117,13 +121,25 @@ def build_tektos_descriptor() -> PluginDescriptor:
         icon=TEKTOS_UI_ROUTE_ICON,
         lazy_module=TEKTOS_UI_ROUTE_LAZY_MODULE,
     )
+    # Stage 9.5 absorbed the retired :5556 standalone Tektos frontend into
+    # the native /tektos-ultima page tree (dashboard + /sessions + /ops +
+    # /panels). Publishing it as a second FrontendContractPort route is what
+    # surfaces it in the shell sidebar — before this the tree had zero
+    # inbound links. Ordering: /tektos (approval surface) first, then the
+    # main GUI.
+    tektos_ultima_route = Route(
+        path=TEKTOS_ULTIMA_ROUTE_PATH,
+        label=TEKTOS_ULTIMA_ROUTE_LABEL,
+        icon=TEKTOS_ULTIMA_ROUTE_ICON,
+        lazy_module=TEKTOS_ULTIMA_ROUTE_LAZY_MODULE,
+    )
     return PluginDescriptor(
         name=TEKTOS_PLUGIN_NAME,
         state_namespace=TEKTOS_STATE_NAMESPACE,
         version=TEKTOS_VERSION,
         kernel_compat=TEKTOS_KERNEL_COMPAT,
         design_tokens={},
-        routes=(dashboard_route,),
+        routes=(dashboard_route, tektos_ultima_route),
         panels=(plan_approval_panel,),
     )
 
